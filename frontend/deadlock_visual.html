@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deloxide - Deadlock Detection Visualization</title>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- D3.js for visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-project-diagram"></i>
+                <h1>Deloxide</h1>
+            </div>
+            <button id="theme-toggle" aria-label="Toggle dark mode">
+                <i id="theme-icon" class="fas fa-moon"></i>
+                <span>Dark Mode</span>
+            </button>
+        </header>
+
+        <main>
+            <div id="loading">
+                <div class="spinner"></div>
+                <p>Loading visualization...</p>
+            </div>
+
+            <div id="controls">
+                <button id="prev-btn" class="control-btn" disabled>
+                    <i class="fas fa-chevron-left"></i>
+                    <span>Previous</span>
+                </button>
+                <button id="play-btn" class="control-btn" data-playing="false">
+                    <i class="fas fa-play"></i>
+                    <span>Play Animation</span>
+                </button>
+                <button id="next-btn" class="control-btn">
+                    <i class="fas fa-chevron-right"></i>
+                    <span>Next</span>
+                </button>
+                <button id="reset-btn" class="control-btn">
+                    <i class="fas fa-redo"></i>
+                    <span>Reset</span>
+                </button>
+            </div>
+
+            <div class="visualization-container">
+                <div class="visualization-left">
+                    <div id="graph">
+                        <!-- D3.js will create SVG elements here -->
+                    </div>
+                </div>
+                
+                <div class="visualization-right">
+                    <div id="step-info">
+                        <h3>Step Information</h3>
+                        <p>Select a step or use the controls to navigate through the visualization.</p>
+                    </div>
+                    
+                    <div id="wait-graph">
+                        <h3>Wait-for Graph</h3>
+                        <div id="wait-graph-content">
+                            <p>The wait-for graph will appear here once resources are being requested.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="timeline">
+                <div id="timeline-line"></div>
+                <div id="timeline-marker"></div>
+                <!-- Timeline events will be added here dynamically -->
+            </div>
+
+            <div id="legend">
+                <h3>Legend</h3>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color thread"></div>
+                        <span>Thread</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color resource"></div>
+                        <span>Resource</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line attempt"></div>
+                        <span>Attempt</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line acquired"></div>
+                        <span>Acquired</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line deadlock"></div>
+                        <span>Deadlock</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Developed by Emirhan Tala and Ulaş Can Demirbağ for the Yeditepe University - CSE 336 Operating Systems Practice course.</p>
+            <div class="footer-links">
+                <a href="https://github.com/emivvvvv/deloxide" target="_blank" rel="noopener noreferrer">
+                    <i class="fab fa-github"></i>
+                    <span>GitHub</span>
+                </a>
+                <a href="#" class="help-toggle">
+                    <i class="fas fa-question-circle"></i>
+                    <span>Help</span>
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>How to Use This Visualization</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h3>Controls</h3>
+                <ul>
+                    <li><strong>Previous/Next:</strong> Navigate between steps</li>
+                    <li><strong>Play/Stop:</strong> Automatically advance through steps</li>
+                    <li><strong>Reset:</strong> Return to the first step</li>
+                </ul>
+                
+                <h3>Keyboard Shortcuts</h3>
+                <ul>
+                    <li><strong>Left Arrow:</strong> Previous step</li>
+                    <li><strong>Right Arrow:</strong> Next step</li>
+                    <li><strong>Space:</strong> Play/Stop animation</li>
+                    <li><strong>R:</strong> Reset to first step</li>
+                </ul>
+                
+                <h3>Visualization Legend</h3>
+                <p>The visualization shows threads and resources as nodes, with different types of relationships between them:</p>
+                <ul>
+                    <li><strong>Thread Nodes:</strong> Represented as blue circles</li>
+                    <li><strong>Resource Nodes:</strong> Represented as green circles</li>
+                    <li><strong>Attempt:</strong> A thread is attempting to acquire a resource</li>
+                    <li><strong>Acquired:</strong> A thread has successfully acquired a resource</li>
+                    <li><strong>Deadlock:</strong> A circular wait condition has been detected</li>
+                </ul>
+                
+                <h3>Wait-for Graph</h3>
+                <p>The wait-for graph shows which threads are waiting for resources held by other threads.
+                When a cycle appears in this graph, a deadlock has been detected.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom JavaScript -->
+    <script src="js/app.js"></script>
+    
+    <!-- Help modal functionality -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('help-modal');
+            const helpToggle = document.querySelector('.help-toggle');
+            const closeBtn = document.querySelector('.modal-close');
+            
+            helpToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                modal.style.display = 'flex';
+            });
+            
+            closeBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+            
+            window.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
