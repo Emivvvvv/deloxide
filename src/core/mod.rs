@@ -17,7 +17,7 @@ pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_rel
 pub mod tracked_mutex;
 pub use tracked_mutex::TrackedMutex;
 
-/// Initialize the deadlock detector with default settings
+/// Initialize the deloxide with default settings
 ///
 /// # Arguments
 /// * `log_path` - Optional path to the log file (None to disable logging)

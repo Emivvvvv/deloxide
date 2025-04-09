@@ -3,6 +3,10 @@ name = "deloxide"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "deloxide"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 parking_lot = "0.12.1"  # Alternative to std mutex with better performance
 chrono = "0.4"  # For timestamps in logging
