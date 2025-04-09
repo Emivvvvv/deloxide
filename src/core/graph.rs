@@ -17,7 +17,10 @@ impl WaitForGraph {
 
     /// Add a directed edge: `from` thread waits for `to` thread
     pub fn add_edge(&mut self, from: ThreadId, to: ThreadId) {
-        self.edges.entry(from).or_insert_with(HashSet::new).insert(to);
+        self.edges
+            .entry(from)
+            .or_insert_with(HashSet::new)
+            .insert(to);
         // Ensure 'to' exists in the graph even if it has no outgoing edges
         self.edges.entry(to).or_insert_with(HashSet::new);
     }

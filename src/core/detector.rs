@@ -1,6 +1,6 @@
-use crate::core::types::{ThreadId, LockId, DeadlockInfo};
 use crate::core::graph::WaitForGraph;
-use crate::core::logger;
+use crate::core::types::{DeadlockInfo, LockId, ThreadId};
+use crate::core::{LockEvent, logger};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -42,7 +42,9 @@ impl Detector {
     /// Register a lock attempt by a thread
     pub fn on_lock_attempt(&mut self, thread_id: ThreadId, lock_id: LockId) {
         // Log the attempt
-        logger::log_event(thread_id, lock_id, crate::core::types::LockEvent::Attempt);
+        if logger::is_logging_enabled() {
+            logger::log_event(thread_id, lock_id, LockEvent::Attempt);
+        }
 
         // Check if the lock is already owned
         if let Some(&owner) = self.lock_owners.get(&lock_id) {
@@ -55,7 +57,8 @@ impl Detector {
             // Check for deadlock
             if let Some(cycle) = self.wait_for_graph.detect_cycle_from(thread_id) {
                 // Create deadlock info
-                let thread_waiting_for_locks: Vec<(ThreadId, LockId)> = self.thread_waits_for
+                let thread_waiting_for_locks: Vec<(ThreadId, LockId)> = self
+                    .thread_waits_for
                     .iter()
                     .map(|(&t_id, &l_id)| (t_id, l_id))
                     .collect();
@@ -77,7 +80,9 @@ impl Detector {
     /// Register successful lock acquisition by a thread
     pub fn on_lock_acquired(&mut self, thread_id: ThreadId, lock_id: LockId) {
         // Log the acquisition
-        logger::log_event(thread_id, lock_id, crate::core::types::LockEvent::Acquired);
+        if logger::is_logging_enabled() {
+            logger::log_event(thread_id, lock_id, LockEvent::Acquired);
+        }
 
         // Update state
         self.lock_owners.insert(lock_id, thread_id);
@@ -90,7 +95,9 @@ impl Detector {
     /// Register lock release by a thread
     pub fn on_lock_release(&mut self, thread_id: ThreadId, lock_id: LockId) {
         // Log the release
-        logger::log_event(thread_id, lock_id, crate::core::types::LockEvent::Released);
+        if logger::is_logging_enabled() {
+            logger::log_event(thread_id, lock_id, LockEvent::Released);
+        }
 
         // Only remove ownership if this thread actually owns the lock
         if self.lock_owners.get(&lock_id) == Some(&thread_id) {

@@ -1,9 +1,9 @@
 use crate::core::detector;
-use crate::core::types::{ThreadId, LockId};
-use std::sync::{Mutex, MutexGuard};
+use crate::core::types::{LockId, ThreadId};
 use std::ops::{Deref, DerefMut};
-use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
+use std::thread;
 
 // Global counter for generating unique lock IDs
 static NEXT_LOCK_ID: AtomicUsize = AtomicUsize::new(1);
@@ -89,7 +89,7 @@ fn get_current_thread_id() -> ThreadId {
     // Convert the ThreadId to a usize for our internal use
     // This is a bit of a hack but it works for our purposes
     let id = thread::current().id();
-    
+
     let id_ptr = &id as *const _ as usize;
     id_ptr
 }

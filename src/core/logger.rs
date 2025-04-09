@@ -1,4 +1,4 @@
-use crate::core::types::{ThreadId, LockId, LockEvent};
+use crate::core::types::{LockEvent, LockId, ThreadId};
 use chrono::Utc;
 use serde::Serialize;
 use std::fs::{File, OpenOptions};
@@ -43,10 +43,7 @@ impl Logger {
 
     /// Create a new logger that writes to the specified file
     pub fn with_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
 
         Ok(Logger {
             mode: LoggerMode::ToFile(file),
@@ -59,7 +56,7 @@ impl Logger {
         if let LoggerMode::Disabled = self.mode {
             return;
         }
-        
+
         let entry = LogEntry {
             thread_id,
             lock_id,
@@ -93,7 +90,7 @@ pub fn init_logger<P: AsRef<Path>>(path: Option<P>) -> std::io::Result<()> {
         match path {
             Some(path) => {
                 *global = Logger::with_file(path)?;
-            },
+            }
             None => {
                 *global = Logger::new(); // Disabled mode
             }
