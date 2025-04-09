@@ -33,6 +33,12 @@ pub struct Logger {
     mode: LoggerMode,
 }
 
+impl Default for Logger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Logger {
     /// Create a new logger with logging disabled
     pub fn new() -> Self {

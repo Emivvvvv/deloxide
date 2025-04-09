@@ -20,6 +20,12 @@ pub struct Detector {
     on_deadlock: Option<Box<dyn Fn(DeadlockInfo) + Send>>,
 }
 
+impl Default for Detector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Detector {
     /// Create a new deadlock detector
     pub fn new() -> Self {

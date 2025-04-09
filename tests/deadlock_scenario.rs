@@ -72,9 +72,8 @@ fn test_deadlock_detection() {
     match rx.recv_timeout(timeout) {
         Ok(info) => {
             // Verify deadlock was detected
-            assert_eq!(
+            assert!(
                 *deadlock_detected.lock().unwrap(),
-                true,
                 "Deadlock flag should be set"
             );
 
@@ -93,7 +92,6 @@ fn test_deadlock_detection() {
             );
 
             // Test passed
-            return;
         }
         Err(_) => {
             panic!("No deadlock detected within timeout period!");

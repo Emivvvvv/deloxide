@@ -7,6 +7,12 @@ pub struct WaitForGraph {
     edges: HashMap<ThreadId, HashSet<ThreadId>>,
 }
 
+impl Default for WaitForGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WaitForGraph {
     /// Create a new empty wait-for graph
     pub fn new() -> Self {
@@ -19,10 +25,10 @@ impl WaitForGraph {
     pub fn add_edge(&mut self, from: ThreadId, to: ThreadId) {
         self.edges
             .entry(from)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(to);
         // Ensure 'to' exists in the graph even if it has no outgoing edges
-        self.edges.entry(to).or_insert_with(HashSet::new);
+        self.edges.entry(to).or_default();
     }
 
     /// Remove all edges for the specified thread (both incoming and outgoing)

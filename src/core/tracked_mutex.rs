@@ -64,7 +64,7 @@ impl<T> TrackedMutex<T> {
     }
 }
 
-impl<'a, T> Deref for TrackedGuard<'a, T> {
+impl<T> Deref for TrackedGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -72,13 +72,13 @@ impl<'a, T> Deref for TrackedGuard<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for TrackedGuard<'a, T> {
+impl<T> DerefMut for TrackedGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.guard.deref_mut()
     }
 }
 
-impl<'a, T> Drop for TrackedGuard<'a, T> {
+impl<T> Drop for TrackedGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
         detector::on_lock_release(self.thread_id, self.lock_id);
@@ -90,6 +90,6 @@ fn get_current_thread_id() -> ThreadId {
     // This is a bit of a hack but it works for our purposes
     let id = thread::current().id();
 
-    let id_ptr = &id as *const _ as usize;
-    id_ptr
+    
+    &id as *const _ as usize
 }
