@@ -17,6 +17,8 @@ pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_rel
 pub mod tracked_mutex;
 pub use tracked_mutex::TrackedMutex;
 
+use std::io;
+
 /// Deloxide configuration struct
 pub struct Deloxide {
     log_path: Option<String>,
@@ -81,7 +83,7 @@ impl Deloxide {
     ///
     /// # Errors
     /// Returns an error if logger initialization fails
-    pub fn start(self) -> std::io::Result<()> {
+    pub fn start(self) -> io::Result<()> {
         // Initialize the logger if a path was provided
         if let Some(log_path) = self.log_path {
             init_logger(Some(log_path))?;

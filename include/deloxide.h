@@ -105,6 +105,17 @@ int deloxide_unlock(void* mutex, unsigned long thread_id);
  */
 unsigned long deloxide_get_thread_id();
 
+/*
+ * @brief Send the log file to the showcase server and open the resulting URL.
+ *
+ * @param log_path Path to the log file as a null-terminated UTF-8 string.
+ *
+ * @return  0 on success,
+ *         -1 if log_path is NULL or contains invalid UTF-8,
+ *         -2 if the showcase operation failed.
+ */
+int deloxide_showcase(const char* log_path);
+
 #ifdef __cplusplus
 }
 #endif

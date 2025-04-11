@@ -239,3 +239,37 @@ pub unsafe extern "C" fn deloxide_get_thread_id() -> c_ulong {
     let id_ptr = &id as *const _ as usize;
     id_ptr as c_ulong
 }
+
+/// Showcase the log data by sending it to the showcase server.
+///
+/// # Arguments
+/// * `log_path` - Path to the log file as a null-terminated C string.
+///
+/// # Returns
+/// * `0` on success
+/// * `-1` if the log path is NULL or invalid UTF-8
+/// * `-2` if showcasing failed (for example, file read or network error)
+///
+/// # Safety
+/// This function dereferences `log_path`. The caller must ensure it is a valid, null-terminated
+/// UTF-8 string and that the memory remains valid during the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
+    if log_path.is_null() {
+        return -1;
+    }
+
+    // Convert C string to Rust string.
+    let path_str = unsafe {
+         match CStr::from_ptr(log_path).to_str() {
+            Ok(s) => s,
+            Err(_) => return -1,
+        }
+    };
+
+    // Call the Rust showcase function (which should be imported from your module).
+    match crate::showcase(path_str) {
+        Ok(_) => 0,    // Success
+        Err(_e) => -2, // Showcase failed
+    }
+}
