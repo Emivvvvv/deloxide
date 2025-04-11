@@ -1,4 +1,4 @@
-use deloxide::core::{DeadlockInfo, TrackedMutex, init};
+use deloxide::core::{DeadlockInfo, Deloxide, TrackedMutex};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -16,20 +16,22 @@ fn test_deadlock_detection() {
     let deadlock_detected_clone = Arc::clone(&deadlock_detected);
     let deadlock_info_clone = Arc::clone(&deadlock_info);
 
-    // Initialize the detector with a callback that sets the flag
-    init(Some("tests/deadlock_test.log"), move |detected_info| {
-        // Set the flag indicating deadlock was detected
-        let mut detected = deadlock_detected_clone.lock().unwrap();
-        *detected = true;
+    Deloxide::new()
+        .log("tests/deadlock_scenario.log")
+        .callback(move |detected_info| {
+            // Set the flag indicating deadlock was detected
+            let mut detected = deadlock_detected_clone.lock().unwrap();
+            *detected = true;
 
-        // Store deadlock info for later verification
-        let mut info = deadlock_info_clone.lock().unwrap();
-        *info = Some(detected_info.clone());
+            // Store deadlock info for later verification
+            let mut info = deadlock_info_clone.lock().unwrap();
+            *info = Some(detected_info.clone());
 
-        // Also send through channel
-        let _ = tx.send(detected_info);
-    })
-    .expect("Failed to initialize detector");
+            // Also send through channel
+            let _ = tx.send(detected_info);
+        })
+        .start()
+        .expect("Failed to initialize detector");
 
     // Create two mutexes
     let mutex_a = Arc::new(TrackedMutex::new("Resource A"));
