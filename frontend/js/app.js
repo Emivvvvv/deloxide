@@ -13,7 +13,6 @@ let currentStep = 1;
 let nodes = [];
 let links = [];
 let svg, linkGroup, nodeGroup, tooltip, simulation;
-let scenarioList = [];
 let currentScenario = null;
 let animationInterval = null;
 let isPlaying = false;
@@ -58,6 +57,495 @@ const toggleTheme = () => {
     applyTheme(newTheme);
 };
 
+// Upload functionality
+const initUploadFeature = () => {
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadModal = document.getElementById('upload-modal');
+    const closeBtn = uploadModal.querySelector('.modal-close');
+    const dropArea = document.getElementById('drop-area');
+    const fileInput = document.getElementById('file-input');
+    const fileSelectBtn = document.getElementById('file-select-btn');
+    const uploadList = document.getElementById('upload-list');
+    const jsonPreview = document.getElementById('json-preview');
+    const jsonContent = document.getElementById('json-content');
+    const shareBtn = document.getElementById('share-btn');
+    
+    // Share functionality
+    if (shareBtn) {
+        shareBtn.addEventListener('click', openShareModal);
+    }
+    
+    // Open modal when upload button is clicked
+    uploadBtn.addEventListener('click', () => {
+        uploadModal.style.display = 'flex';
+    });
+    
+    // Close modal
+    closeBtn.addEventListener('click', () => {
+        uploadModal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === uploadModal) {
+            uploadModal.style.display = 'none';
+        }
+    });
+    
+    // Open file dialog when button is clicked
+    fileSelectBtn.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    // Handle file selection
+    fileInput.addEventListener('change', () => {
+        handleFiles(fileInput.files);
+    });
+    
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    // Highlight drop area when dragging over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    function highlight() {
+        dropArea.classList.add('highlight');
+    }
+    
+    function unhighlight() {
+        dropArea.classList.remove('highlight');
+    }
+    
+    // Handle dropped files
+    dropArea.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    });
+    
+    // Process the files
+    function handleFiles(files) {
+        // Convert FileList to array for easier handling
+        const filesArray = Array.from(files);
+        
+        // Filter only JSON files
+        const jsonFiles = filesArray.filter(file => file.name.endsWith('.json'));
+        
+        if (jsonFiles.length === 0) {
+            alert('Please upload JSON files only');
+            return;
+        }
+        
+        // Clear previous uploads
+        uploadList.innerHTML = '';
+        
+        // Process each file
+        jsonFiles.forEach(file => {
+            // Show in upload list
+            const fileItem = document.createElement('div');
+            fileItem.className = 'upload-item';
+            
+            const fileName = document.createElement('span');
+            fileName.className = 'upload-item-name';
+            fileName.textContent = file.name;
+            
+            const fileSize = document.createElement('span');
+            fileSize.className = 'upload-item-size';
+            fileSize.textContent = formatFileSize(file.size);
+            
+            const viewBtn = document.createElement('button');
+            viewBtn.className = 'upload-item-view';
+            viewBtn.textContent = 'View';
+            viewBtn.addEventListener('click', () => {
+                readAndPreviewJSON(file);
+            });
+            
+            const loadBtn = document.createElement('button');
+            loadBtn.className = 'upload-item-load';
+            loadBtn.textContent = 'Load';
+            loadBtn.addEventListener('click', () => {
+                loadScenarioFromFile(file);
+            });
+            
+            fileItem.appendChild(fileName);
+            fileItem.appendChild(fileSize);
+            fileItem.appendChild(viewBtn);
+            fileItem.appendChild(loadBtn);
+            uploadList.appendChild(fileItem);
+            
+            // Auto-preview the first file
+            if (uploadList.children.length === 1) {
+                readAndPreviewJSON(file);
+            }
+        });
+    }
+    
+    // Format file size for display
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' bytes';
+        else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        else return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+    
+    // Read and show JSON content
+    function readAndPreviewJSON(file) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const jsonData = JSON.parse(e.target.result);
+                const formattedJSON = JSON.stringify(jsonData, null, 2);
+                jsonContent.textContent = formattedJSON;
+                jsonPreview.style.display = 'block';
+                
+                // Validate if this is a proper deadlock log
+                if (validateDeadlockLog(jsonData)) {
+                    console.log('Valid deadlock log file loaded');
+                } else {
+                    console.warn('The uploaded file does not appear to be a valid deadlock log');
+                    alert('Warning: The file does not appear to be a valid deadlock log file. It may not display correctly.');
+                }
+            } catch (error) {
+                jsonContent.textContent = 'Error parsing JSON: ' + error.message;
+                jsonPreview.style.display = 'block';
+            }
+        };
+        
+        reader.onerror = function() {
+            jsonContent.textContent = 'Error reading file';
+            jsonPreview.style.display = 'block';
+        };
+        
+        reader.readAsText(file);
+    }
+    
+    // Load scenario from uploaded file
+    function loadScenarioFromFile(file) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const jsonData = JSON.parse(e.target.result);
+                
+                // Validate if this is a proper deadlock log
+                if (validateDeadlockLog(jsonData)) {
+                    // Close the modal
+                    uploadModal.style.display = 'none';
+                    
+                    // Process the scenario data
+                    resetVisualization();
+                    currentScenario = jsonData;
+                    logData = jsonData.logs;
+                    graphStateData = jsonData.graph_state;
+                    
+                    // Update scenario information
+                    updateScenarioInfo(jsonData);
+                    
+                    // Initialize visualization
+                    currentStep = 1;
+                    
+                    // Show loading state while we initialize
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
+                    
+                    // Show share button since we have data loaded
+                    if (shareBtn) {
+                        shareBtn.style.display = 'flex';
+                    }
+                    
+                    // Initialize after a brief delay to allow the UI to update
+                    setTimeout(() => {
+                        initVisualization();
+                        
+                        // Hide loading message and show visualization elements
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('graph').style.display = 'block';
+                        document.getElementById('step-info').style.display = 'block';
+                        document.getElementById('wait-graph').style.display = 'block';
+                        document.getElementById('timeline').style.display = 'block';
+                        
+                        // Initialize timeline
+                        initTimeline();
+                        
+                        // Update visualization for the first step
+                        updateVisualization();
+                    }, 100);
+                } else {
+                    alert('Error: The file is not a valid deadlock log file. Please upload a properly formatted file.');
+                }
+            } catch (error) {
+                alert('Error loading file: ' + error.message);
+            }
+        };
+        
+        reader.onerror = function() {
+            alert('Error reading file.');
+        };
+        
+        reader.readAsText(file);
+    }
+};
+
+// Share functionality
+function initShareFeature() {
+    const shareModal = document.getElementById('share-modal');
+    const closeBtns = shareModal.querySelectorAll('.modal-close');
+    const copyBtn = document.getElementById('copy-link-btn');
+    const shareLinkInput = document.getElementById('share-link');
+    const copyStatus = document.getElementById('copy-status');
+    
+    // Close modal when clicking the X button
+    closeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            shareModal.style.display = 'none';
+            copyStatus.style.display = 'none';
+        });
+    });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === shareModal) {
+            shareModal.style.display = 'none';
+            copyStatus.style.display = 'none';
+        }
+    });
+    
+    // Copy link to clipboard
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            // Select the text first
+            shareLinkInput.select();
+            
+            // Try to use the modern Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(shareLinkInput.value)
+                    .then(() => {
+                        // Show success message
+                        showCopySuccess();
+                    })
+                    .catch(err => {
+                        console.error('Could not copy text using Clipboard API:', err);
+                        // Fall back to execCommand
+                        fallbackCopy();
+                    });
+            } else {
+                // Fall back to execCommand for older browsers
+                fallbackCopy();
+            }
+        });
+    }
+    
+    function fallbackCopy() {
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showCopySuccess();
+            } else {
+                console.error('Fallback: Unable to copy');
+                alert('Unable to copy to clipboard. Please select the text and copy manually.');
+            }
+        } catch (err) {
+            console.error('Fallback: Unable to copy', err);
+            alert('Unable to copy to clipboard. Please select the text and copy manually.');
+        }
+    }
+    
+    function showCopySuccess() {
+        // Show success message
+        copyStatus.style.display = 'flex';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            copyStatus.style.display = 'none';
+        }, 3000);
+    }
+    
+    // Check if there's a shared scenario in the URL
+    checkForSharedScenario();
+}
+
+// Open share modal and generate shareable link
+function openShareModal() {
+    const shareModal = document.getElementById('share-modal');
+    const shareLinkInput = document.getElementById('share-link');
+    
+    if (!currentScenario) {
+        alert('No scenario is currently loaded. Please upload a scenario first.');
+        return;
+    }
+    
+    try {
+        console.log('Preparing to share scenario:', currentScenario.title);
+        
+        // Create a compressed version of the current scenario
+        const scenarioString = JSON.stringify(currentScenario);
+        console.log('Original data size:', scenarioString.length, 'bytes');
+        
+        // Compress the data
+        const compressedData = LZString.compressToEncodedURIComponent(scenarioString);
+        console.log('Compressed data size:', compressedData.length, 'bytes');
+        
+        // Generate the full URL with the compressed data
+        const currentUrl = window.location.href.split('?')[0]; // Remove any existing query parameters
+        const shareUrl = `${currentUrl}?data=${compressedData}&step=${currentStep}`;
+        
+        console.log('Share URL generated, length:', shareUrl.length);
+        
+        // Set the input value
+        shareLinkInput.value = shareUrl;
+        
+        // Show the modal
+        shareModal.style.display = 'flex';
+    } catch (error) {
+        console.error('Error generating share link:', error);
+        alert('Error generating share link: ' + error.message);
+    }
+}
+
+// Check for shared scenario in URL parameters
+function checkForSharedScenario() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const encodedData = urlParams.get('data');
+    const step = urlParams.get('step');
+    
+    if (encodedData) {
+        try {
+            console.log('Found shared data in URL, processing...');
+            
+            // Show loading state
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading shared visualization...</p>';
+            
+            // Decode the data
+            console.log('Compressed data size:', encodedData.length, 'bytes');
+            const decompressedData = LZString.decompressFromEncodedURIComponent(encodedData);
+            
+            if (!decompressedData) {
+                throw new Error('Failed to decompress data');
+            }
+            
+            console.log('Decompressed data size:', decompressedData.length, 'bytes');
+            const scenarioData = JSON.parse(decompressedData);
+            console.log('Successfully parsed JSON data');
+            
+            // Validate the data
+            if (validateDeadlockLog(scenarioData)) {
+                console.log('Valid deadlock log format detected');
+                
+                // Process the scenario data
+                resetVisualization();
+                currentScenario = scenarioData;
+                logData = scenarioData.logs;
+                graphStateData = scenarioData.graph_state;
+                
+                // Update scenario information
+                updateScenarioInfo(scenarioData);
+                
+                // Set step if provided
+                currentStep = step ? parseInt(step) : 1;
+                if (isNaN(currentStep) || currentStep < 1 || currentStep > logData.length) {
+                    currentStep = 1;
+                }
+                console.log('Setting to step:', currentStep);
+                
+                // Show share button
+                const shareBtn = document.getElementById('share-btn');
+                if (shareBtn) {
+                    shareBtn.style.display = 'flex';
+                }
+                
+                // Initialize visualization
+                setTimeout(() => {
+                    initVisualization();
+                    
+                    // Hide loading message and show visualization elements
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('graph').style.display = 'block';
+                    document.getElementById('step-info').style.display = 'block';
+                    document.getElementById('wait-graph').style.display = 'block';
+                    document.getElementById('timeline').style.display = 'block';
+                    
+                    // Initialize timeline
+                    initTimeline();
+                    
+                    // Update visualization with the specified step
+                    updateVisualization();
+                    
+                    console.log('Shared visualization loaded successfully');
+                }, 100);
+            } else {
+                console.error('Invalid deadlock log format in shared data');
+                document.getElementById('loading').innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        The shared visualization data is invalid or corrupted.
+                    </div>`;
+            }
+        } catch (error) {
+            console.error('Error loading shared scenario:', error);
+            document.getElementById('loading').innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error loading shared visualization: ${error.message}
+                </div>`;
+        }
+    }
+}
+
+// Helper function to validate deadlock log structure
+function validateDeadlockLog(json) {
+    return (
+        json && 
+        typeof json === 'object' && 
+        json.title && 
+        json.description && 
+        Array.isArray(json.logs) && 
+        json.logs.length > 0 &&
+        Array.isArray(json.graph_state) &&
+        json.graph_state.length > 0
+    );
+}
+
+// Update scenario info in the UI
+function updateScenarioInfo(scenarioData) {
+    const scenarioTitle = document.createElement('h2');
+    scenarioTitle.textContent = scenarioData.title;
+    
+    const scenarioDesc = document.createElement('p');
+    scenarioDesc.className = 'scenario-description';
+    scenarioDesc.textContent = scenarioData.description;
+    
+    const scenarioInfo = document.createElement('div');
+    scenarioInfo.id = 'scenario-info';
+    scenarioInfo.className = 'scenario-info';
+    scenarioInfo.appendChild(scenarioTitle);
+    scenarioInfo.appendChild(scenarioDesc);
+    
+    // Add to DOM
+    const mainElement = document.querySelector('main');
+    const existingInfo = document.getElementById('scenario-info');
+    const controlsElement = document.getElementById('controls');
+    
+    if (existingInfo) {
+        mainElement.replaceChild(scenarioInfo, existingInfo);
+    } else {
+        mainElement.insertBefore(scenarioInfo, controlsElement);
+    }
+}
+
 // Initialize theme
 const initTheme = () => {
     const currentTheme = getCurrentTheme();
@@ -90,136 +578,14 @@ function checkD3Availability() {
  * Load scenario list and populate dropdown
  */
 async function loadScenarioList() {
-    try {
-        const response = await fetch('data/scenarios.json');
-        if (!response.ok) {
-            throw new Error(`Failed to load scenarios: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        scenarioList = data.scenarios;
-        
-        // Create scenario selector dropdown
-        const scenarioContainer = document.createElement('div');
-        scenarioContainer.id = 'scenario-selector';
-        scenarioContainer.className = 'scenario-selector';
-        
-        const scenarioLabel = document.createElement('label');
-        scenarioLabel.textContent = 'Select Scenario:';
-        scenarioLabel.htmlFor = 'scenario-dropdown';
-        
-        const scenarioDropdown = document.createElement('select');
-        scenarioDropdown.id = 'scenario-dropdown';
-        
-        scenarioList.forEach(scenario => {
-            const option = document.createElement('option');
-            option.value = scenario.id;
-            option.textContent = scenario.title;
-            scenarioDropdown.appendChild(option);
-        });
-        
-        scenarioContainer.appendChild(scenarioLabel);
-        scenarioContainer.appendChild(scenarioDropdown);
-        
-        // Insert before controls
-        const controlsElement = document.getElementById('controls');
-        controlsElement.parentNode.insertBefore(scenarioContainer, controlsElement);
-        
-        // Add event listener for scenario change
-        scenarioDropdown.addEventListener('change', (event) => {
-            const selectedScenarioId = event.target.value;
-            const selectedScenario = scenarioList.find(s => s.id === selectedScenarioId);
-            
-            if (selectedScenario) {
-                loadScenario(selectedScenario.file);
-            }
-        });
-        
-        // Load the first scenario by default
-        if (scenarioList.length > 0) {
-            loadScenario(scenarioList[0].file);
-        }
-    } catch (error) {
-        console.error('Error loading scenario list:', error);
-        document.getElementById('loading').innerHTML = `
-            <div class="error-message">
-                <i class="fas fa-exclamation-triangle"></i> 
-                Error loading scenario list: ${error.message}. Please check your network connection and try reloading the page.
-            </div>`;
-    }
-}
-
-/**
- * Load a specific scenario by filename
- */
-async function loadScenario(filename) {
-    try {
-        // Reset visualization
-        resetVisualization();
-        
-        // Show loading state
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('graph').style.display = 'none';
-        document.getElementById('step-info').style.display = 'none';
-        document.getElementById('wait-graph').style.display = 'none';
-        document.getElementById('timeline').style.display = 'none';
-        
-        const response = await fetch(`data/${filename}`);
-        if (!response.ok) {
-            throw new Error(`Failed to load scenario: ${response.status} ${response.statusText}`);
-        }
-        
-        const scenarioData = await response.json();
-        currentScenario = scenarioData;
-        logData = scenarioData.logs;
-        graphStateData = scenarioData.graph_state;
-        
-        // Update scenario description
-        const scenarioTitle = document.createElement('h2');
-        scenarioTitle.textContent = scenarioData.title;
-        
-        const scenarioDesc = document.createElement('p');
-        scenarioDesc.className = 'scenario-description';
-        scenarioDesc.textContent = scenarioData.description;
-        
-        const scenarioInfo = document.createElement('div');
-        scenarioInfo.id = 'scenario-info';
-        scenarioInfo.className = 'scenario-info';
-        scenarioInfo.appendChild(scenarioTitle);
-        scenarioInfo.appendChild(scenarioDesc);
-        
-        // Add to DOM
-        const mainElement = document.querySelector('main');
-        const existingInfo = document.getElementById('scenario-info');
-        
-        if (existingInfo) {
-            mainElement.replaceChild(scenarioInfo, existingInfo);
-        } else {
-            const scenarioSelector = document.getElementById('scenario-selector');
-            mainElement.insertBefore(scenarioInfo, scenarioSelector.nextSibling);
-        }
-        
-        // Initialize visualization
-        currentStep = 1;
-        initVisualization();
-        
-        // Hide loading message and show visualization elements
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('graph').style.display = 'block';
-        document.getElementById('step-info').style.display = 'block';
-        document.getElementById('timeline').style.display = 'block';
-        
-        // Initialize timeline
-        initTimeline();
-        
-        // Update visualization for the first step
-        updateVisualization();
-    } catch (error) {
-        console.error('Error loading scenario:', error);
-        document.getElementById('loading').innerHTML = `
-            <div class="error-message">
-                <i class="fas fa-exclamation-triangle"></i> 
-                Error loading scenario: ${error.message}. Please try selecting a different scenario or reload the page.
+    // Show instruction message since we're not loading built-in scenarios anymore
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) {
+        loadingElement.innerHTML = `
+            <div class="welcome-message">
+                <i class="fas fa-upload"></i>
+                <h2>No Scenario Loaded</h2>
+                <p>Click the "Upload" button in the header to load a deadlock log file.</p>
             </div>`;
     }
 }
@@ -829,6 +1195,10 @@ function setupEventListeners() {
 function initApp() {
     console.log('Initializing application...');
     
+    // Check for shared data in URL first
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasSharedData = urlParams.has('data');
+    
     // Initialize theme
     initTheme();
     
@@ -838,11 +1208,20 @@ function initApp() {
         return;
     }
     
-    // Load scenario list
-    loadScenarioList();
-    
-    // Set up event listeners
+    // Setup event listeners
     setupEventListeners();
+    
+    // Initialize the upload feature
+    initUploadFeature();
+    
+    // Initialize the share feature
+    initShareFeature();
+    
+    // Check for shared scenario or show welcome message
+    if (!hasSharedData) {
+        // Show welcome message instead of loading scenarios
+        loadScenarioList();
+    }
 }
 
 // Start the application when the DOM is loaded

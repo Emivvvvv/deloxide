@@ -16,6 +16,9 @@
     <!-- D3.js for visualization -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     
+    <!-- LZ-String for data compression -->
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -26,10 +29,20 @@
                 <i class="fas fa-project-diagram"></i>
                 <h1>Deloxide</h1>
             </div>
-            <button id="theme-toggle" aria-label="Toggle dark mode">
-                <i id="theme-icon" class="fas fa-moon"></i>
-                <span>Dark Mode</span>
-            </button>
+            <div class="header-buttons">
+                <button id="upload-btn" class="header-btn" aria-label="Upload log files">
+                    <i class="fas fa-upload"></i>
+                    <span>Upload</span>
+                </button>
+                <button id="share-btn" class="header-btn" aria-label="Share visualization" style="display: none;">
+                    <i class="fas fa-share-alt"></i>
+                    <span>Share</span>
+                </button>
+                <button id="theme-toggle" aria-label="Toggle dark mode">
+                    <i id="theme-icon" class="fas fa-moon"></i>
+                    <span>Dark Mode</span>
+                </button>
+            </div>
         </header>
 
         <main>
@@ -162,6 +175,54 @@
                 <h3>Wait-for Graph</h3>
                 <p>The wait-for graph shows which threads are waiting for resources held by other threads.
                 When a cycle appears in this graph, a deadlock has been detected.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="share-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Share This Visualization</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Use the link below to share this visualization with others:</p>
+                <div class="share-link-container">
+                    <input type="text" id="share-link" readonly>
+                    <button id="copy-link-btn" class="control-btn">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                </div>
+                <div id="copy-status" class="copy-success" style="display: none;">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Link copied to clipboard!</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Upload Deadlock Log Files</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="drop-area">
+                    <p>Drag and drop JSON log files here</p>
+                    <p>or</p>
+                    <input type="file" id="file-input" accept=".json" multiple hidden>
+                    <button id="file-select-btn" class="control-btn">
+                        <i class="fas fa-file-upload"></i>
+                        <span>Select Files</span>
+                    </button>
+                </div>
+                <div id="upload-list"></div>
+                <div id="json-preview">
+                    <h3>Log Content Preview</h3>
+                    <pre id="json-content"></pre>
+                </div>
             </div>
         </div>
     </div>
