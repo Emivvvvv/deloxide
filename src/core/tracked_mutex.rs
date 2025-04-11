@@ -90,6 +90,5 @@ fn get_current_thread_id() -> ThreadId {
     // This is a bit of a hack but it works for our purposes
     let id = thread::current().id();
 
-    
     &id as *const _ as usize
 }
