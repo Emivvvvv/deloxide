@@ -1,4 +1,4 @@
-use deloxide::{showcase, DeadlockInfo, Deloxide, TrackedMutex};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
