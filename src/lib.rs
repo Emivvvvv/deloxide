@@ -19,5 +19,5 @@ pub mod ffi;
 pub mod showcase;
 
 // Re-export core functionality for convenience
-pub use core::{DeadlockInfo, Deloxide};
+pub use core::{DeadlockInfo, Deloxide, types::{LockId, ThreadId}};
 pub use showcase::showcase;

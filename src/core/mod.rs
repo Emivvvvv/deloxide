@@ -17,8 +17,6 @@ pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_rel
 pub mod tracked_mutex;
 pub use tracked_mutex::TrackedMutex;
 
-mod graph_logger;
-
 use anyhow::{Context, Result};
 
 /// Deloxide configuration struct

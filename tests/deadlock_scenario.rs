@@ -21,7 +21,7 @@ fn test_deadlock_detection() {
 
     let log_location = "tests/deadlock_scenario.log";
     Deloxide::new()
-        .log(log_location)
+        .with_log(log_location)
         .callback(move |detected_info| {
             showcase(log_location).unwrap();
             // Set the flag indicating deadlock was detected

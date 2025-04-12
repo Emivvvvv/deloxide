@@ -1,13 +1,13 @@
-use crate::core::graph_logger;
-use crate::core::graph_logger::GraphState;
 use crate::core::types::{LockEvent, LockId, ThreadId};
-use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
+use anyhow::{Result, Context};
+use crate::core::logger::graph_logger;
+use crate::core::logger::graph_logger::GraphState;
 
 #[derive(Debug, Serialize)]
 pub struct CombinedLogEntry {
@@ -38,20 +38,20 @@ pub enum LoggerMode {
 }
 
 /// Logger for recording lock events
-pub struct Logger {
+pub struct EventLogger {
     mode: LoggerMode,
 }
 
-impl Default for Logger {
+impl Default for EventLogger {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Logger {
+impl EventLogger {
     /// Create a new logger with logging disabled
     pub fn new() -> Self {
-        Logger {
+        EventLogger {
             mode: LoggerMode::Disabled,
         }
     }
@@ -64,7 +64,7 @@ impl Logger {
             .open(path)
             .context("Failed to open log file")?;
 
-        Ok(Logger {
+        Ok(EventLogger {
             mode: LoggerMode::ToFile(file),
         })
     }
@@ -117,7 +117,7 @@ impl Logger {
 
 // Global logger instance
 lazy_static::lazy_static! {
-    static ref GLOBAL_LOGGER: Mutex<Logger> = Mutex::new(Logger::new());
+    static ref GLOBAL_LOGGER: Mutex<EventLogger> = Mutex::new(EventLogger::new());
 }
 
 /// Set the global logger to use the specified file, or disable logging if None
@@ -125,10 +125,11 @@ pub fn init_logger<P: AsRef<Path>>(path: Option<P>) -> Result<()> {
     if let Ok(mut global) = GLOBAL_LOGGER.lock() {
         match path {
             Some(path) => {
-                *global = Logger::with_file(path).context("Failed to create logger with file")?;
+                *global = EventLogger::with_file(path)
+                    .context("Failed to create logger with file")?;
             }
             None => {
-                *global = Logger::new(); // Disabled mode
+                *global = EventLogger::new(); // Disabled mode
             }
         }
     } else {
