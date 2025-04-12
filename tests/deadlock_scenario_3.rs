@@ -1,7 +1,4 @@
-use deloxide::{
-    DeadlockInfo, Deloxide, TrackedMutex,
-    showcase
-};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -18,14 +15,8 @@ fn test_partial_deadlock_with_some_threads_finishing() {
     let deadlock_detected_cb = Arc::clone(&deadlock_detected);
     let deadlock_info_cb = Arc::clone(&deadlock_info);
 
-    // Specify a log file for the detector's output.
-    let log_location = "tests/partial_deadlock.log";
     Deloxide::new()
-        .with_log(log_location)
         .callback(move |detected_info| {
-            // Optionally print the log file contents.
-            showcase(log_location).unwrap();
-
             // Mark that a deadlock has been detected.
             let mut detected = deadlock_detected_cb.lock().unwrap();
             *detected = true;
@@ -81,7 +72,9 @@ fn test_partial_deadlock_with_some_threads_finishing() {
     });
 
     // Wait for the non-deadlocking thread to finish.
-    non_deadlock_thread.join().expect("Thread 3 should complete normally");
+    non_deadlock_thread
+        .join()
+        .expect("Thread 3 should complete normally");
 
     // Wait for deadlock detection (with a timeout).
     // In this example, only threads 1 and 2 are deadlocked.

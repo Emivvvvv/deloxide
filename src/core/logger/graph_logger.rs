@@ -89,14 +89,19 @@ impl GraphLogger {
                 }
 
                 // Clean up thread from set if it no longer has any lock relationships
-                if !self.lock_owners.values().any(|&t| t == thread_id) &&
-                    !self.thread_attempts.contains_key(&thread_id) {
+                if !self.lock_owners.values().any(|&t| t == thread_id)
+                    && !self.thread_attempts.contains_key(&thread_id)
+                {
                     self.threads.remove(&thread_id);
                 }
 
                 // Clean up lock from set if it's no longer owned or attempted
-                if !self.lock_owners.contains_key(&lock_id) &&
-                    !self.thread_attempts.values().any(|attempts| attempts.contains(&lock_id)) {
+                if !self.lock_owners.contains_key(&lock_id)
+                    && !self
+                        .thread_attempts
+                        .values()
+                        .any(|attempts| attempts.contains(&lock_id))
+                {
                     self.locks.remove(&lock_id);
                 }
             }
@@ -158,5 +163,77 @@ pub fn get_current_graph_state() -> GraphState {
             locks: Vec::new(),
             links: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cleanup_after_release() {
+        let mut logger = GraphLogger::new();
+
+        // Add a thread and lock
+        logger.update(1, 10, LockEvent::Attempt);
+        logger.update(1, 10, LockEvent::Acquired);
+
+        // Verify they're in the sets
+        assert!(logger.threads.contains(&1));
+        assert!(logger.locks.contains(&10));
+
+        // Release the lock
+        logger.update(1, 10, LockEvent::Released);
+
+        // Verify both thread and lock have been removed
+        assert!(!logger.threads.contains(&1));
+        assert!(!logger.locks.contains(&10));
+    }
+
+    #[test]
+    fn test_cleanup_with_multiple_locks() {
+        let mut logger = GraphLogger::new();
+
+        // Thread 1 acquires two locks
+        logger.update(1, 10, LockEvent::Acquired);
+        logger.update(1, 20, LockEvent::Acquired);
+
+        // Verify thread is tracked
+        assert!(logger.threads.contains(&1));
+
+        // Release only one lock
+        logger.update(1, 10, LockEvent::Released);
+
+        // Thread should still be tracked because it owns another lock
+        assert!(logger.threads.contains(&1));
+
+        // But the released lock should be removed
+        assert!(!logger.locks.contains(&10));
+
+        // Release the second lock
+        logger.update(1, 20, LockEvent::Released);
+
+        // Now thread should be removed too
+        assert!(!logger.threads.contains(&1));
+    }
+
+    #[test]
+    fn test_cleanup_with_attempts() {
+        let mut logger = GraphLogger::new();
+
+        // Thread attempts a lock but doesn't acquire
+        logger.update(1, 10, LockEvent::Attempt);
+
+        // Both should be tracked
+        assert!(logger.threads.contains(&1));
+        assert!(logger.locks.contains(&10));
+
+        // Thread acquires the lock and then releases it
+        logger.update(1, 10, LockEvent::Acquired);
+        logger.update(1, 10, LockEvent::Released);
+
+        // Both should be removed
+        assert!(!logger.threads.contains(&1));
+        assert!(!logger.locks.contains(&10));
     }
 }
