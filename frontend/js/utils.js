@@ -6,12 +6,11 @@
  */
 
 /**
- * Convert raw lock number to letter representation
- * e.g., 1 → "A", 2 → "B", 3 → "C", ...
+ * Convert raw lock number to string representation
+ * Returns the original lock number as a string
  */
 function mapLockId(lockNum) {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  return letters[lockNum - 1] || lockNum.toString()
+  return lockNum.toString()
 }
 
 /**
@@ -31,9 +30,13 @@ function transformLogs(rawLogs, resourceMapping) {
     step: 1,
     timestamp: null, // Set to null to prevent showing timestamp for step 1
     type: "init",
-    description: `Created threads ${rawThreadIds.join(
-      ", "
-    )} and resources ${allLockLetters.map((r) => r).join(", ")}.`,
+    description: `<span style="color:black">Created:</span> <br> <span class="thread-id">Threads</span> ${rawThreadIds
+      .map((id) => `<span class="thread-id">${id}</span>`)
+      .join(
+        ", "
+      )} <br> <span class="resource-id">Resources</span> ${allLockLetters
+      .map((r) => `<span class="resource-id">${r}</span>`)
+      .join(", ")}.`,
   }
 
   const eventTypes = { 0: "attempt", 1: "acquired", 2: "released" }
@@ -56,11 +59,11 @@ function transformLogs(rawLogs, resourceMapping) {
 
   // Deadlock log: Collect "attempt" events from normal logs and create a generic description
   let unresolvedEvents = normalLogs.filter((log) => log.type === "attempt")
-  
+
   // Deduplicate by thread_id and resource_id combination
   // Create a unique key for each thread-resource pair and keep only unique pairs
   const seenPairs = new Map() // Using Map to keep the latest attempt event for each thread-resource pair
-  
+
   // Process events in reverse order to keep the most recent attempt for each thread-resource pair
   // This ensures we have the most up-to-date state when there are multiple attempts
   for (let i = unresolvedEvents.length - 1; i >= 0; i--) {
@@ -70,10 +73,10 @@ function transformLogs(rawLogs, resourceMapping) {
       seenPairs.set(key, ev)
     }
   }
-  
+
   // Convert back to array of unique events
   unresolvedEvents = Array.from(seenPairs.values())
-  
+
   // Deduplicate thread_id-resource_id pairs that would cause repeated entries in the description
   const threadResourceMapping = new Map()
   for (const ev of unresolvedEvents) {
@@ -81,14 +84,16 @@ function transformLogs(rawLogs, resourceMapping) {
       threadResourceMapping.set(ev.thread_id, ev.resource_id)
     }
   }
-  
+
   // Recreate unresolvedEvents with only one resource per thread
-  unresolvedEvents = Array.from(threadResourceMapping.entries()).map(([thread_id, resource_id]) => ({
-    thread_id,
-    resource_id,
-    type: "attempt"
-  }))
-  
+  unresolvedEvents = Array.from(threadResourceMapping.entries()).map(
+    ([thread_id, resource_id]) => ({
+      thread_id,
+      resource_id,
+      type: "attempt",
+    })
+  )
+
   // Deadlock cycle: Contains raw thread ids that are waiting
   const deadlockCycle = Array.from(
     new Set(unresolvedEvents.map((ev) => ev.thread_id))
@@ -317,75 +322,81 @@ function processEncodedLog(encodedStr) {
 
 /**
  * Process logs in the new format (one JSON object per line)
- * 
+ *
  * @param {string} logText - Raw text containing one JSON object per line
  * @returns {Object} - Structured logs and graph state data
  */
 function processNewFormatLogs(logText) {
   try {
     // Parse the log text into an array of event objects
-    const lines = logText.trim().split('\n');
-    const events = lines.map(line => JSON.parse(line));
+    const lines = logText.trim().split("\n")
+    const events = lines.map((line) => JSON.parse(line))
 
     // Get all unique thread IDs and lock IDs from the events
-    const allThreads = new Set();
-    const allLocks = new Set();
+    const allThreads = new Set()
+    const allLocks = new Set()
 
-    events.forEach(event => {
+    events.forEach((event) => {
       if (event.event && event.event.thread_id) {
-        allThreads.add(event.event.thread_id);
+        allThreads.add(event.event.thread_id)
       }
       if (event.event && event.event.lock_id) {
-        allLocks.add(event.event.lock_id);
+        allLocks.add(event.event.lock_id)
       }
-    });
+    })
 
     // Create resource mapping (lock_id -> letter)
-    const resourceMapping = {};
-    Array.from(allLocks).sort().forEach((lockId, index) => {
-      resourceMapping[lockId] = mapLockId(index + 1);
-    });
+    const resourceMapping = {}
+    Array.from(allLocks)
+      .sort()
+      .forEach((lockId, index) => {
+        resourceMapping[lockId] = mapLockId(index + 1)
+      })
 
     // Create thread mapping for the graph (raw_thread_id -> incremental number)
-    const graphThreadMapping = {};
-    Array.from(allThreads).sort().forEach((threadId, index) => {
-      graphThreadMapping[threadId] = index + 1;
-    });
+    const graphThreadMapping = {}
+    Array.from(allThreads)
+      .sort()
+      .forEach((threadId, index) => {
+        graphThreadMapping[threadId] = index + 1
+      })
 
     // Build structured logs array
-    const logs = [];
+    const logs = []
 
     // Add init log as first step
-    const threadsStr = Array.from(allThreads).join(', ');
-    const resourcesStr = Object.values(resourceMapping).map(r => `Resource ${r}`).join(', ');
-    
+    const threadsStr = Array.from(allThreads).join(", ")
+    const resourcesStr = Object.values(resourceMapping)
+      .map((r) => `Resource ${r}`)
+      .join(", ")
+
     logs.push({
       step: 1,
       timestamp: null,
       type: "init",
-      description: `Created threads ${threadsStr} and resources ${resourcesStr}.`
-    });
+      description: `<span style="color:black">Created:</span> <br> <span class="thread-id">Threads</span> ${threadsStr}</span> <br> <span class="resource-id">Resources</span> ${resourcesStr}.`,
+    })
 
     // Process each event
     events.forEach((eventObj, idx) => {
-      const { event } = eventObj;
-      if (!event) return;
+      const { event } = eventObj
+      if (!event) return
 
       // Map event names
       const eventTypeMap = {
-        'Attempt': 'attempt',
-        'Acquired': 'acquired',
-        'Released': 'released'
-      };
+        Attempt: "attempt",
+        Acquired: "acquired",
+        Released: "released",
+      }
 
-      const eventType = eventTypeMap[event.event] || 'unknown';
-      
+      const eventType = eventTypeMap[event.event] || "unknown"
+
       // Skip if not a valid event type
-      if (eventType === 'unknown') return;
-      
-      const threadId = event.thread_id;
-      const resourceId = resourceMapping[event.lock_id];
-      const timestamp = Math.floor(event.timestamp * 1000); // Convert to milliseconds
+      if (eventType === "unknown") return
+
+      const threadId = event.thread_id
+      const resourceId = resourceMapping[event.lock_id]
+      const timestamp = Math.floor(event.timestamp * 1000) // Convert to milliseconds
 
       logs.push({
         step: idx + 2, // init step is 1, so we start from 2
@@ -393,73 +404,80 @@ function processNewFormatLogs(logText) {
         type: eventType,
         thread_id: threadId,
         resource_id: resourceId,
-        description: `<span class="thread-id">Thread ${threadId}</span> ${eventType} <span class="resource-id">Resource ${resourceId}</span>`
-      });
-    });
+        description: `<span class="thread-id">Thread ${threadId}</span> ${eventType} <span class="resource-id">Resource ${resourceId}</span>`,
+      })
+    })
 
     // Check for deadlock by looking at the last graph state
-    const lastEventWithGraph = events[events.length - 1];
-    
+    const lastEventWithGraph = events[events.length - 1]
+
     if (lastEventWithGraph && lastEventWithGraph.graph) {
-      const graph = lastEventWithGraph.graph;
-      const attemptLinks = graph.links.filter(link => link.type === "Attempt");
-      
+      const graph = lastEventWithGraph.graph
+      const attemptLinks = graph.links.filter((link) => link.type === "Attempt")
+
       // If we have multiple threads attempting to acquire resources, check for a deadlock
       if (attemptLinks.length >= 2) {
         // Find threads that are both attempting to acquire a resource and already hold one
-        const threadsInDeadlock = [];
-        const waitingDetails = [];
-        
-        graph.threads.forEach(threadId => {
+        const threadsInDeadlock = []
+        const waitingDetails = []
+
+        graph.threads.forEach((threadId) => {
           const acquiredResources = graph.links
-            .filter(link => link.source === threadId && link.type === "Acquired")
-            .map(link => link.target);
-            
+            .filter(
+              (link) => link.source === threadId && link.type === "Acquired"
+            )
+            .map((link) => link.target)
+
           const attemptedResources = graph.links
-            .filter(link => link.source === threadId && link.type === "Attempt")
-            .map(link => link.target);
-          
+            .filter(
+              (link) => link.source === threadId && link.type === "Attempt"
+            )
+            .map((link) => link.target)
+
           if (acquiredResources.length > 0 && attemptedResources.length > 0) {
-            threadsInDeadlock.push(threadId);
-            attemptedResources.forEach(resourceId => {
+            threadsInDeadlock.push(threadId)
+            attemptedResources.forEach((resourceId) => {
               waitingDetails.push({
                 thread_id: threadId,
-                lock_id: resourceMapping[resourceId]
-              });
-            });
+                lock_id: resourceMapping[resourceId],
+              })
+            })
           }
-        });
+        })
 
         // If we found threads in a potential deadlock
         if (threadsInDeadlock.length >= 2) {
           // Create descriptions
           const deadlockDescriptions = waitingDetails.map(
-            detail => `<span class="thread-id">Thread ${detail.thread_id}</span> is waiting for <span class="resource-id">Resource ${detail.lock_id}</span>`
-          );
+            (detail) =>
+              `<span class="thread-id">Thread ${detail.thread_id}</span> is waiting for <span class="resource-id">Resource ${detail.lock_id}</span>`
+          )
 
           // Join descriptions with proper separators for better readability
-          let deadlockDescription;
+          let deadlockDescription
           if (deadlockDescriptions.length === 1) {
-            deadlockDescription = `<strong>DEADLOCK DETECTED:</strong> ${deadlockDescriptions[0]}`;
+            deadlockDescription = `<strong>DEADLOCK DETECTED:</strong> ${deadlockDescriptions[0]}`
           } else if (deadlockDescriptions.length === 2) {
-            deadlockDescription = `<strong>DEADLOCK DETECTED:</strong> ${deadlockDescriptions[0]} while ${deadlockDescriptions[1].replace(
+            deadlockDescription = `<strong>DEADLOCK DETECTED:</strong> ${
+              deadlockDescriptions[0]
+            } while ${deadlockDescriptions[1].replace(
               '<span class="thread-id">Thread',
               '<span class="thread-id">thread'
-            )}`;
+            )}`
           } else {
-            const lastDesc = deadlockDescriptions.pop();
+            const lastDesc = deadlockDescriptions.pop()
             deadlockDescription = `<strong>DEADLOCK DETECTED:</strong> ${deadlockDescriptions.join(
               ", "
             )} and ${lastDesc.replace(
               '<span class="thread-id">Thread',
               '<span class="thread-id">thread'
-            )}`;
+            )}`
           }
 
           // Create deadlock log
-          const lastTimestamp = events[events.length - 1].event.timestamp;
-          const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000);
-          
+          const lastTimestamp = events[events.length - 1].event.timestamp
+          const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000)
+
           logs.push({
             step: logs.length + 1,
             timestamp: deadlockTimestamp,
@@ -469,22 +487,26 @@ function processNewFormatLogs(logText) {
             deadlock_details: {
               thread_cycle: threadsInDeadlock,
               thread_waiting_for_locks: waitingDetails,
-              timestamp: deadlockTimestamp
-            }
-          });
+              timestamp: deadlockTimestamp,
+            },
+          })
         }
       }
     }
 
     // Generate graph states based on logs
-    const graphStates = generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping);
+    const graphStates = generateGraphStateFromLogs(
+      logs,
+      graphThreadMapping,
+      resourceMapping
+    )
 
     return {
       logs,
-      graph_state: graphStates
-    };
+      graph_state: graphStates,
+    }
   } catch (error) {
-    console.error("Error processing new format logs:", error);
-    throw error;
+    console.error("Error processing new format logs:", error)
+    throw error
   }
 }

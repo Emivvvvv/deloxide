@@ -63,13 +63,13 @@
         /* Thread and resource IDs styling */
         .thread-id {
             font-family: 'Roboto Mono', monospace;
-            color: var(--primary-color);
+            color: var(--danger-color);
             font-weight: 500;
         }
         
         .resource-id {
             font-family: 'Roboto Mono', monospace;
-            color: var(--secondary-color);
+            color: var(--primary-color);
             font-weight: 500;
         }
         
@@ -143,6 +143,36 @@
                     <i class="fas fa-redo"></i>
                     <span>Reset</span>
                 </button>
+                <button id="toggle-legend-btn" class="control-btn" aria-label="Toggle Legend">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Legend</span>
+                </button>
+            </div>
+
+            <div id="legend">
+                <h3>Legend</h3>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color thread"></div>
+                        <span>Thread</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color resource"></div>
+                        <span>Resource</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line attempt"></div>
+                        <span>Attempt</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line acquired"></div>
+                        <span>Acquired</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line deadlock"></div>
+                        <span>Deadlock</span>
+                    </div>
+                </div>
             </div>
 
             <div class="visualization-container">
@@ -171,32 +201,6 @@
                 <div id="timeline-line"></div>
                 <div id="timeline-marker"></div>
                 <!-- Timeline events will be added here dynamically -->
-            </div>
-
-            <div id="legend">
-                <h3>Legend</h3>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <div class="legend-color thread"></div>
-                        <span>Thread</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color resource"></div>
-                        <span>Resource</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line attempt"></div>
-                        <span>Attempt</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line acquired"></div>
-                        <span>Acquired</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line deadlock"></div>
-                        <span>Deadlock</span>
-                    </div>
-                </div>
             </div>
         </main>
 
@@ -280,21 +284,21 @@
     <div id="upload-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Upload Deadlock Log Files</h2>
+                <h2>Upload Deadlock Log File</h2>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
                 <div id="drop-area">
-                    <p>Drag and drop JSON log files here</p>
+                    <p>Drag and drop a single Deloxide log file here to load automatically</p>
                     <p>or</p>
-                    <input type="file" id="file-input" accept=".json" multiple hidden>
+                    <input type="file" id="file-input" hidden>
                     <button id="file-select-btn" class="control-btn">
                         <i class="fas fa-file-upload"></i>
-                        <span>Select Files</span>
+                        <span>Select File</span>
                     </button>
                 </div>
                 <div id="upload-list"></div>
-                <div id="json-preview">
+                <div id="json-preview" style="display: none;">
                     <h3>Log Content Preview</h3>
                     <pre id="json-content"></pre>
                 </div>
