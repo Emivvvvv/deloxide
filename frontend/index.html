@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deloxide - Deadlock Detection Visualization</title>
     
+    <!--favicon-->
+    <link rel="icon" type="image/png" href="img/favicon.ico">
+    
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -31,6 +34,20 @@
             display: inline-block;
             margin: 10px 0;
             text-align: center;
+        }
+        
+        /* Logo styling */
+        .logo img {
+            height: 32px;
+            width: auto;
+            margin-right: 10px;
+            filter: brightness(0) invert(1); /* Makes the logo white */
+        }
+        
+        @media (max-width: 768px) {
+            .logo img {
+                height: 24px; /* Smaller on mobile */
+            }
         }
         
         .resource-list {
@@ -85,8 +102,7 @@
     <div class="container">
         <header>
             <div class="logo">
-                <i class="fas fa-project-diagram"></i>
-                <h1>Deloxide</h1>
+                <img src="img/logo.png" alt="Deloxide Logo">
             </div>
             <div class="header-buttons">
                 <button id="upload-btn" class="header-btn" aria-label="Upload log files">

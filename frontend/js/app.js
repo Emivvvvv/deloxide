@@ -16,6 +16,7 @@ let svg, linkGroup, nodeGroup, tooltip, simulation;
 let currentScenario = null;
 let animationInterval = null;
 let isPlaying = false;
+let isFileUploaded = false; // Add flag to track if data was uploaded
 
 // Theme management
 const themeToggle = document.getElementById('theme-toggle');
@@ -206,14 +207,30 @@ const initUploadFeature = () => {
         
         reader.onload = function(e) {
             try {
-                const jsonData = JSON.parse(e.target.result);
-                const formattedJSON = JSON.stringify(jsonData, null, 2);
-                jsonContent.textContent = formattedJSON;
+                // Check if the file is a newline-delimited JSON format
+                const content = e.target.result;
+                let jsonData;
+                let isNewFormat = false;
+                
+                if (content.trim().startsWith('{') && content.includes('{"event":')) {
+                    // This is likely the new format with one JSON per line
+                    isNewFormat = true;
+                    // Just show the raw text for preview
+                    jsonContent.textContent = content;
+                } else {
+                    // Assume it's a standard JSON file
+                    jsonData = JSON.parse(content);
+                    const formattedJSON = JSON.stringify(jsonData, null, 2);
+                    jsonContent.textContent = formattedJSON;
+                }
+                
                 jsonPreview.style.display = 'block';
                 
                 // Validate if this is a proper deadlock log
-                if (validateDeadlockLog(jsonData)) {
+                if (!isNewFormat && validateDeadlockLog(jsonData)) {
                     console.log('Valid deadlock log file loaded');
+                } else if (isNewFormat) {
+                    console.log('New format log file detected');
                 } else {
                     console.warn('The uploaded file does not appear to be a valid deadlock log');
                     alert('Warning: The file does not appear to be a valid deadlock log file. It may not display correctly.');
@@ -238,31 +255,35 @@ const initUploadFeature = () => {
         
         reader.onload = function(e) {
             try {
-                // Parse the uploaded file
-                const jsonData = JSON.parse(e.target.result);
+                // Get file content
+                const content = e.target.result;
+                let scenario;
                 
-                // Check if this is the new format (raw data array)
-                if (Array.isArray(jsonData) && jsonData.length >= 1 && Array.isArray(jsonData[0])) {
-                    // This is the new raw format, transform it using the utility function
-                    const transformed = transformRawObject(jsonData);
+                // Set the uploaded flag to true
+                isFileUploaded = true;
+                
+                // Check if this is the new format (one JSON object per line)
+                if (content.trim().startsWith('{') && content.includes('{"event":')) {
+                    // Process the new format logs
+                    scenario = processNewFormatLogs(content);
                     
-                    // Store the original raw data for sharing
-                    transformed.rawData = jsonData;
+                    // Store the original content for sharing
+                    scenario.rawContent = content;
                     
                     // Process the transformed data
                     uploadModal.style.display = 'none';
                     resetVisualization();
-                    currentScenario = transformed;
-                    logData = transformed.logs;
-                    graphStateData = transformed.graph_state;
+                    currentScenario = scenario;
+                    logData = scenario.logs;
+                    graphStateData = scenario.graph_state;
                     
                     // Show loading state
                     document.getElementById('loading').style.display = 'block';
                     document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
                     
-                    // Show share button
+                    // Hide share button for uploads
                     if (shareBtn) {
-                        shareBtn.style.display = 'flex';
+                        shareBtn.style.display = 'none';
                     }
                     
                     // Initialize visualization after a brief delay
@@ -283,31 +304,34 @@ const initUploadFeature = () => {
                         updateVisualization();
                     }, 100);
                 } else {
-                    // Check if it's a standard format
-                    if (validateDeadlockLog(jsonData)) {
-                        // Process the scenario data (old format)
+                    // Parse the uploaded file as standard JSON
+                    const jsonData = JSON.parse(content);
+                    
+                    // Check if this is the new format (raw data array)
+                    if (Array.isArray(jsonData) && jsonData.length >= 1 && Array.isArray(jsonData[0])) {
+                        // This is the new raw format, transform it using the utility function
+                        scenario = transformRawObject(jsonData);
+                        
+                        // Store the original raw data for sharing
+                        scenario.rawData = jsonData;
+                        
+                        // Process the transformed data
                         uploadModal.style.display = 'none';
                         resetVisualization();
-                        currentScenario = jsonData;
-                        logData = jsonData.logs;
-                        graphStateData = jsonData.graph_state;
+                        currentScenario = scenario;
+                        logData = scenario.logs;
+                        graphStateData = scenario.graph_state;
                         
-                        // Update scenario information
-                        updateScenarioInfo(jsonData);
-                        
-                        // Initialize visualization
-                        currentStep = 1;
-                        
-                        // Show loading state while we initialize
+                        // Show loading state
                         document.getElementById('loading').style.display = 'block';
                         document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
                         
-                        // Show share button since we have data loaded
+                        // Hide share button for uploads
                         if (shareBtn) {
-                            shareBtn.style.display = 'flex';
+                            shareBtn.style.display = 'none';
                         }
                         
-                        // Initialize after a brief delay to allow the UI to update
+                        // Initialize visualization after a brief delay
                         setTimeout(() => {
                             initVisualization();
                             
@@ -325,7 +349,50 @@ const initUploadFeature = () => {
                             updateVisualization();
                         }, 100);
                     } else {
-                        alert('Error: The file is not a valid deadlock log file. Please upload a properly formatted file.');
+                        // Check if it's a standard format
+                        if (validateDeadlockLog(jsonData)) {
+                            // Process the scenario data (old format)
+                            uploadModal.style.display = 'none';
+                            resetVisualization();
+                            currentScenario = jsonData;
+                            logData = jsonData.logs;
+                            graphStateData = jsonData.graph_state;
+                            
+                            // Update scenario information
+                            updateScenarioInfo(jsonData);
+                            
+                            // Initialize visualization
+                            currentStep = 1;
+                            
+                            // Show loading state while we initialize
+                            document.getElementById('loading').style.display = 'block';
+                            document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
+                            
+                            // Show share button since we have data loaded
+                            if (shareBtn) {
+                                shareBtn.style.display = 'flex';
+                            }
+                            
+                            // Initialize after a brief delay to allow the UI to update
+                            setTimeout(() => {
+                                initVisualization();
+                                
+                                // Hide loading message and show visualization elements
+                                document.getElementById('loading').style.display = 'none';
+                                document.getElementById('graph').style.display = 'block';
+                                document.getElementById('step-info').style.display = 'block';
+                                document.getElementById('wait-graph').style.display = 'block';
+                                document.getElementById('timeline').style.display = 'block';
+                                
+                                // Initialize timeline
+                                initTimeline();
+                                
+                                // Update visualization for the first step
+                                updateVisualization();
+                            }, 100);
+                        } else {
+                            alert('Error: The file is not a valid deadlock log file. Please upload a properly formatted file.');
+                        }
                     }
                 }
             } catch (error) {
@@ -448,7 +515,30 @@ function openShareModal() {
     try {
         console.log('Preparing to share scenario');
         
-        // Check if data can be shared as raw logs
+        // Check if data can be shared as raw content (new line-by-line format)
+        if (currentScenario.rawContent) {
+            // We have the original raw text content available
+            console.log('Using raw line-by-line format for sharing');
+            
+            // Compress the raw text content
+            const compressedData = LZString.compressToEncodedURIComponent(currentScenario.rawContent);
+            console.log('Compressed line format size:', compressedData.length, 'bytes');
+            
+            // Generate URL with the format parameter to indicate line-by-line
+            const currentUrl = window.location.href.split('?')[0];
+            const shareUrl = `${currentUrl}?format=line&data=${compressedData}&step=${currentStep}`;
+            
+            console.log('Share URL generated, length:', shareUrl.length);
+            
+            // Set the input value
+            shareLinkInput.value = shareUrl;
+            
+            // Show the modal
+            shareModal.style.display = 'flex';
+            return;
+        }
+        
+        // Check if data can be shared as raw logs (msgpack format)
         if (currentScenario.rawData) {
             // We have the original raw data available
             console.log('Using raw log data for sharing');
@@ -515,7 +605,85 @@ function checkForSharedScenario() {
     const urlParams = new URLSearchParams(window.location.search);
     const encodedData = urlParams.get('data');
     const step = urlParams.get('step');
-    const encodedLogs = urlParams.get('logs'); // New parameter for msgpack encoded logs
+    const encodedLogs = urlParams.get('logs'); // Parameter for msgpack encoded logs
+    const format = urlParams.get('format'); // New parameter to indicate line-by-line format
+    
+    // Handle line-by-line formatted logs
+    if (format === 'line' && encodedData) {
+        try {
+            console.log('Found line-by-line format logs in URL, processing...');
+            
+            // Show loading state
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading shared visualization...</p>';
+            
+            // Decompress the line-by-line content
+            console.log('Compressed line data size:', encodedData.length, 'bytes');
+            const decompressedContent = LZString.decompressFromEncodedURIComponent(encodedData);
+            
+            if (!decompressedContent) {
+                throw new Error('Failed to decompress line data');
+            }
+            
+            console.log('Decompressed line data size:', decompressedContent.length, 'bytes');
+            
+            // Process using the new format parser
+            const processed = processNewFormatLogs(decompressedContent);
+            console.log('Successfully processed line format data');
+            
+            // Store original content for potential re-sharing
+            processed.rawContent = decompressedContent;
+            
+            // Process the transformed data
+            resetVisualization();
+            currentScenario = processed;
+            logData = processed.logs;
+            graphStateData = processed.graph_state;
+            
+            // Set step if provided
+            currentStep = step ? parseInt(step) : 1;
+            if (isNaN(currentStep) || currentStep < 1 || currentStep > logData.length) {
+                currentStep = 1;
+            }
+            console.log('Setting to step:', currentStep);
+            
+            // Show share button
+            const shareBtn = document.getElementById('share-btn');
+            if (shareBtn) {
+                shareBtn.style.display = 'flex';
+            }
+            
+            // Initialize visualization
+            setTimeout(() => {
+                initVisualization();
+                
+                // Hide loading message and show visualization elements
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('graph').style.display = 'block';
+                document.getElementById('step-info').style.display = 'block';
+                document.getElementById('wait-graph').style.display = 'block';
+                document.getElementById('timeline').style.display = 'block';
+                
+                // Initialize timeline
+                initTimeline();
+                
+                // Update visualization with the specified step
+                updateVisualization();
+                
+                console.log('Shared line format visualization loaded successfully');
+            }, 100);
+            
+            return; // Exit early since we've handled this format
+        } catch (error) {
+            console.error('Error loading line format logs:', error);
+            document.getElementById('loading').innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error loading shared visualization: ${error.message}
+                </div>`;
+            return; // Exit early to prevent further processing
+        }
+    }
     
     if (encodedLogs) {
         // This is the new compressed msgpack format
@@ -721,6 +889,7 @@ function checkForSharedScenario() {
 
 // Helper function to validate deadlock log structure
 function validateDeadlockLog(json) {
+    // Standard format check
     return (
         json && 
         typeof json === 'object' && 
