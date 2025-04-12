@@ -15,6 +15,8 @@ pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_rel
 
 // Tracked mutex
 pub mod tracked_mutex;
+mod graph_logger;
+
 pub use tracked_mutex::TrackedMutex;
 
 use std::io;

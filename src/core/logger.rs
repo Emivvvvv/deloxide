@@ -5,6 +5,14 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
+use crate::core::graph_logger;
+use crate::core::graph_logger::GraphState;
+
+#[derive(Debug, Serialize)]
+pub struct CombinedLogEntry {
+    pub event: LogEntry,
+    pub graph: GraphState,
+}
 
 /// Structure for a single log entry
 #[derive(Debug, Serialize)]
@@ -63,6 +71,10 @@ impl Logger {
             return;
         }
 
+        // First update the graph state with this event
+        graph_logger::update_graph(thread_id, lock_id, event);
+
+        // Then create log entry
         let entry = LogEntry {
             thread_id,
             lock_id,
@@ -70,9 +82,18 @@ impl Logger {
             timestamp: Utc::now().to_rfc3339(),
         };
 
+        // Get the updated graph state
+        let graph = graph_logger::get_current_graph_state();
+
+        // Create combined log entry
+        let combined_entry = CombinedLogEntry {
+            event: entry,
+            graph,
+        };
+
         if let LoggerMode::ToFile(ref file) = self.mode {
             let mut file = file;
-            if let Ok(json) = serde_json::to_string(&entry) {
+            if let Ok(json) = serde_json::to_string(&combined_entry) {
                 let _ = writeln!(file, "{}", json);
                 let _ = file.flush();
             }
