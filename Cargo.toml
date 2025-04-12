@@ -27,3 +27,7 @@ webbrowser = "1.0.3"
 # CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
 log = "0.4.27"
+
+rmp-serde = "1.1.1"       # For MessagePack serialization
+flate2 = "1.0.26"         # For Gzip compression
+base64 = "0.21.2"         # For Base64URL encoding
