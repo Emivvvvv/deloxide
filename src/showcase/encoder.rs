@@ -110,7 +110,7 @@ fn parse_log_entry(entry: LogEntry) -> Result<(Event, Graph)> {
         "Attempt" => 0u8,
         "Acquired" => 1u8,
         "Released" => 2u8,
-        _ => anyhow::bail!("Invalid event type: {}", entry.event.event),
+        other => anyhow::bail!("Invalid event type: '{}'", other),
     };
 
     let compact_event = (

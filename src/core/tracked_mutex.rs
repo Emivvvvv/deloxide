@@ -62,6 +62,26 @@ impl<T> TrackedMutex<T> {
             Err(e) => Err(e),
         }
     }
+
+    /// Try to acquire the lock without blocking
+    pub fn try_lock(&self) -> Result<TrackedGuard<T>, std::sync::TryLockError<MutexGuard<T>>> {
+        let thread_id = get_current_thread_id();
+
+        // Report lock attempt
+        detector::on_lock_attempt(thread_id, self.id);
+
+        match self.inner.try_lock() {
+            Ok(guard) => {
+                detector::on_lock_acquired(thread_id, self.id);
+                Ok(TrackedGuard {
+                    thread_id,
+                    lock_id: self.id,
+                    guard,
+                })
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 impl<T> Deref for TrackedGuard<'_, T> {

@@ -50,14 +50,14 @@ impl Deloxide {
         }
     }
 
-    /// Set the path for the log file
+    /// Activate logger and set the path for the log file
     ///
     /// # Arguments
     /// * `path` - Path to the log file
     ///
     /// # Returns
     /// The builder for method chaining
-    pub fn log<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
+    pub fn with_log<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
         self.log_path = Some(path.as_ref().to_string_lossy().into_owned());
         self
     }
