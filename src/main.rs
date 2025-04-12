@@ -1,36 +1,21 @@
-// use clap::{Parser, Subcommand};
-// use deloxide:: showcase;
-// use std::path::PathBuf;
-//
-// #[derive(Parser)]
-// #[clap(author, version, about = "Deloxide - Deadlock Detection Tool")]
-// struct Cli {
-//     #[clap(subcommand)]
-//     command: Commands,
-// }
-//
-// #[derive(Subcommand)]
-// enum Commands {
-//     /// Upload log file to showcase visualization
-//     Showcase {
-//         /// Path to the log file
-//         #[clap(required = true)]
-//         log_file: PathBuf,
-//     },
-// }
-//
-// fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let cli = Cli::parse();
-//
-//     match cli.command {
-//         Commands::Showcase { log_file } => {
-//             showcase::cli_showcase(log_file)?;
-//         }
-//     }
-//
-//     Ok(())
-// }
+use anyhow::Result;
+use clap::Parser;
+use deloxide::showcase;
+use std::path::PathBuf;
 
-fn main() {
-    deloxide::showcase::encoder::convert_to_compact_format("tests/deadlock_scenario.log");
+#[derive(Parser)]
+#[command(
+    author,
+    version,
+    about = "Deloxide - Cross-Language Deadlock Detector With Visualization Support"
+)]
+struct Cli {
+    /// Path to the log file
+    log_file: PathBuf,
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    showcase::showcase(cli.log_file)?;
+    Ok(())
 }

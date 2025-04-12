@@ -15,18 +15,17 @@ pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_rel
 
 // Tracked mutex
 pub mod tracked_mutex;
-mod graph_logger;
-
 pub use tracked_mutex::TrackedMutex;
 
-use std::io;
+mod graph_logger;
+
+use anyhow::{Context, Result};
 
 /// Deloxide configuration struct
 pub struct Deloxide {
     log_path: Option<String>,
     callback: Box<dyn Fn(DeadlockInfo) + Send + 'static>,
 }
-
 impl Default for Deloxide {
     fn default() -> Self {
         Self::new()
@@ -85,10 +84,10 @@ impl Deloxide {
     ///
     /// # Errors
     /// Returns an error if logger initialization fails
-    pub fn start(self) -> io::Result<()> {
+    pub fn start(self) -> Result<()> {
         // Initialize the logger if a path was provided
         if let Some(log_path) = self.log_path {
-            init_logger(Some(log_path))?;
+            init_logger(Some(log_path)).context("Failed to initialize logger")?;
         }
 
         // Initialize the detector with the callback

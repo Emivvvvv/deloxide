@@ -1,6 +1,6 @@
 use deloxide::{
     core::{DeadlockInfo, Deloxide, TrackedMutex},
-    showcase
+    showcase,
 };
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;

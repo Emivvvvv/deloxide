@@ -1,12 +1,13 @@
+use crate::core::graph_logger;
+use crate::core::graph_logger::GraphState;
 use crate::core::types::{LockEvent, LockId, ThreadId};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
-use crate::core::graph_logger;
-use crate::core::graph_logger::GraphState;
 
 #[derive(Debug, Serialize)]
 pub struct CombinedLogEntry {
@@ -56,8 +57,12 @@ impl Logger {
     }
 
     /// Create a new logger that writes to the specified file
-    pub fn with_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = OpenOptions::new().create(true).append(true).open(path)?;
+    pub fn with_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .context("Failed to open log file")?;
 
         Ok(Logger {
             mode: LoggerMode::ToFile(file),
@@ -116,16 +121,18 @@ lazy_static::lazy_static! {
 }
 
 /// Set the global logger to use the specified file, or disable logging if None
-pub fn init_logger<P: AsRef<Path>>(path: Option<P>) -> std::io::Result<()> {
+pub fn init_logger<P: AsRef<Path>>(path: Option<P>) -> Result<()> {
     if let Ok(mut global) = GLOBAL_LOGGER.lock() {
         match path {
             Some(path) => {
-                *global = Logger::with_file(path)?;
+                *global = Logger::with_file(path).context("Failed to create logger with file")?;
             }
             None => {
                 *global = Logger::new(); // Disabled mode
             }
         }
+    } else {
+        anyhow::bail!("Failed to acquire lock on global logger");
     }
     Ok(())
 }
