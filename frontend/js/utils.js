@@ -30,7 +30,7 @@ function transformLogs(rawLogs, resourceMapping) {
     step: 1,
     timestamp: null, // Set to null to prevent showing timestamp for step 1
     type: "init",
-    description: `<span style="color:black">Created:</span> <br> <span class="thread-id">Threads</span> ${rawThreadIds
+    description: `<span class="thread-id">Threads</span> ${rawThreadIds
       .map((id) => `<span class="thread-id">${id}</span>`)
       .join(
         ", "
@@ -167,7 +167,7 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
     .sort((a, b) => a[1] - b[1])
     .map(([rawThread, mapped]) => ({
       id: `T${mapped}`,
-      name: `Thread ${rawThread.toString()}`,
+      name: `${rawThread.toString()}`,
       type: "thread",
     }))
   const resourceNodes = Object.keys(resourceMapping).map((lockNum) => {

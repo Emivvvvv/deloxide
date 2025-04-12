@@ -1247,35 +1247,85 @@ function updateStepInfo() {
     const logEntry = logData[currentStep - 1]
 
     // Create main step info with clean formatting
-    let stepInfoContent = `<h3>Step ${
-      logEntry.step
-    }: ${logEntry.type.toUpperCase()}</h3>`
-    stepInfoContent += `<p>${
-      logEntry.description || "No description available"
-    }</p>`
+    let stepInfoContent = `<h3>Step ${logEntry.step}: ${logEntry.type.charAt(0).toUpperCase() + logEntry.type.slice(1)}</h3>`
+
+    // Create a more descriptive message based on event type
+    if (logEntry.type === "attempt") {
+      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> attempts to acquire <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+    } else if (logEntry.type === "acquired") {
+      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> successfully acquired <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+    } else if (logEntry.type === "released") {
+      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> released <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+    } else if (logEntry.type === "init") {
+      stepInfoContent += `<p>${logEntry.description || "No description available"}</p>`
+    } else if (logEntry.type === "deadlock") {
+      // For deadlock, format the description with line breaks for better readability
+      const deadlockPrefix = '<strong>DEADLOCK DETECTED:</strong>';
+
+      // Remove the prefix from the description to work with just the thread details
+      let deadlockDetails = logEntry.description.replace(deadlockPrefix, '').trim();
+
+      // Format the deadlock details with line breaks
+      if (deadlockDetails.includes(',')) {
+        // Split by comma and 'and' to get individual thread statements
+        let statements = deadlockDetails.split(/,\s*(?=<span)|and\s*(?=<span)/);
+
+        // Format with line breaks
+        deadlockDetails = statements.map(statement => statement.trim()).join(',<br>');
+
+        // Replace the last comma with 'and' if there was an 'and' in the original
+        if (logEntry.description.includes(' and ')) {
+          const lastCommaIndex = deadlockDetails.lastIndexOf(',<br>');
+          if (lastCommaIndex !== -1) {
+            deadlockDetails =
+                deadlockDetails.substring(0, lastCommaIndex) +
+                ' and<br>' +
+                deadlockDetails.substring(lastCommaIndex + 5);
+          }
+        }
+      }
+
+      // Reconstruct the full description with prefix and formatted details
+      stepInfoContent += `<p>${deadlockPrefix}<br>${deadlockDetails}</p>`;
+    } else {
+      // Fallback for any other event types
+      stepInfoContent += `<p>${logEntry.description || "No description available"}</p>`
+    }
 
     if (logEntry.code_reference) {
       stepInfoContent += `<p><strong>Code Reference:</strong> <code class="code-reference">${logEntry.code_reference}</code></p>`
     }
 
-    // Add additional details based on event type
-    if (
-      logEntry.type === "attempt" ||
-      logEntry.type === "acquired" ||
-      logEntry.type === "released"
-    ) {
-      stepInfoContent += `<p><strong>Thread:</strong> <span class="thread-id">Thread ${logEntry.thread_id}</span></p>`
-      stepInfoContent += `<p><strong class="resource-id">Resource:</strong> <span class="resource-id">Resource ${logEntry.resource_id}</span></p>`
-    }
-
     // Add timestamp only if not step 1 (init)
     if (logEntry.type !== "init" && logEntry.timestamp) {
-      const date = new Date(logEntry.timestamp)
-      // Format with milliseconds
-      const formattedTime = `${date.toLocaleTimeString()}.${String(
-        date.getMilliseconds()
-      ).padStart(3, "0")}`
-      stepInfoContent += `<p class="timestamp"><i class="far fa-clock"></i> ${formattedTime}</p>`
+      const date = new Date(logEntry.timestamp);
+
+      // Format with more details including date, time with milliseconds, and Unix timestamp
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
+
+      // Get month name and day
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const month = monthNames[date.getMonth()];
+      const day = String(date.getDate()).padStart(2, '0');
+      const year = date.getFullYear();
+
+      // Create formatted timestamp
+      const formattedTime = `${hours}:${minutes}:${seconds}.${milliseconds}`;
+      const formattedDate = `${month} ${day}, ${year}`;
+
+      // Add Unix timestamp (in seconds and milliseconds)
+      const unixTimestamp = logEntry.timestamp / 1000;
+      const unixSeconds = Math.floor(unixTimestamp);
+      const remainingMs = logEntry.timestamp % 1000;
+
+      stepInfoContent += `
+        <div class="timestamp">
+          <i class="far fa-clock"></i> 
+          <span class="timestamp-datetime">${formattedDate} ${formattedTime}</span>
+        </div>`;
     }
 
     // Set content
@@ -1290,51 +1340,31 @@ function updateStepInfo() {
     if (logEntry.type === "deadlock" && logEntry.deadlock_details) {
       waitGraphElement.style.display = "block"
 
-      // Construct wait-for graph explanation
-      let waitGraphContent = `<h3>Wait-for Graph</h3><div id="wait-graph-content">`
+      // Construct wait-for graph explanation with improved design
+      let waitGraphContent = `<h3>Deadlock Cycle</h3><div id="wait-graph-content">`
 
-      waitGraphContent += `<p>A cycle has been detected in the wait-for graph:</p>`
-
-      // Format the cycle
+      // Format the cycle with better visualization
       const cycle = logEntry.deadlock_details.thread_cycle || []
       if (cycle.length > 0) {
-        // Create a nice cycle visualization
-        waitGraphContent += `<p class="cycle-visualization">`
+        // Create a nicer cycle visualization
+        waitGraphContent += `<div class="cycle-visualization">`
         cycle.forEach((threadId, index) => {
           waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
           if (index < cycle.length - 1) {
-            waitGraphContent += ` <i class="fas fa-arrow-right"></i> `
+            waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `
           }
         })
 
         // Add arrow back to first thread to show the cycle clearly
         if (cycle.length > 1) {
-          waitGraphContent += ` <i class="fas fa-arrow-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
+          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
         }
-        waitGraphContent += `</p>`
-      } else {
-        waitGraphContent += `<p>Deadlock detected between threads.</p>`
-      }
 
-      waitGraphContent += `<p><strong>Resources involved:</strong></p>`
+        // Add non-breaking spaces for visible spacing at the end (using &nbsp;)
+        waitGraphContent += `<span class="end-spacing">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>`
 
-      const threadWaitingForLocks =
-        logEntry.deadlock_details.thread_waiting_for_locks || []
-      if (threadWaitingForLocks.length > 0) {
-        waitGraphContent += `<ul class="resource-list">`
-        threadWaitingForLocks.forEach((item) => {
-          const threadLog = logData.find(
-            (log) =>
-              log.thread_id === item.thread_id &&
-              log.resource_id === item.lock_id &&
-              log.type === "attempt"
-          )
-
-          waitGraphContent += `<li><span class="thread-id">Thread ${item.thread_id}</span> is waiting for <span class="resource-id">Resource ${item.lock_id}</span></li>`
-        })
-        waitGraphContent += `</ul>`
-      } else {
-        waitGraphContent += `<p>No detailed resource information available.</p>`
+        // Add explanation of what the cycle means
+        waitGraphContent += `<p class="deadlock-explanation">This circular waiting pattern creates a deadlock where no thread can proceed.</p>`
       }
 
       waitGraphContent += `</div>`
@@ -1343,16 +1373,16 @@ function updateStepInfo() {
     } else if (logEntry.wait_for_edge) {
       waitGraphElement.style.display = "block"
 
-      // Show simple wait-for edge
+      // Show simple wait-for edge with improved description
       const { from, to } = logEntry.wait_for_edge
 
-      let waitGraphContent = `<h3>Wait-for Graph</h3><div id="wait-graph-content">`
-      waitGraphContent += `<p>Thread ${from} is waiting for a resource held by Thread ${to}.</p>`
-      waitGraphContent += `<p>This creates an edge in the wait-for graph from Thread ${from} to Thread ${to}.</p>`
+      let waitGraphContent = `<h3>Resource Waiting</h3><div id="wait-graph-content">`
+      waitGraphContent += `<p><span class="thread-id">Thread ${from}</span> is waiting for a resource held by <span class="thread-id">Thread ${to}</span>.</p>`
       waitGraphContent += `</div>`
 
       waitGraphElement.innerHTML = waitGraphContent
     } else {
+      // Hide the wait graph for non-deadlock events
       waitGraphElement.style.display = "none"
     }
   }

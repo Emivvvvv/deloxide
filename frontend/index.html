@@ -28,14 +28,23 @@
     <style>
         /* Additional styling for the cycle visualization */
         .cycle-visualization {
-            padding: 10px;
-            background-color: var(--secondary-bg-color);
+            padding: 12px;
+            background-color: var(--hover-bg);
             border-radius: 8px;
-            display: inline-block;
-            margin: 10px 0;
+            margin: 12px 0;
             text-align: center;
+            border-left: 4px solid var(--danger-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
-        
+
+        .cycle-visualization i {
+            color: var(--danger-color);
+        }
+
         /* Logo styling */
         .logo img {
             height: 32px;
@@ -78,7 +87,7 @@
             line-height: 1.5;
             margin: 8px 0;
         }
-        
+
         /* Deadlock message highlighting */
         strong {
             color: var(--highlight-color, #e74c3c);
@@ -92,7 +101,7 @@
             border-top: 1px dotted var(--border-color, #ddd);
             padding-top: 8px;
         }
-        
+
         .timestamp i {
             margin-right: 5px;
         }
