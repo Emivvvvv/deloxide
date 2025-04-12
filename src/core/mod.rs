@@ -91,6 +91,9 @@ impl Deloxide {
         // Initialize the detector with the callback
         init_detector(self.callback);
 
+        // Print header
+        println!("{}", crate::BANNER);
+
         Ok(())
     }
 }
