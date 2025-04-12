@@ -24,7 +24,7 @@ pub struct LogEntry {
     /// Type of event that occurred
     pub event: LockEvent,
     /// ISO 8601 timestamp of when the event occurred
-    pub timestamp: String,
+    pub timestamp: f64,
 }
 
 /// Determines how the logger should operate
@@ -74,12 +74,16 @@ impl Logger {
         // First update the graph state with this event
         graph_logger::update_graph(thread_id, lock_id, event);
 
+        // Generate absolute timestamp as f64: seconds since Unix Epoch with microsecond precision
+        let now = Utc::now();
+        let timestamp = now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1_000_000.0;
+
         // Then create log entry
         let entry = LogEntry {
             thread_id,
             lock_id,
             event,
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp,
         };
 
         // Get the updated graph state

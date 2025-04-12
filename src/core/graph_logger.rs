@@ -8,9 +8,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 pub struct GraphLink {
     /// Thread ID (source)
-    pub source: String,
+    pub source: ThreadId,
     /// Lock ID (target)
-    pub target: String,
+    pub target: LockId,
     /// Type of relationship (acquired or attempt)
     #[serde(rename = "type")]
     pub link_type: String,
@@ -95,9 +95,9 @@ impl GraphLogger {
         // Add links for acquired locks
         for (&lock_id, &thread_id) in &self.lock_owners {
             links.push(GraphLink {
-                source: thread_id.to_string(),
-                target: lock_id.to_string(),
-                link_type: "acquired".to_string(),
+                source: thread_id,
+                target: lock_id,
+                link_type: "Acquired".to_string(),
             });
         }
 
@@ -105,9 +105,9 @@ impl GraphLogger {
         for (&thread_id, attempts) in &self.thread_attempts {
             for &lock_id in attempts {
                 links.push(GraphLink {
-                    source: thread_id.to_string(),
-                    target: lock_id.to_string(),
-                    link_type: "attempt".to_string(),
+                    source: thread_id,
+                    target: lock_id,
+                    link_type: "Attempt".to_string(),
                 });
             }
         }
