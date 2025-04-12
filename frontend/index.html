@@ -21,6 +21,65 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
+    
+    <style>
+        /* Additional styling for the cycle visualization */
+        .cycle-visualization {
+            padding: 10px;
+            background-color: var(--secondary-bg-color);
+            border-radius: 8px;
+            display: inline-block;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .resource-list {
+            margin-left: 15px;
+            padding-left: 10px;
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .resource-list li {
+            margin-bottom: 5px;
+        }
+        
+        /* Thread and resource IDs styling */
+        .thread-id {
+            font-family: 'Roboto Mono', monospace;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        
+        .resource-id {
+            font-family: 'Roboto Mono', monospace;
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+        
+        /* Step info enhancements */
+        #step-info p {
+            line-height: 1.5;
+            margin: 8px 0;
+        }
+        
+        /* Deadlock message highlighting */
+        strong {
+            color: var(--highlight-color, #e74c3c);
+        }
+        
+        /* Timestamp styling */
+        .timestamp {
+            font-size: 0.85rem;
+            color: var(--text-secondary-color, #777);
+            margin-top: 15px;
+            border-top: 1px dotted var(--border-color, #ddd);
+            padding-top: 8px;
+        }
+        
+        .timestamp i {
+            margin-right: 5px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -227,7 +286,11 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
+    
     <!-- Custom JavaScript -->
+    <script src="js/utils.js"></script>
     <script src="js/app.js"></script>
     
     <!-- Help modal functionality -->
@@ -251,7 +314,13 @@
                     modal.style.display = 'none';
                 }
             });
+            
+            // Check for logs parameter in URL for direct loading
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('logs')) {
+                console.log('Found logs parameter in URL, processing...');
+            }
         });
     </script>
 </body>
-</html> 
+</html>     

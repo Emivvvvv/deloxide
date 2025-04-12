@@ -238,35 +238,34 @@ const initUploadFeature = () => {
         
         reader.onload = function(e) {
             try {
+                // Parse the uploaded file
                 const jsonData = JSON.parse(e.target.result);
                 
-                // Validate if this is a proper deadlock log
-                if (validateDeadlockLog(jsonData)) {
-                    // Close the modal
+                // Check if this is the new format (raw data array)
+                if (Array.isArray(jsonData) && jsonData.length >= 1 && Array.isArray(jsonData[0])) {
+                    // This is the new raw format, transform it using the utility function
+                    const transformed = transformRawObject(jsonData);
+                    
+                    // Store the original raw data for sharing
+                    transformed.rawData = jsonData;
+                    
+                    // Process the transformed data
                     uploadModal.style.display = 'none';
-                    
-                    // Process the scenario data
                     resetVisualization();
-                    currentScenario = jsonData;
-                    logData = jsonData.logs;
-                    graphStateData = jsonData.graph_state;
+                    currentScenario = transformed;
+                    logData = transformed.logs;
+                    graphStateData = transformed.graph_state;
                     
-                    // Update scenario information
-                    updateScenarioInfo(jsonData);
-                    
-                    // Initialize visualization
-                    currentStep = 1;
-                    
-                    // Show loading state while we initialize
+                    // Show loading state
                     document.getElementById('loading').style.display = 'block';
                     document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
                     
-                    // Show share button since we have data loaded
+                    // Show share button
                     if (shareBtn) {
                         shareBtn.style.display = 'flex';
                     }
                     
-                    // Initialize after a brief delay to allow the UI to update
+                    // Initialize visualization after a brief delay
                     setTimeout(() => {
                         initVisualization();
                         
@@ -284,7 +283,50 @@ const initUploadFeature = () => {
                         updateVisualization();
                     }, 100);
                 } else {
-                    alert('Error: The file is not a valid deadlock log file. Please upload a properly formatted file.');
+                    // Check if it's a standard format
+                    if (validateDeadlockLog(jsonData)) {
+                        // Process the scenario data (old format)
+                        uploadModal.style.display = 'none';
+                        resetVisualization();
+                        currentScenario = jsonData;
+                        logData = jsonData.logs;
+                        graphStateData = jsonData.graph_state;
+                        
+                        // Update scenario information
+                        updateScenarioInfo(jsonData);
+                        
+                        // Initialize visualization
+                        currentStep = 1;
+                        
+                        // Show loading state while we initialize
+                        document.getElementById('loading').style.display = 'block';
+                        document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>';
+                        
+                        // Show share button since we have data loaded
+                        if (shareBtn) {
+                            shareBtn.style.display = 'flex';
+                        }
+                        
+                        // Initialize after a brief delay to allow the UI to update
+                        setTimeout(() => {
+                            initVisualization();
+                            
+                            // Hide loading message and show visualization elements
+                            document.getElementById('loading').style.display = 'none';
+                            document.getElementById('graph').style.display = 'block';
+                            document.getElementById('step-info').style.display = 'block';
+                            document.getElementById('wait-graph').style.display = 'block';
+                            document.getElementById('timeline').style.display = 'block';
+                            
+                            // Initialize timeline
+                            initTimeline();
+                            
+                            // Update visualization for the first step
+                            updateVisualization();
+                        }, 100);
+                    } else {
+                        alert('Error: The file is not a valid deadlock log file. Please upload a properly formatted file.');
+                    }
                 }
             } catch (error) {
                 alert('Error loading file: ' + error.message);
@@ -298,6 +340,22 @@ const initUploadFeature = () => {
         reader.readAsText(file);
     }
 };
+
+/**
+ * Decode logs from a URL-safe Base64, Gzip and MessagePack encoded string
+ */
+function decodeLogs(encodedStr) {
+    var base64 = encodedStr.replace(/-/g, '+').replace(/_/g, '/');
+    var binaryStr = atob(base64);
+    var len = binaryStr.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+    }
+    var decompressed = pako.ungzip(bytes);
+    var logsData = msgpack.decode(decompressed);
+    return logsData;
+}
 
 // Share functionality
 function initShareFeature() {
@@ -373,7 +431,7 @@ function initShareFeature() {
         }, 3000);
     }
     
-    // Check if there's a shared scenario in the URL
+    // Check for shared scenario in the URL
     checkForSharedScenario();
 }
 
@@ -388,7 +446,44 @@ function openShareModal() {
     }
     
     try {
-        console.log('Preparing to share scenario:', currentScenario.title);
+        console.log('Preparing to share scenario');
+        
+        // Check if data can be shared as raw logs
+        if (currentScenario.rawData) {
+            // We have the original raw data available
+            console.log('Using raw log data for sharing');
+            
+            // Convert to msgpack, compress with gzip, and encode to base64
+            const msgpackData = msgpack.encode(currentScenario.rawData);
+            const compressedData = pako.gzip(msgpackData);
+            
+            // Convert to base64 and make URL-safe
+            let base64 = '';
+            const bytes = new Uint8Array(compressedData);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                base64 += String.fromCharCode(bytes[i]);
+            }
+            const b64encoded = btoa(base64).replace(/\+/g, '-').replace(/\//g, '_');
+            
+            console.log('Compressed logs size:', b64encoded.length, 'characters');
+            
+            // Generate URL with the logs parameter
+            const currentUrl = window.location.href.split('?')[0];
+            const shareUrl = `${currentUrl}?logs=${b64encoded}&step=${currentStep}`;
+            
+            console.log('Share URL generated, length:', shareUrl.length);
+            
+            // Set the input value
+            shareLinkInput.value = shareUrl;
+            
+            // Show the modal
+            shareModal.style.display = 'flex';
+            return;
+        }
+        
+        // Fallback to using the processed scenario object
+        console.log('Using processed scenario data for sharing');
         
         // Create a compressed version of the current scenario
         const scenarioString = JSON.stringify(currentScenario);
@@ -420,8 +515,79 @@ function checkForSharedScenario() {
     const urlParams = new URLSearchParams(window.location.search);
     const encodedData = urlParams.get('data');
     const step = urlParams.get('step');
+    const encodedLogs = urlParams.get('logs'); // New parameter for msgpack encoded logs
+    
+    if (encodedLogs) {
+        // This is the new compressed msgpack format
+        try {
+            console.log('Found compressed logs in URL, processing...');
+            
+            // Show loading state
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerHTML = '<div class="spinner"></div><p>Loading shared visualization...</p>';
+            
+            // Use the utility function to process the encoded logs
+            console.log('Compressed logs size:', encodedLogs.length, 'characters');
+            const transformed = processEncodedLog(encodedLogs);
+            console.log('Successfully processed log data');
+            
+            // Store the raw data for potential re-sharing
+            const decodedData = decodeLogs(encodedLogs);
+            transformed.rawData = decodedData;
+            
+            // Process the transformed data
+            resetVisualization();
+            currentScenario = transformed;
+            logData = transformed.logs;
+            graphStateData = transformed.graph_state;
+            
+            // Set step if provided
+            currentStep = step ? parseInt(step) : 1;
+            if (isNaN(currentStep) || currentStep < 1 || currentStep > logData.length) {
+                currentStep = 1;
+            }
+            console.log('Setting to step:', currentStep);
+            
+            // Show share button
+            const shareBtn = document.getElementById('share-btn');
+            if (shareBtn) {
+                shareBtn.style.display = 'flex';
+            }
+            
+            // Initialize visualization
+            setTimeout(() => {
+                initVisualization();
+                
+                // Hide loading message and show visualization elements
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('graph').style.display = 'block';
+                document.getElementById('step-info').style.display = 'block';
+                document.getElementById('wait-graph').style.display = 'block';
+                document.getElementById('timeline').style.display = 'block';
+                
+                // Initialize timeline
+                initTimeline();
+                
+                // Update visualization with the specified step
+                updateVisualization();
+                
+                console.log('Shared visualization loaded successfully');
+            }, 100);
+            
+            return; // Exit early since we've handled this format
+        } catch (error) {
+            console.error('Error loading compressed logs:', error);
+            document.getElementById('loading').innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error loading shared visualization: ${error.message}
+                </div>`;
+            return; // Exit early to prevent further processing
+        }
+    }
     
     if (encodedData) {
+        // Handle the existing LZString format
         try {
             console.log('Found shared data in URL, processing...');
             
@@ -441,8 +607,56 @@ function checkForSharedScenario() {
             const scenarioData = JSON.parse(decompressedData);
             console.log('Successfully parsed JSON data');
             
-            // Validate the data
-            if (validateDeadlockLog(scenarioData)) {
+            // Check if this is the new raw format
+            if (Array.isArray(scenarioData) && scenarioData.length >= 1 && Array.isArray(scenarioData[0])) {
+                // Process raw data
+                console.log('Raw log format detected, transforming data');
+                const transformed = transformRawObject(scenarioData);
+                
+                // Store original data for sharing
+                transformed.rawData = scenarioData;
+                
+                // Process the transformed data
+                resetVisualization();
+                currentScenario = transformed;
+                logData = transformed.logs;
+                graphStateData = transformed.graph_state;
+                
+                // Set step if provided
+                currentStep = step ? parseInt(step) : 1;
+                if (isNaN(currentStep) || currentStep < 1 || currentStep > logData.length) {
+                    currentStep = 1;
+                }
+                console.log('Setting to step:', currentStep);
+                
+                // Show share button
+                const shareBtn = document.getElementById('share-btn');
+                if (shareBtn) {
+                    shareBtn.style.display = 'flex';
+                }
+                
+                // Initialize visualization
+                setTimeout(() => {
+                    initVisualization();
+                    
+                    // Hide loading message and show visualization elements
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('graph').style.display = 'block';
+                    document.getElementById('step-info').style.display = 'block';
+                    document.getElementById('wait-graph').style.display = 'block';
+                    document.getElementById('timeline').style.display = 'block';
+                    
+                    // Initialize timeline
+                    initTimeline();
+                    
+                    // Update visualization with the specified step
+                    updateVisualization();
+                    
+                    console.log('Shared visualization loaded successfully');
+                }, 100);
+            }
+            // Check if it's a standard format
+            else if (validateDeadlockLog(scenarioData)) {
                 console.log('Valid deadlock log format detected');
                 
                 // Process the scenario data
@@ -510,8 +724,6 @@ function validateDeadlockLog(json) {
     return (
         json && 
         typeof json === 'object' && 
-        json.title && 
-        json.description && 
         Array.isArray(json.logs) && 
         json.logs.length > 0 &&
         Array.isArray(json.graph_state) &&
@@ -521,29 +733,7 @@ function validateDeadlockLog(json) {
 
 // Update scenario info in the UI
 function updateScenarioInfo(scenarioData) {
-    const scenarioTitle = document.createElement('h2');
-    scenarioTitle.textContent = scenarioData.title;
-    
-    const scenarioDesc = document.createElement('p');
-    scenarioDesc.className = 'scenario-description';
-    scenarioDesc.textContent = scenarioData.description;
-    
-    const scenarioInfo = document.createElement('div');
-    scenarioInfo.id = 'scenario-info';
-    scenarioInfo.className = 'scenario-info';
-    scenarioInfo.appendChild(scenarioTitle);
-    scenarioInfo.appendChild(scenarioDesc);
-    
-    // Add to DOM
-    const mainElement = document.querySelector('main');
-    const existingInfo = document.getElementById('scenario-info');
-    const controlsElement = document.getElementById('controls');
-    
-    if (existingInfo) {
-        mainElement.replaceChild(scenarioInfo, existingInfo);
-    } else {
-        mainElement.insertBefore(scenarioInfo, controlsElement);
-    }
+    // Function intentionally left empty - title and description are no longer used
 }
 
 // Initialize theme
@@ -578,14 +768,14 @@ function checkD3Availability() {
  * Load scenario list and populate dropdown
  */
 async function loadScenarioList() {
-    // Show instruction message since we're not loading built-in scenarios anymore
+    // Show instruction message for uploading log files
     const loadingElement = document.getElementById('loading');
     if (loadingElement) {
         loadingElement.innerHTML = `
             <div class="welcome-message">
                 <i class="fas fa-upload"></i>
-                <h2>No Scenario Loaded</h2>
-                <p>Click the "Upload" button in the header to load a deadlock log file.</p>
+                <h2>Deadlock Visualization</h2>
+                <p>Click the "Upload" button to load a deadlock log file.</p>
             </div>`;
     }
 }
@@ -898,9 +1088,9 @@ function updateStepInfo() {
         // Get the log entry for current step
         const logEntry = logData[currentStep - 1];
         
-        // Create main step info
+        // Create main step info with clean formatting
         let stepInfoContent = `<h3>Step ${logEntry.step}: ${logEntry.type.toUpperCase()}</h3>`;
-        stepInfoContent += `<p>${logEntry.description}</p>`;
+        stepInfoContent += `<p>${logEntry.description || 'No description available'}</p>`;
         
         if (logEntry.code_reference) {
             stepInfoContent += `<p><strong>Code Reference:</strong> <code class="code-reference">${logEntry.code_reference}</code></p>`;
@@ -908,13 +1098,17 @@ function updateStepInfo() {
         
         // Add additional details based on event type
         if (logEntry.type === 'attempt' || logEntry.type === 'acquired' || logEntry.type === 'released') {
-            stepInfoContent += `<p><strong>Thread:</strong> ${logEntry.thread_name} (ID: ${logEntry.thread_id})<br>`;
-            stepInfoContent += `<strong>Resource:</strong> ${logEntry.resource_name} (ID: ${logEntry.resource_id})</p>`;
+            stepInfoContent += `<p><strong>Thread:</strong> <span class="thread-id">Thread ${logEntry.thread_id}</span></p>`;
+            stepInfoContent += `<p><strong>Resource:</strong> <span class="resource-id">Resource ${logEntry.resource_id}</span></p>`;
         }
         
-        // Add timestamp
-        const date = new Date(logEntry.timestamp);
-        stepInfoContent += `<p><small>Timestamp: ${date.toLocaleString()}</small></p>`;
+        // Add timestamp only if not step 1 (init)
+        if (logEntry.type !== 'init' && logEntry.timestamp) {
+            const date = new Date(logEntry.timestamp);
+            // Format with milliseconds
+            const formattedTime = `${date.toLocaleTimeString()}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+            stepInfoContent += `<p class="timestamp"><i class="far fa-clock"></i> ${formattedTime}</p>`;
+        }
         
         // Set content
         stepInfoElement.innerHTML = stepInfoContent;
@@ -931,27 +1125,49 @@ function updateStepInfo() {
             // Construct wait-for graph explanation
             let waitGraphContent = `<h3>Wait-for Graph</h3><div id="wait-graph-content">`;
             
-            waitGraphContent += `<p>A cycle has been detected in the wait-for graph: `;
+            waitGraphContent += `<p>A cycle has been detected in the wait-for graph:</p>`;
             
             // Format the cycle
-            const cycle = logEntry.deadlock_details.thread_cycle;
-            waitGraphContent += cycle.map(t => `Thread ${t}`).join(' → ') + ` → Thread ${cycle[0]}</p>`;
-            
-            waitGraphContent += `<p><strong>Resources involved:</strong></p><ul>`;
-            logEntry.deadlock_details.thread_waiting_for_locks.forEach(item => {
-                const threadLog = logData.find(log => 
-                    log.thread_id === item.thread_id && 
-                    log.resource_id === item.lock_id && 
-                    log.type === 'attempt'
-                );
+            const cycle = logEntry.deadlock_details.thread_cycle || [];
+            if (cycle.length > 0) {
+                // Create a nice cycle visualization
+                waitGraphContent += `<p class="cycle-visualization">`;
+                cycle.forEach((threadId, index) => {
+                    waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`;
+                    if (index < cycle.length - 1) {
+                        waitGraphContent += ` <i class="fas fa-arrow-right"></i> `;
+                    }
+                });
                 
-                if (threadLog) {
-                    waitGraphContent += `<li>Thread ${item.thread_id} (${threadLog.thread_name}) is waiting for Resource ${item.lock_id} (${threadLog.resource_name})</li>`;
-                } else {
-                    waitGraphContent += `<li>Thread ${item.thread_id} is waiting for Resource ${item.lock_id}</li>`;
+                // Add arrow back to first thread to show the cycle clearly
+                if (cycle.length > 1) {
+                    waitGraphContent += ` <i class="fas fa-arrow-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`;
                 }
-            });
-            waitGraphContent += `</ul></div>`;
+                waitGraphContent += `</p>`;
+            } else {
+                waitGraphContent += `<p>Deadlock detected between threads.</p>`;
+            }
+            
+            waitGraphContent += `<p><strong>Resources involved:</strong></p>`;
+            
+            const threadWaitingForLocks = logEntry.deadlock_details.thread_waiting_for_locks || [];
+            if (threadWaitingForLocks.length > 0) {
+                waitGraphContent += `<ul class="resource-list">`;
+                threadWaitingForLocks.forEach(item => {
+                    const threadLog = logData.find(log => 
+                        log.thread_id === item.thread_id && 
+                        log.resource_id === item.lock_id && 
+                        log.type === 'attempt'
+                    );
+                    
+                    waitGraphContent += `<li><span class="thread-id">Thread ${item.thread_id}</span> is waiting for <span class="resource-id">Resource ${item.lock_id}</span></li>`;
+                });
+                waitGraphContent += `</ul>`;
+            } else {
+                waitGraphContent += `<p>No detailed resource information available.</p>`;
+            }
+            
+            waitGraphContent += `</div>`;
             
             waitGraphElement.innerHTML = waitGraphContent;
         } else if (logEntry.wait_for_edge) {
