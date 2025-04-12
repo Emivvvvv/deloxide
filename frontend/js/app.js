@@ -291,6 +291,9 @@ const initUploadFeature = () => {
 
             // Update visualization for the first step
             updateVisualization()
+
+            // Automatically start the animation
+            autoStartAnimation()
           }, 100)
         } else {
           // Parse the uploaded file as standard JSON
@@ -337,6 +340,9 @@ const initUploadFeature = () => {
 
               // Update visualization for the first step
               updateVisualization()
+
+              // Automatically start the animation
+              autoStartAnimation()
             }, 100)
           } else {
             // Check if it's a standard format
@@ -376,6 +382,9 @@ const initUploadFeature = () => {
 
                 // Update visualization for the first step
                 updateVisualization()
+
+                // Automatically start the animation
+                autoStartAnimation()
               }, 100)
             } else {
               alert(
@@ -606,7 +615,7 @@ function checkForSharedScenario() {
   const urlParams = new URLSearchParams(window.location.search)
   const encodedData = urlParams.get("data")
   const step = urlParams.get("step")
-  const encodedLogs = urlParams.get("logs") // Parameter for msgpack encoded logs
+  const encodedLogs = urlParams.get("logs") || urlParams.get("log") // Support both 'logs' and 'log' parameters
   const format = urlParams.get("format") // New parameter to indicate line-by-line format
 
   // Handle line-by-line formatted logs
@@ -678,6 +687,9 @@ function checkForSharedScenario() {
         updateVisualization()
 
         console.log("Shared line format visualization loaded successfully")
+        
+        // Automatically start the animation
+        autoStartAnimation()
       }, 100)
 
       return // Exit early since we've handled this format
@@ -1572,11 +1584,6 @@ function setupEventListeners() {
     updateVisualization()
   })
 
-  // Legend toggle functionality
-  document
-    .getElementById("toggle-legend-btn")
-    .addEventListener("click", toggleLegend)
-
   // Add keyboard navigation
   document.addEventListener("keydown", (e) => {
     // Left arrow key
@@ -1602,10 +1609,6 @@ function setupEventListeners() {
     else if (e.keyCode === 82 && !e.target.matches("input, textarea")) {
       document.getElementById("reset-btn").click()
     }
-    // L key to toggle legend
-    else if (e.keyCode === 76 && !e.target.matches("input, textarea")) {
-      toggleLegend()
-    }
   })
 
   // Handle window resize
@@ -1619,32 +1622,12 @@ function setupEventListeners() {
 }
 
 /**
- * Toggle legend visibility
+ * Automatically start the animation after a short delay
  */
-function toggleLegend() {
-  const legendElement = document.getElementById("legend")
-  const toggleBtn = document.getElementById("toggle-legend-btn")
-  const toggleIcon = toggleBtn.querySelector("i")
-
-  if (legendElement.style.display === "block") {
-    legendElement.style.display = "none"
-    toggleIcon.className = "fas fa-info-circle"
-  } else {
-    legendElement.style.display = "block"
-    toggleIcon.className = "fas fa-times-circle"
-  }
-}
-
-/**
- * Shows legend automatically on first load
- */
-function showLegendAutomatically() {
-  const legendElement = document.getElementById("legend")
-  legendElement.style.display = "block"
-
-  const toggleBtn = document.getElementById("toggle-legend-btn")
-  const toggleIcon = toggleBtn.querySelector("i")
-  toggleIcon.className = "fas fa-times-circle"
+function autoStartAnimation() {
+  setTimeout(() => {
+    togglePlay(); // This will start the animation
+  }, 500); // Wait 500ms to ensure everything is ready
 }
 
 /**
@@ -1655,7 +1638,7 @@ function initApp() {
 
   // Check for shared data in URL first
   const urlParams = new URLSearchParams(window.location.search)
-  const hasSharedData = urlParams.has("data")
+  const hasSharedData = urlParams.has("data") || urlParams.has("logs") || urlParams.has("log")
 
   // Initialize theme
   initTheme()
@@ -1676,9 +1659,6 @@ function initApp() {
 
   // Initialize the share feature
   initShareFeature()
-
-  // Show legend automatically on first load
-  showLegendAutomatically()
 
   if (hasSharedData) {
     // Process shared data
@@ -1717,13 +1697,6 @@ function showWelcomeScreen() {
   if (visualizationContainer) {
     visualizationContainer.style.display = "none"
   }
-
-  // Reset legend toggle button icon
-  const toggleBtn = document.getElementById("toggle-legend-btn")
-  if (toggleBtn) {
-    const toggleIcon = toggleBtn.querySelector("i")
-    toggleIcon.className = "fas fa-info-circle"
-  }
 }
 
 // Function to show all visualization elements
@@ -1741,4 +1714,5 @@ function showVisualizationElements() {
   document.getElementById("wait-graph").style.display = "block"
   document.getElementById("timeline").style.display = "block"
   document.getElementById("controls").style.display = "flex"
+  document.getElementById("legend").style.display = "block"
 }

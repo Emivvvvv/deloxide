@@ -143,36 +143,6 @@
                     <i class="fas fa-redo"></i>
                     <span>Reset</span>
                 </button>
-                <button id="toggle-legend-btn" class="control-btn" aria-label="Toggle Legend">
-                    <i class="fas fa-info-circle"></i>
-                    <span>Legend</span>
-                </button>
-            </div>
-
-            <div id="legend">
-                <h3>Legend</h3>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <div class="legend-color thread"></div>
-                        <span>Thread</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color resource"></div>
-                        <span>Resource</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line attempt"></div>
-                        <span>Attempt</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line acquired"></div>
-                        <span>Acquired</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line deadlock"></div>
-                        <span>Deadlock</span>
-                    </div>
-                </div>
             </div>
 
             <div class="visualization-container">
@@ -201,6 +171,31 @@
                 <div id="timeline-line"></div>
                 <div id="timeline-marker"></div>
                 <!-- Timeline events will be added here dynamically -->
+            </div>
+            
+            <div id="legend">
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color thread"></div>
+                        <span>Thread</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color resource"></div>
+                        <span>Resource</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line attempt"></div>
+                        <span>Attempt</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line acquired"></div>
+                        <span>Acquired</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line deadlock"></div>
+                        <span>Deadlock</span>
+                    </div>
+                </div>
             </div>
         </main>
 
@@ -337,7 +332,7 @@
             
             // Check for logs parameter in URL for direct loading
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('logs')) {
+            if (urlParams.has('logs') || urlParams.has('log')) {
                 console.log('Found logs parameter in URL, processing...');
             }
         });
