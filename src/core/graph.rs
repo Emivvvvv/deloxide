@@ -90,6 +90,7 @@ impl WaitForGraph {
 
     /// Detect any cycle in the graph.
     /// Returns the cycle as a vector of thread IDs if found.
+    #[cfg(test)]
     pub fn detect_cycle(&self) -> Option<Vec<ThreadId>> {
         for &thread_id in self.edges.keys() {
             if let Some(cycle) = self.detect_cycle_from(thread_id) {
@@ -97,11 +98,6 @@ impl WaitForGraph {
             }
         }
         None
-    }
-
-    /// Get a copy of all edges in the graph
-    pub fn get_edges(&self) -> HashMap<ThreadId, HashSet<ThreadId>> {
-        self.edges.clone()
     }
 }
 

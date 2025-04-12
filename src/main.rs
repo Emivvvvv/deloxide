@@ -16,6 +16,6 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    showcase::showcase(cli.log_file)?;
+    showcase(cli.log_file)?;
     Ok(())
 }

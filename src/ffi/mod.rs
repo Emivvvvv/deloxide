@@ -254,7 +254,7 @@ pub unsafe extern "C" fn deloxide_get_thread_id() -> c_ulong {
 /// This function dereferences `log_path`. The caller must ensure it is a valid, null-terminated
 /// UTF-8 string and that the memory remains valid during the call.
 #[unsafe(no_mangle)]
-unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
+pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
     if log_path.is_null() {
         return -1;
     }
@@ -267,11 +267,12 @@ unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
         }
     };
 
-    // Call the Rust showcase function with anyhow error handling
+    // Call the Rust showcase function handling anyhow Result
     match crate::showcase(path_str) {
         Ok(_) => 0, // Success
         Err(e) => {
-            eprintln!("Showcase error: {:#}", e); // Pretty-print the error chain
+            // Log the error in a way that's accessible to C code
+            eprintln!("Showcase error: {:#}", e);
             -2 // Showcase failed
         }
     }

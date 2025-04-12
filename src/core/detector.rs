@@ -2,7 +2,7 @@ use crate::core::graph::WaitForGraph;
 use crate::core::types::{DeadlockInfo, LockId, ThreadId};
 use crate::core::{LockEvent, logger};
 use chrono::Utc;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Main deadlock detector that maintains thread-lock relationships
@@ -109,11 +109,6 @@ impl Detector {
         if self.lock_owners.get(&lock_id) == Some(&thread_id) {
             self.lock_owners.remove(&lock_id);
         }
-    }
-
-    /// Get a snapshot of the current wait-for graph
-    pub fn get_wait_for_graph(&self) -> HashMap<ThreadId, HashSet<ThreadId>> {
-        self.wait_for_graph.get_edges()
     }
 }
 

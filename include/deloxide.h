@@ -3,8 +3,8 @@
  * @brief C/C++ API for the Rust deloxide deadlock detection library.
  */
 
-#ifndef DELOXIDE_DEADLOCK_DETECTOR_H
-#define DELOXIDE_DEADLOCK_DETECTOR_H
+#ifndef DELOXIDE_H
+#define DELOXIDE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,7 +106,7 @@ int deloxide_unlock(void* mutex, unsigned long thread_id);
 unsigned long deloxide_get_thread_id();
 
 /*
- * @brief Send the log file to the showcase server and open the resulting URL.
+ * @brief Popups a browser screen to showcase given log data.
  *
  * @param log_path Path to the log file as a null-terminated UTF-8 string.
  *
@@ -120,4 +120,4 @@ int deloxide_showcase(const char* log_path);
 }
 #endif
 
-#endif /* DELOXIDE_DEADLOCK_DETECTOR_H */
+#endif /* DELOXIDE_H */

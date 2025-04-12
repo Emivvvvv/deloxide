@@ -4,7 +4,7 @@ pub use types::*;
 
 // Logging functionality
 pub mod logger;
-pub use logger::{init_logger, log_event};
+pub use logger::init_logger;
 
 // Graph implementation
 pub mod graph;

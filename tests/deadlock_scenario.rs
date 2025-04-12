@@ -1,7 +1,4 @@
-use deloxide::{
-    core::{DeadlockInfo, Deloxide, TrackedMutex},
-    showcase,
-};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -19,11 +16,8 @@ fn test_deadlock_detection() {
     let deadlock_detected_clone = Arc::clone(&deadlock_detected);
     let deadlock_info_clone = Arc::clone(&deadlock_info);
 
-    let log_location = "tests/deadlock_scenario.log";
     Deloxide::new()
-        .with_log(log_location)
         .callback(move |detected_info| {
-            showcase(log_location).unwrap();
             // Set the flag indicating deadlock was detected
             let mut detected = deadlock_detected_clone.lock().unwrap();
             *detected = true;

@@ -1,7 +1,7 @@
 use crate::core::types::{LockEvent, LockId, ThreadId};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
-use serde::Serialize;
 
 /// Represents a link between a thread and a lock
 #[derive(Debug, Serialize)]
@@ -66,7 +66,7 @@ impl GraphLogger {
                 // Add this attempt to the thread's attempts set
                 self.thread_attempts
                     .entry(thread_id)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(lock_id);
             }
             LockEvent::Acquired => {

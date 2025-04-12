@@ -14,10 +14,13 @@
 //! - Cross-language support through FFI
 //! - Tracked mutex implementation for Rust
 
-pub mod core;
-pub mod ffi;
-pub mod showcase;
+mod core;
+pub use core::{
+    DeadlockInfo, Deloxide, TrackedMutex,
+    types::{LockId, ThreadId},
+};
 
-// Re-export core functionality for convenience
-pub use core::{DeadlockInfo, Deloxide, types::{LockId, ThreadId}};
+mod showcase;
 pub use showcase::showcase;
+
+pub mod ffi;

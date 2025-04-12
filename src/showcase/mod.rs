@@ -3,7 +3,6 @@ pub use encoder::process_log_for_url;
 
 use anyhow::{Context, Result};
 use std::path::Path;
-use webbrowser;
 
 /// Showcase the log data by sending it to the showcase server
 ///

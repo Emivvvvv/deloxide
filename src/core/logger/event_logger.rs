@@ -1,13 +1,13 @@
+use crate::core::logger::graph_logger;
+use crate::core::logger::graph_logger::GraphState;
 use crate::core::types::{LockEvent, LockId, ThreadId};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
-use anyhow::{Result, Context};
-use crate::core::logger::graph_logger;
-use crate::core::logger::graph_logger::GraphState;
 
 #[derive(Debug, Serialize)]
 pub struct CombinedLogEntry {
@@ -125,8 +125,8 @@ pub fn init_logger<P: AsRef<Path>>(path: Option<P>) -> Result<()> {
     if let Ok(mut global) = GLOBAL_LOGGER.lock() {
         match path {
             Some(path) => {
-                *global = EventLogger::with_file(path)
-                    .context("Failed to create logger with file")?;
+                *global =
+                    EventLogger::with_file(path).context("Failed to create logger with file")?;
             }
             None => {
                 *global = EventLogger::new(); // Disabled mode
