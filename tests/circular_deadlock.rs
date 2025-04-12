@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 #[test]
-fn test_partial_deadlock_with_some_threads_finishing() {
+fn test_circular_deadlock_four_threads() {
     // Create a channel to receive deadlock detection information.
     let (tx, rx) = mpsc::channel::<DeadlockInfo>();
 
