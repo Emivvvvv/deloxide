@@ -57,7 +57,7 @@ impl GraphLogger {
 
     /// Update the graph state based on a lock event
     pub fn update(&mut self, thread_id: ThreadId, lock_id: LockId, event: LockEvent) {
-        // Track all seen threads and locks
+        // Always track the threads and locks involved in the current event
         self.threads.insert(thread_id);
         self.locks.insert(lock_id);
 
@@ -76,12 +76,28 @@ impl GraphLogger {
                 // Remove from attempts since it's now acquired
                 if let Some(attempts) = self.thread_attempts.get_mut(&thread_id) {
                     attempts.remove(&lock_id);
+                    // If thread has no more attempts, clean up
+                    if attempts.is_empty() {
+                        self.thread_attempts.remove(&thread_id);
+                    }
                 }
             }
             LockEvent::Released => {
                 // Remove ownership only if this thread owns it
                 if self.lock_owners.get(&lock_id) == Some(&thread_id) {
                     self.lock_owners.remove(&lock_id);
+                }
+
+                // Clean up thread from set if it no longer has any lock relationships
+                if !self.lock_owners.values().any(|&t| t == thread_id) &&
+                    !self.thread_attempts.contains_key(&thread_id) {
+                    self.threads.remove(&thread_id);
+                }
+
+                // Clean up lock from set if it's no longer owned or attempted
+                if !self.lock_owners.contains_key(&lock_id) &&
+                    !self.thread_attempts.values().any(|attempts| attempts.contains(&lock_id)) {
+                    self.locks.remove(&lock_id);
                 }
             }
         }
