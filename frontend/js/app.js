@@ -292,8 +292,7 @@ const initUploadFeature = () => {
             // Update visualization for the first step
             updateVisualization()
 
-            // Automatically start the animation
-            autoStartAnimation()
+            // Auto-start removed - user needs to click play manually
           }, 100)
         } else {
           // Parse the uploaded file as standard JSON
@@ -341,8 +340,7 @@ const initUploadFeature = () => {
               // Update visualization for the first step
               updateVisualization()
 
-              // Automatically start the animation
-              autoStartAnimation()
+              // Auto-start removed - user needs to click play manually
             }, 100)
           } else {
             // Check if it's a standard format
@@ -383,8 +381,7 @@ const initUploadFeature = () => {
                 // Update visualization for the first step
                 updateVisualization()
 
-                // Automatically start the animation
-                autoStartAnimation()
+                // Auto-start removed - user needs to click play manually
               }, 100)
             } else {
               alert(
@@ -688,7 +685,7 @@ function checkForSharedScenario() {
 
         console.log("Shared line format visualization loaded successfully")
         
-        // Automatically start the animation
+        // Keep autoplay for shared URLs
         autoStartAnimation()
       }, 100)
 
@@ -1303,11 +1300,14 @@ function updateStepInfo() {
 
     // Create a more descriptive message based on event type
     if (logEntry.type === "attempt") {
-      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> attempts to acquire <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      // Use the description property which now contains both IDs
+      stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description}.</p>`
     } else if (logEntry.type === "acquired") {
-      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> successfully acquired <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      // Use the description property which now contains both IDs
+      stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description}.</p>`
     } else if (logEntry.type === "released") {
-      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> released <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      // Use the description property which now contains both IDs
+      stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description}.</p>`
     } else if (logEntry.type === "init") {
       stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description || "No description available"}</p>`
     } else if (logEntry.type === "deadlock") {
@@ -1397,11 +1397,18 @@ function updateStepInfo() {
 
       // Format the cycle with better visualization
       const cycle = logEntry.deadlock_details.thread_cycle || []
+      const graphThreadMapping = {}
+      
+      // Create a mapping for thread IDs
+      cycle.sort().forEach((id, index) => {
+        graphThreadMapping[id] = index + 1
+      })
+      
       if (cycle.length > 0) {
         // Create a nicer cycle visualization
         waitGraphContent += `<div class="cycle-visualization animate__animated animate__pulse">`
         cycle.forEach((threadId, index) => {
-          waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
+          waitGraphContent += `<span class="thread-id">Thread ${graphThreadMapping[threadId]}(${threadId})</span>`
           if (index < cycle.length - 1) {
             waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `
           }
@@ -1409,7 +1416,7 @@ function updateStepInfo() {
 
         // Add arrow back to first thread to show the cycle clearly
         if (cycle.length > 1) {
-          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
+          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${graphThreadMapping[cycle[0]]}(${cycle[0]})</span>`
         }
 
         // Add non-breaking spaces for visible spacing at the end (using &nbsp;)
@@ -1427,9 +1434,16 @@ function updateStepInfo() {
 
       // Show simple wait-for edge with improved description
       const { from, to } = logEntry.wait_for_edge
+      
+      // Create a mapping for thread IDs
+      const threadIds = [from, to];
+      const graphThreadMapping = {}
+      threadIds.sort().forEach((id, index) => {
+        graphThreadMapping[id] = index + 1
+      })
 
       let waitGraphContent = `<h3 class="animate__animated animate__fadeIn">Resource Waiting</h3><div id="wait-graph-content" class="animate__animated animate__fadeIn">`
-      waitGraphContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${from}</span> is waiting for a resource held by <span class="thread-id">Thread ${to}</span>.</p>`
+      waitGraphContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${graphThreadMapping[from]}(${from})</span> is waiting for a resource held by <span class="thread-id">Thread ${graphThreadMapping[to]}(${to})</span>.</p>`
       waitGraphContent += `</div>`
 
       waitGraphElement.innerHTML = waitGraphContent
@@ -1624,7 +1638,7 @@ function togglePlay() {
       currentStep = step
       updateVisualization()
       step++
-    }, 500) // 500ms instead of 1000ms
+    }, 1000) // Increased from 500ms to 1000ms to slow down the animation
   }
 }
 
@@ -1711,9 +1725,11 @@ function setupEventListeners() {
  * Automatically start the animation after a short delay
  */
 function autoStartAnimation() {
+  // Function kept for compatibility with shared URLs, but not used for uploads
   setTimeout(() => {
-    togglePlay(); // This will start the animation
-  }, 150); // Wait 150ms to ensure everything is ready (reduced from 300ms)
+    // Animation autostart disabled for uploads
+    // togglePlay();
+  }, 150);
 }
 
 /**

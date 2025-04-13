@@ -25,13 +25,20 @@ function mapLockId(lockNum) {
 function transformLogs(rawLogs, resourceMapping) {
   // Init log: Information about thread and resource creation at the start of logs
   const rawThreadIds = Array.from(new Set(rawLogs.map((log) => log[0])))
+  
+  // Create a mapping for thread IDs
+  const threadMapping = {}
+  rawThreadIds.sort().forEach((id, index) => {
+    threadMapping[id] = index + 1
+  })
+  
   const allLockLetters = Object.values(resourceMapping)
   const initLog = {
     step: 1,
     timestamp: null, // Set to null to prevent showing timestamp for step 1
     type: "init",
     description: `<span class="thread-id">Threads</span> ${rawThreadIds
-      .map((id) => `<span class="thread-id">${id}</span>`)
+      .map((id) => `<span class="thread-id">${threadMapping[id]}(${id})</span>`)
       .join(
         ", "
       )} <br> <span class="resource-id">Resources</span> ${allLockLetters
@@ -51,7 +58,7 @@ function transformLogs(rawLogs, resourceMapping) {
       type: eventTypes[eventCode] || "unknown",
       thread_id: rawThread, // original raw thread id
       resource_id: resourceMapping[lockNum],
-      description: `<span class="thread-id">Thread ${rawThread}</span> ${
+      description: `<span class="thread-id">Thread ${threadMapping[rawThread]}(${rawThread})</span> ${
         eventTypes[eventCode] || "unknown"
       } <span class="resource-id">Resource ${resourceMapping[lockNum]}</span>`,
     }
@@ -102,7 +109,7 @@ function transformLogs(rawLogs, resourceMapping) {
   // Create a clear description of the deadlock situation
   const deadlockDescriptions = unresolvedEvents.map(
     (ev) =>
-      `<span class="thread-id">Thread ${ev.thread_id}</span> is waiting for <span class="resource-id">Resource ${ev.resource_id}</span>`
+      `<span class="thread-id">Thread ${threadMapping[ev.thread_id]}(${ev.thread_id})</span> is waiting for <span class="resource-id">Resource ${ev.resource_id}</span>`
   )
 
   // Join descriptions with proper separators for better readability
@@ -355,17 +362,18 @@ function processNewFormatLogs(logText) {
 
     // Create thread mapping for the graph (raw_thread_id -> incremental number)
     const graphThreadMapping = {}
-    Array.from(allThreads)
-      .sort()
-      .forEach((threadId, index) => {
-        graphThreadMapping[threadId] = index + 1
-      })
+    const sortedThreads = Array.from(allThreads).sort()
+    sortedThreads.forEach((threadId, index) => {
+      graphThreadMapping[threadId] = index + 1
+    })
 
     // Build structured logs array
     const logs = []
 
     // Add init log as first step
-    const threadsStr = Array.from(allThreads).join(", ")
+    const threadsStr = sortedThreads
+      .map(threadId => `<span class="thread-id">${graphThreadMapping[threadId]} (${threadId})</span>`)
+      .join(", ")
     const resourcesStr = Object.values(resourceMapping)
       .map((r) => `Resource ${r}`)
       .join(", ")
@@ -404,7 +412,7 @@ function processNewFormatLogs(logText) {
         type: eventType,
         thread_id: threadId,
         resource_id: resourceId,
-        description: `<span class="thread-id">Thread ${threadId}</span> ${eventType} <span class="resource-id">Resource ${resourceId}</span>`,
+        description: `<span class="thread-id">Thread ${graphThreadMapping[threadId]} (${threadId})</span> ${eventType} <span class="resource-id">Resource ${resourceId}</span>`,
       })
     })
 
@@ -450,7 +458,7 @@ function processNewFormatLogs(logText) {
           // Create descriptions
           const deadlockDescriptions = waitingDetails.map(
             (detail) =>
-              `<span class="thread-id">Thread ${detail.thread_id}</span> is waiting for <span class="resource-id">Resource ${detail.lock_id}</span>`
+              `<span class="thread-id">Thread ${graphThreadMapping[detail.thread_id]} (${detail.thread_id})</span> is waiting for <span class="resource-id">Resource ${detail.lock_id}</span>`
           )
 
           // Join descriptions with proper separators for better readability
