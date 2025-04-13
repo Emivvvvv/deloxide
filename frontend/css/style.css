@@ -1111,3 +1111,14 @@ svg {
     background-color: var(--hover-bg);
     border-left: 4px solid var(--primary-color); /* Reduced from 5px */
 }
+
+a {
+    font-weight: bold;
+    text-decoration: none;
+    color: var(--bg-color);
+}
+
+
+a:hover{
+    text-decoration: underline;
+}
