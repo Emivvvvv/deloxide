@@ -25,6 +25,9 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
     
+    <!-- Animate.css for animations -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    
     <style>
         /* Additional styling for the cycle visualization */
         .cycle-visualization {
@@ -40,6 +43,7 @@
             flex-wrap: wrap;
             gap: 8px;
         }
+        
 
         .cycle-visualization i {
             color: var(--danger-color);
@@ -57,6 +61,23 @@
             .logo img {
                 height: 24px; /* Smaller on mobile */
             }
+        }
+
+        .cycle-visualization i.fa-long-arrow-alt-right {
+            animation: arrowPulse 0.8s infinite;
+        }
+
+
+        @keyframes arrowPulse {
+            0% { transform: translateX(0); opacity: 0.6; }
+            50% { transform: translateX(3px); opacity: 1; }
+            100% { transform: translateX(0); opacity: 0.6; }
+        }
+
+        
+        .cycle-visualization.animate__pulse {
+            animation-iteration-count: infinite;
+            animation-duration: 1s;
         }
         
         .resource-list {
@@ -131,11 +152,11 @@
 
         <main>
             <div id="loading">
-                <div class="spinner"></div>
-                <p>Loading visualization...</p>
+                <div class="spinner animate__animated animate__rotateIn"></div>
+                <p class="animate__animated animate__fadeIn">Loading visualization...</p>
             </div>
 
-            <div id="controls">
+            <div id="controls" class="animate__animated animate__fadeIn">
                 <button id="prev-btn" class="control-btn" disabled>
                     <i class="fas fa-chevron-left"></i>
                     <span>Previous</span>
@@ -154,7 +175,7 @@
                 </button>
             </div>
 
-            <div class="visualization-container">
+            <div class="visualization-container animate__animated animate__fadeIn">
                 <div class="visualization-left">
                     <div id="graph">
                         <!-- D3.js will create SVG elements here -->
@@ -176,7 +197,7 @@
                 </div>
             </div>
 
-            <div id="timeline">
+            <div id="timeline" class="animate__animated animate__fadeIn">
                 <div id="timeline-line"></div>
                 <div id="timeline-marker"></div>
                 <!-- Timeline events will be added here dynamically -->
@@ -224,7 +245,7 @@
     </div>
 
     <div id="help-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content animate__animated animate__fadeIn animate__faster">
             <div class="modal-header">
                 <h2>How to Use This Visualization</h2>
                 <button class="modal-close">&times;</button>
@@ -263,7 +284,7 @@
     </div>
 
     <div id="share-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content animate__animated animate__fadeIn animate__faster">
             <div class="modal-header">
                 <h2>Share This Visualization</h2>
                 <button class="modal-close">&times;</button>
@@ -286,7 +307,7 @@
     </div>
 
     <div id="upload-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content animate__animated animate__fadeIn animate__faster">
             <div class="modal-header">
                 <h2>Upload Deadlock Log File</h2>
                 <button class="modal-close">&times;</button>
@@ -326,16 +347,16 @@
             
             helpToggle.addEventListener('click', function(e) {
                 e.preventDefault();
-                modal.style.display = 'flex';
+                showModalWithAnimation(modal);
             });
             
             closeBtn.addEventListener('click', function() {
-                modal.style.display = 'none';
+                hideModalWithAnimation(modal);
             });
             
             window.addEventListener('click', function(e) {
                 if (e.target === modal) {
-                    modal.style.display = 'none';
+                    hideModalWithAnimation(modal);
                 }
             });
             

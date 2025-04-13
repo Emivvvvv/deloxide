@@ -78,18 +78,18 @@ const initUploadFeature = () => {
 
   // Open modal when upload button is clicked
   uploadBtn.addEventListener("click", () => {
-    uploadModal.style.display = "flex"
+    showModalWithAnimation(uploadModal);
   })
 
   // Close modal
   closeBtn.addEventListener("click", () => {
-    uploadModal.style.display = "none"
+    hideModalWithAnimation(uploadModal);
   })
 
   // Close modal when clicking outside
   window.addEventListener("click", (e) => {
     if (e.target === uploadModal) {
-      uploadModal.style.display = "none"
+      hideModalWithAnimation(uploadModal);
     }
   })
 
@@ -433,7 +433,7 @@ function initShareFeature() {
   // Close modal when clicking the X button
   closeBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
-      shareModal.style.display = "none"
+      hideModalWithAnimation(shareModal)
       copyStatus.style.display = "none"
     })
   })
@@ -441,7 +441,7 @@ function initShareFeature() {
   // Close modal when clicking outside
   window.addEventListener("click", (e) => {
     if (e.target === shareModal) {
-      shareModal.style.display = "none"
+      hideModalWithAnimation(shareModal)
       copyStatus.style.display = "none"
     }
   })
@@ -543,7 +543,7 @@ function openShareModal() {
       shareLinkInput.value = shareUrl
 
       // Show the modal
-      shareModal.style.display = "flex"
+      showModalWithAnimation(shareModal)
       return
     }
 
@@ -577,7 +577,7 @@ function openShareModal() {
       shareLinkInput.value = shareUrl
 
       // Show the modal
-      shareModal.style.display = "flex"
+      showModalWithAnimation(shareModal)
       return
     }
 
@@ -603,7 +603,7 @@ function openShareModal() {
     shareLinkInput.value = shareUrl
 
     // Show the modal
-    shareModal.style.display = "flex"
+    showModalWithAnimation(shareModal)
   } catch (error) {
     console.error("Error generating share link:", error)
     alert("Error generating share link: " + error.message)
@@ -1174,14 +1174,19 @@ function updateNodeElements() {
   // Join nodes with elements
   const nodeElements = nodeGroup.selectAll(".node").data(nodes, (d) => d.id)
 
-  // Remove old nodes
-  nodeElements.exit().remove()
+  // Remove old nodes with fade out animation
+  nodeElements.exit()
+    .transition()
+    .duration(300)
+    .style("opacity", 0)
+    .remove();
 
   // Create new node groups
   const nodeEnter = nodeElements
     .enter()
     .append("g")
     .attr("class", (d) => `node ${d.type}`)
+    .style("opacity", 0) // Start with opacity 0 for fade-in effect
     .call(
       d3
         .drag()
@@ -1191,7 +1196,11 @@ function updateNodeElements() {
     )
 
   // Add circles to new nodes
-  nodeEnter.append("circle").attr("r", 25)
+  nodeEnter.append("circle")
+    .attr("r", 0) // Start with radius 0 for growing animation
+    .transition()
+    .duration(500)
+    .attr("r", 25); // Grow to final size
 
   // Add text labels to new nodes
   nodeEnter
@@ -1199,19 +1208,57 @@ function updateNodeElements() {
     .attr("dy", 5)
     .text((d) => d.id)
     .attr("fill", "white")
+    .style("opacity", 0) // Start with opacity 0
+    .transition()
+    .duration(500)
+    .style("opacity", 1); // Fade in
+  
+  // Animate the node's appearance
+  nodeEnter
+    .transition()
+    .duration(500)
+    .style("opacity", 1); // Fade in
+  
+  // Special animation for deadlock nodes
+  nodeElements.filter(d => d.isInCycle)
+    .select("circle")
+    .transition()
+    .duration(500)
+    .attr("r", 28) // Slightly larger
+    .transition()
+    .duration(500)
+    .attr("r", 25) // Back to normal size
+    .on("end", function() {
+      // Repeat the pulse animation for nodes in deadlock
+      if (d3.select(this.parentNode).datum().isInCycle) {
+        d3.select(this)
+          .transition()
+          .duration(1000)
+          .attr("r", 28)
+          .transition()
+          .duration(1000)
+          .attr("r", 25);
+      }
+    });
 
   // Handle tooltips
   nodeEnter
     .on("mouseover", function (event, d) {
       d3.select(".tooltip")
-        .style("opacity", 0.9)
+        .style("opacity", 0)
         .html(d.name)
         .style("left", event.pageX + 10 + "px")
         .style("top", event.pageY - 28 + "px")
+        .transition()
+        .duration(200)
+        .style("opacity", 0.9);
     })
     .on("mouseout", function () {
-      d3.select(".tooltip").style("opacity", 0)
-    })
+      d3.select(".tooltip")
+        .transition()
+        .duration(200)
+        .style("opacity", 0);
+    });
 }
 
 // Helper function to update link elements
@@ -1243,21 +1290,26 @@ function updateStepInfo() {
   const waitGraphElement = document.getElementById("wait-graph")
 
   if (stepInfoElement) {
+    // Remove existing animation classes before adding new ones
+    stepInfoElement.querySelectorAll('.animate__animated').forEach(el => {
+      el.classList.remove('animate__animated', 'animate__fadeIn');
+    });
+
     // Get the log entry for current step
     const logEntry = logData[currentStep - 1]
 
     // Create main step info with clean formatting
-    let stepInfoContent = `<h3>Step ${logEntry.step}: ${logEntry.type.charAt(0).toUpperCase() + logEntry.type.slice(1)}</h3>`
+    let stepInfoContent = `<h3 class="animate__animated animate__fadeIn">Step ${logEntry.step}: ${logEntry.type.charAt(0).toUpperCase() + logEntry.type.slice(1)}</h3>`
 
     // Create a more descriptive message based on event type
     if (logEntry.type === "attempt") {
-      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> attempts to acquire <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> attempts to acquire <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
     } else if (logEntry.type === "acquired") {
-      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> successfully acquired <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> successfully acquired <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
     } else if (logEntry.type === "released") {
-      stepInfoContent += `<p><span class="thread-id">Thread ${logEntry.thread_id}</span> released <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${logEntry.thread_id}</span> released <span class="resource-id">Resource ${logEntry.resource_id}</span>.</p>`
     } else if (logEntry.type === "init") {
-      stepInfoContent += `<p>${logEntry.description || "No description available"}</p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description || "No description available"}</p>`
     } else if (logEntry.type === "deadlock") {
       // For deadlock, format the description with line breaks for better readability
       const deadlockPrefix = '<strong>DEADLOCK DETECTED:</strong>';
@@ -1285,15 +1337,15 @@ function updateStepInfo() {
         }
       }
 
-      // Reconstruct the full description with prefix and formatted details
-      stepInfoContent += `<p>${deadlockPrefix}<br>${deadlockDetails}</p>`;
+      // Reconstruct the full description with prefix and formatted details and animations
+      stepInfoContent += `<p class="animate__animated animate__fadeIn animate__headShake">${deadlockPrefix}<br>${deadlockDetails}</p>`;
     } else {
       // Fallback for any other event types
-      stepInfoContent += `<p>${logEntry.description || "No description available"}</p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description || "No description available"}</p>`
     }
 
     if (logEntry.code_reference) {
-      stepInfoContent += `<p><strong>Code Reference:</strong> <code class="code-reference">${logEntry.code_reference}</code></p>`
+      stepInfoContent += `<p class="animate__animated animate__fadeIn"><strong>Code Reference:</strong> <code class="code-reference">${logEntry.code_reference}</code></p>`
     }
 
     // Add timestamp only if not step 1 (init)
@@ -1322,7 +1374,7 @@ function updateStepInfo() {
       const remainingMs = logEntry.timestamp % 1000;
 
       stepInfoContent += `
-        <div class="timestamp">
+        <div class="timestamp animate__animated animate__fadeIn">
           <i class="far fa-clock"></i> 
           <span class="timestamp-datetime">${formattedDate} ${formattedTime}</span>
         </div>`;
@@ -1341,13 +1393,13 @@ function updateStepInfo() {
       waitGraphElement.style.display = "block"
 
       // Construct wait-for graph explanation with improved design
-      let waitGraphContent = `<h3>Deadlock Cycle</h3><div id="wait-graph-content">`
+      let waitGraphContent = `<h3 class="animate__animated animate__fadeIn">Deadlock Cycle</h3><div id="wait-graph-content" class="animate__animated animate__fadeIn">`
 
       // Format the cycle with better visualization
       const cycle = logEntry.deadlock_details.thread_cycle || []
       if (cycle.length > 0) {
         // Create a nicer cycle visualization
-        waitGraphContent += `<div class="cycle-visualization">`
+        waitGraphContent += `<div class="cycle-visualization animate__animated animate__pulse">`
         cycle.forEach((threadId, index) => {
           waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
           if (index < cycle.length - 1) {
@@ -1364,7 +1416,7 @@ function updateStepInfo() {
         waitGraphContent += `<span class="end-spacing">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>`
 
         // Add explanation of what the cycle means
-        waitGraphContent += `<p class="deadlock-explanation">This circular waiting pattern creates a deadlock where no thread can proceed.</p>`
+        waitGraphContent += `<p class="deadlock-explanation animate__animated animate__fadeIn">This circular waiting pattern creates a deadlock where no thread can proceed.</p>`
       }
 
       waitGraphContent += `</div>`
@@ -1376,8 +1428,8 @@ function updateStepInfo() {
       // Show simple wait-for edge with improved description
       const { from, to } = logEntry.wait_for_edge
 
-      let waitGraphContent = `<h3>Resource Waiting</h3><div id="wait-graph-content">`
-      waitGraphContent += `<p><span class="thread-id">Thread ${from}</span> is waiting for a resource held by <span class="thread-id">Thread ${to}</span>.</p>`
+      let waitGraphContent = `<h3 class="animate__animated animate__fadeIn">Resource Waiting</h3><div id="wait-graph-content" class="animate__animated animate__fadeIn">`
+      waitGraphContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${from}</span> is waiting for a resource held by <span class="thread-id">Thread ${to}</span>.</p>`
       waitGraphContent += `</div>`
 
       waitGraphElement.innerHTML = waitGraphContent
@@ -1492,31 +1544,35 @@ function initTimeline() {
 
   if (timelineElement && logData.length > 0) {
     // Clear existing events
-    const timelineLine = document.getElementById("timeline-line")
-    const timelineMarker = document.getElementById("timeline-marker")
-
     while (timelineElement.firstChild) {
       timelineElement.removeChild(timelineElement.firstChild)
     }
 
     // Add back the line and marker
-    timelineElement.appendChild(document.createElement("div")).id =
-      "timeline-line"
-    timelineElement.appendChild(document.createElement("div")).id =
-      "timeline-marker"
+    timelineElement.appendChild(document.createElement("div")).id = "timeline-line"
+    timelineElement.appendChild(document.createElement("div")).id = "timeline-marker"
 
     // Calculate event positions
     const totalWidth = timelineElement.clientWidth - 40 // 20px padding on each side
 
-    // Create events
+    // Create events with staggered animations
     logData.forEach((event, index) => {
       const position = 20 + (totalWidth * index) / (logData.length - 1)
 
       const eventElement = document.createElement("div")
-      eventElement.className = `timeline-event ${event.type}`
+      eventElement.className = `timeline-event ${event.type} animate__animated animate__fadeIn`
       eventElement.style.left = `${position}px`
       eventElement.setAttribute("data-step", event.step)
       eventElement.setAttribute("title", `Step ${event.step}: ${event.type}`)
+      
+      // Add staggered animation delay based on index
+      eventElement.style.animationDelay = `${index * 50}ms`
+
+      // Add additional animation class for deadlock events
+      if (event.type === "deadlock") {
+        eventElement.classList.add("animate__pulse")
+        eventElement.style.animationIterationCount = "2"
+      }
 
       eventElement.addEventListener("click", () => {
         currentStep = event.step
@@ -1657,7 +1713,7 @@ function setupEventListeners() {
 function autoStartAnimation() {
   setTimeout(() => {
     togglePlay(); // This will start the animation
-  }, 500); // Wait 500ms to ensure everything is ready
+  }, 300); // Wait 300ms to ensure everything is ready (reduced from 500ms)
 }
 
 /**
@@ -1745,4 +1801,37 @@ function showVisualizationElements() {
   document.getElementById("timeline").style.display = "block"
   document.getElementById("controls").style.display = "flex"
   document.getElementById("legend").style.display = "block"
+}
+
+/**
+ * Utility functions for modal animations
+ */
+function showModalWithAnimation(modal) {
+  // First set display to flex so the modal is visible
+  modal.style.display = 'flex';
+  
+  // Get the modal content element
+  const modalContent = modal.querySelector('.modal-content');
+  
+  // Reset any existing animations
+  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  
+  // Add the animation
+  modalContent.classList.add('animate__animated', 'animate__fadeIn', 'animate__faster');
+}
+
+function hideModalWithAnimation(modal) {
+  // Get the modal content element
+  const modalContent = modal.querySelector('.modal-content');
+  
+  // Reset any existing animations
+  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  
+  // Add the fadeOut animation
+  modalContent.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+  
+  // Wait for animation to complete before hiding the modal
+  setTimeout(() => {
+    modal.style.display = 'none';
+  }, 200); // 200ms animation duration (reduced from 300ms)
 }
