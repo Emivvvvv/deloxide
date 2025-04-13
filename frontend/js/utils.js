@@ -114,7 +114,7 @@ function transformLogs(rawLogs, resourceMapping) {
       deadlockDescriptions[0]
     } while ${deadlockDescriptions[1].replace(
       '<span class="thread-id">Thread',
-      '<span class="thread-id">thread'
+      '<span class="thread-id">Thread'
     )}`
   } else {
     const lastDesc = deadlockDescriptions.pop()
@@ -122,7 +122,7 @@ function transformLogs(rawLogs, resourceMapping) {
       ", "
     )} and ${lastDesc.replace(
       '<span class="thread-id">Thread',
-      '<span class="thread-id">thread'
+      '<span class="thread-id">Thread'
     )}`
   }
 
@@ -462,7 +462,7 @@ function processNewFormatLogs(logText) {
               deadlockDescriptions[0]
             } while ${deadlockDescriptions[1].replace(
               '<span class="thread-id">Thread',
-              '<span class="thread-id">thread'
+              '<span class="thread-id">Thread'
             )}`
           } else {
             const lastDesc = deadlockDescriptions.pop()
@@ -470,7 +470,7 @@ function processNewFormatLogs(logText) {
               ", "
             )} and ${lastDesc.replace(
               '<span class="thread-id">Thread',
-              '<span class="thread-id">thread'
+              '<span class="thread-id">Thread'
             )}`
           }
 
