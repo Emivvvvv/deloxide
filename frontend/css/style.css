@@ -288,7 +288,7 @@ body {
     color: var(--text-color);
     margin: 0;
     padding: 0;
-    transition: background-color 0.2s, color 0.2s;
+    transition: background-color 0.1s, color 0.1s;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -354,7 +354,7 @@ header {
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: background-color 0.2s;
+    transition: background-color 0.1s;
 }
 
 #theme-toggle:hover, .header-btn:hover {
@@ -491,7 +491,7 @@ main {
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 4px var(--shadow-color);
-    transition: all 0.2s ease;
+    transition: all 0.1s ease;
     min-width: 110px; /* Reduced from 120px */
     flex: 1;
     max-width: 160px; /* Reduced from 180px */
@@ -612,7 +612,7 @@ main {
     background-color: var(--primary-color);
     top: 50%;
     transform: translateY(-50%);
-    transition: left 0.2s ease;
+    transition: left 0.1s ease;
     z-index: 5;
 }
 
@@ -626,7 +626,7 @@ main {
     cursor: pointer;
     z-index: 10;
     box-shadow: 0 2px 5px var(--shadow-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .timeline-event:hover {
@@ -668,7 +668,7 @@ main {
     border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(5px);
     display: block;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.1s ease;
 }
 
 #legend h3 {
@@ -763,7 +763,7 @@ main {
 
 /* Node and Edge Styles */
 .node circle {
-    transition: stroke 0.2s, stroke-width 0.2s;
+    transition: stroke 0.1s, stroke-width 0.1s;
     fill-opacity: 0.9;
 }
 
@@ -847,7 +847,7 @@ footer p {
     padding: 6px 10px; /* Reduced from 8px 12px */
     border-radius: 6px;
     background-color: rgba(255, 255, 255, 0.15);
-    transition: background-color 0.2s;
+    transition: background-color 0.1s;
 }
 
 .footer-links a:hover {
@@ -876,7 +876,7 @@ footer p {
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
-    animation: modalShow 0.2s ease-out;
+    animation: modalShow 0.1s ease-out;
 }
 
 @keyframes modalShow {
@@ -903,7 +903,7 @@ footer p {
     font-size: 1.6rem; /* Reduced from 1.8rem */
     cursor: pointer;
     color: var(--neutral-color);
-    transition: color 0.2s;
+    transition: color 0.1s;
 }
 
 .modal-close:hover {
@@ -1044,7 +1044,7 @@ svg {
 
 .node {
     cursor: pointer;
-    transition: transform 0.2s ease;
+    transition: transform 0.1s ease;
 }
 
 .node text {
@@ -1064,7 +1064,7 @@ svg {
     padding: 25px; /* Reduced from 30px */
     text-align: center;
     margin-bottom: 15px; /* Reduced from 20px */
-    transition: all 0.2s;
+    transition: all 0.1s;
     background-color: var(--hover-bg);
 }
 
@@ -1131,7 +1131,7 @@ button.simulation-btn {
     border-radius: 5px;
     cursor: pointer;
     box-shadow: 0 2px 5px var(--shadow-color);
-    transition: all 0.2s ease;
+    transition: all 0.1s ease;
 }
 
 button.primary-action {
@@ -1146,7 +1146,7 @@ button.primary-action {
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.1s ease;
 }
 
 .nav-link {
@@ -1157,7 +1157,7 @@ button.primary-action {
     align-items: center;
     gap: 0.5rem;
     border-radius: 6px;
-    transition: background-color 0.2s, color 0.2s;
+    transition: background-color 0.1s, color 0.1s;
 }
 
 .mode-toggle {
@@ -1167,18 +1167,18 @@ button.primary-action {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s;
+    transition: background-color 0.1s;
 }
 
 .graph-node circle {
-    transition: stroke 0.2s, stroke-width 0.2s;
+    transition: stroke 0.1s, stroke-width 0.1s;
 }
 
 .settings-toggle {
     cursor: pointer;
-    transition: transform 0.2s ease;
+    transition: transform 0.1s ease;
 }
 
 .settings-menu {
-    transition: all 0.2s;
+    transition: all 0.1s;
 }

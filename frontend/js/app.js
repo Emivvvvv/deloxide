@@ -1177,7 +1177,7 @@ function updateNodeElements() {
   // Remove old nodes with fade out animation
   nodeElements.exit()
     .transition()
-    .duration(300)
+    .duration(150)
     .style("opacity", 0)
     .remove();
 
@@ -1199,7 +1199,7 @@ function updateNodeElements() {
   nodeEnter.append("circle")
     .attr("r", 0) // Start with radius 0 for growing animation
     .transition()
-    .duration(500)
+    .duration(250)
     .attr("r", 25); // Grow to final size
 
   // Add text labels to new nodes
@@ -1210,33 +1210,33 @@ function updateNodeElements() {
     .attr("fill", "white")
     .style("opacity", 0) // Start with opacity 0
     .transition()
-    .duration(500)
+    .duration(250)
     .style("opacity", 1); // Fade in
   
   // Animate the node's appearance
   nodeEnter
     .transition()
-    .duration(500)
+    .duration(250)
     .style("opacity", 1); // Fade in
   
   // Special animation for deadlock nodes
   nodeElements.filter(d => d.isInCycle)
     .select("circle")
     .transition()
-    .duration(500)
+    .duration(250)
     .attr("r", 28) // Slightly larger
     .transition()
-    .duration(500)
+    .duration(250)
     .attr("r", 25) // Back to normal size
     .on("end", function() {
       // Repeat the pulse animation for nodes in deadlock
       if (d3.select(this.parentNode).datum().isInCycle) {
         d3.select(this)
           .transition()
-          .duration(1000)
+          .duration(500)
           .attr("r", 28)
           .transition()
-          .duration(1000)
+          .duration(500)
           .attr("r", 25);
       }
     });
@@ -1624,7 +1624,7 @@ function togglePlay() {
       currentStep = step
       updateVisualization()
       step++
-    }, 1000)
+    }, 500) // 500ms instead of 1000ms
   }
 }
 
@@ -1713,7 +1713,7 @@ function setupEventListeners() {
 function autoStartAnimation() {
   setTimeout(() => {
     togglePlay(); // This will start the animation
-  }, 300); // Wait 300ms to ensure everything is ready (reduced from 500ms)
+  }, 150); // Wait 150ms to ensure everything is ready (reduced from 300ms)
 }
 
 /**
@@ -1817,7 +1817,7 @@ function showModalWithAnimation(modal) {
   modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
   
   // Add the animation
-  modalContent.classList.add('animate__animated', 'animate__fadeIn', 'animate__faster');
+  modalContent.classList.add('animate__animated', 'animate__fadeIn', 'animate__faster', 'animate__faster');
 }
 
 function hideModalWithAnimation(modal) {
@@ -1828,10 +1828,10 @@ function hideModalWithAnimation(modal) {
   modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
   
   // Add the fadeOut animation
-  modalContent.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+  modalContent.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster', 'animate__faster');
   
   // Wait for animation to complete before hiding the modal
   setTimeout(() => {
     modal.style.display = 'none';
-  }, 200); // 200ms animation duration (reduced from 300ms)
+  }, 100); // 100ms animation duration (reduced from 200ms)
 }
