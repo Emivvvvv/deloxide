@@ -60,7 +60,6 @@ impl EventLogger {
     pub fn with_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = OpenOptions::new()
             .create(true)
-            .append(true)
             .open(path)
             .context("Failed to open log file")?;
 
