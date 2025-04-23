@@ -51,7 +51,8 @@ impl Deloxide {
     /// Activate logger and set the path for the log file
     ///
     /// # Arguments
-    /// * `path` - Path to the log file
+    /// * `path` - Path to the log file. If the path contains "{timestamp}",
+    ///   it will be replaced with the current timestamp.
     ///
     /// # Returns
     /// The builder for method chaining

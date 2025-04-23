@@ -277,3 +277,28 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
         }
     }
 }
+
+/// Showcase the current active log data by sending it to the showcase server.
+///
+/// # Returns
+/// * `0` on success
+/// * `-1` if no active log file exists
+/// * `-2` if showcasing failed (for example, file read or network error)
+///
+/// # Safety
+/// This function is safe to call from FFI contexts.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
+    match crate::showcase::showcase_this() {
+        Ok(_) => 0, // Success
+        Err(e) => {
+            if e.to_string().contains("No active log file") {
+                -1 // No active log file
+            } else {
+                // Log the error in a way that's accessible to C code
+                eprintln!("Showcase error: {:#}", e);
+                -2 // Showcase failed
+            }
+        }
+    }
+}
