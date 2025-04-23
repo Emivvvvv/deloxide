@@ -7,4 +7,4 @@ mod event_logger;
 mod graph_logger;
 
 // Re-export core functionality
-pub use event_logger::{init_logger, is_logging_enabled, log_event};
+pub use event_logger::{init_logger, is_logging_enabled, log_event, get_current_log_file};
