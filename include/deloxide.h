@@ -169,7 +169,6 @@ void deloxide_destroy_mutex(void* mutex);
  *
  * @return  0 on success
  *         -1 if mutex is NULL
- *         -2 if lock acquisition failed
  */
 int deloxide_lock(void* mutex);
 

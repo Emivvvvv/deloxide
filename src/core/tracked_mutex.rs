@@ -1,9 +1,9 @@
 use crate::core::detector;
 use crate::core::types::{LockId, ThreadId};
 use crate::core::utils::get_current_thread_id;
+use parking_lot::{Mutex, MutexGuard};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard};
 
 // Global counter for generating unique lock IDs
 static NEXT_LOCK_ID: AtomicUsize = AtomicUsize::new(1);
@@ -61,38 +61,32 @@ impl<T> TrackedMutex<T> {
         // Report lock attempt
         detector::on_lock_attempt(thread_id, self.id);
 
-        // Try to acquire the lock
-        match self.inner.lock() {
-            Ok(guard) => {
-                // Report successful acquisition
-                detector::on_lock_acquired(thread_id, self.id);
-                Ok(TrackedGuard {
-                    thread_id,
-                    lock_id: self.id,
-                    guard,
-                })
-            }
-            Err(e) => Err(e),
-        }
+        let guard = self.inner.lock();
+
+        detector::on_lock_acquired(thread_id, self.id);
+        Ok(TrackedGuard {
+            thread_id,
+            lock_id: self.id,
+            guard,
+        })
     }
 
     /// Try to acquire the lock without blocking
-    pub fn try_lock(&self) -> Result<TrackedGuard<T>, std::sync::TryLockError<MutexGuard<T>>> {
+    pub fn try_lock(&self) -> Option<TrackedGuard<'_, T>> {
         let thread_id = get_current_thread_id();
 
         // Report lock attempt
         detector::on_lock_attempt(thread_id, self.id);
 
-        match self.inner.try_lock() {
-            Ok(guard) => {
-                detector::on_lock_acquired(thread_id, self.id);
-                Ok(TrackedGuard {
-                    thread_id,
-                    lock_id: self.id,
-                    guard,
-                })
-            }
-            Err(e) => Err(e),
+        if let Some(guard) = self.inner.try_lock() {
+            detector::on_lock_acquired(thread_id, self.id);
+            Some(TrackedGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+            })
+        } else {
+            None
         }
     }
 }

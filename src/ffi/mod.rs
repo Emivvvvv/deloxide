@@ -199,9 +199,8 @@ pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
 ///
 /// # Returns
-/// * `0` on successful lock acquisition
+/// * `0` on success
 /// * `-1` if the mutex pointer is NULL
-/// * `-2` if the lock operation failed (mutex is poisoned)
 ///
 /// # Safety
 /// - The caller must pass a valid pointer to a `TrackedMutex<()>`.
@@ -214,21 +213,13 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
 
     unsafe {
         let mutex_ref = &*(mutex as *const TrackedMutex<()>);
+        let guard = mutex_ref.lock();
 
-        match mutex_ref.lock() {
-            Ok(guard) => {
-                // Transmute the guard’s lifetime so we can store it in thread-local storage
-                let static_guard =
-                    std::mem::transmute::<TrackedGuard<'_, ()>, TrackedGuard<'static, ()>>(guard);
-
-                // Keep it alive until unlock
-                FFI_GUARD.with(|slot| *slot.borrow_mut() = Some(static_guard));
-
-                0
-            }
-            Err(_) => -2,
-        }
+        #[allow(clippy::missing_transmute_annotations)]
+        FFI_GUARD.with(|slot| *slot.borrow_mut() = Some(std::mem::transmute(guard)));
     }
+
+    0
 }
 
 /// Unlock a tracked mutex.
@@ -252,6 +243,7 @@ pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
     FFI_GUARD.with(|slot| {
         let _ = slot.borrow_mut().take();
     });
+
     0
 }
 
