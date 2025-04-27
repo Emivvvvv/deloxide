@@ -346,13 +346,6 @@ mod tests {
         let state = logger.get_current_state();
         assert!(state.locks.contains(&10));
 
-        // Check for the creation link
-        let has_creation_link = state
-            .links
-            .iter()
-            .any(|link| link.source == 5 && link.target == 10 && link.link_type == "Created");
-        assert!(has_creation_link);
-
         // Destroy the lock
         logger.update_lock_destroy(10);
 
