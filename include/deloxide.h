@@ -1,21 +1,17 @@
 /*
  * @file deloxide.h
- * @brief C/C++ API for the Rust deloxide deadlock detection library.
+ * @brief C API for the Rust deloxide deadlock detection library.
  */
 
 #ifndef DELOXIDE_H
 #define DELOXIDE_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <stddef.h>
 
 /*
  * --- High-Level Macros for Easier Tracked Usage ---
  *
- * These macros simplify correct usage of Deloxide from C/C++.
+ * These macros simplify correct usage of Deloxide from C.
  *
  * 1. Tracked Threads:
  *    - Automatically register spawn and exit events for threads.
@@ -251,9 +247,5 @@ int deloxide_showcase(const char* log_path);
  *         -2 if the showcase operation failed.
  */
 int deloxide_showcase_current();
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* DELOXIDE_H */
