@@ -238,15 +238,6 @@ impl GraphLogger {
             }
         }
 
-        // Add links for lock creation relationships (optional - this will add creator links to visualization)
-        for (&lock_id, &creator_id) in &self.lock_creators {
-            links.push(GraphLink {
-                source: creator_id,
-                target: lock_id,
-                link_type: "Created".to_string(),
-            });
-        }
-
         GraphState {
             threads: self.threads.iter().copied().collect(),
             locks: self.locks.iter().copied().collect(),
