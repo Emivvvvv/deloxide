@@ -1,9 +1,9 @@
 pub mod encoder;
 pub use encoder::process_log_for_url;
 
+use crate::core::logger;
 use anyhow::{Context, Result};
 use std::path::Path;
-use crate::core::logger;
 
 /// Showcase the log data by sending it to the showcase server
 ///
@@ -48,8 +48,8 @@ pub fn showcase_this() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No active log file found"))?;
 
     // Process the log file to get an encoded string suitable for URLs
-    let encoded_log = process_log_for_url(&log_path)
-        .context("Failed to process log file for URL")?;
+    let encoded_log =
+        process_log_for_url(&log_path).context("Failed to process log file for URL")?;
 
     // Construct the URL with the encoded log as a parameter
     let showcase_url = format!("https://deloxide.vercel.app/?logs={}", encoded_log);

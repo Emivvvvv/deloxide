@@ -98,7 +98,10 @@ fn test_dining_philosophers_deadlock() {
 
             println!("Successfully detected dining philosophers deadlock!");
             println!("Thread cycle: {:?}", info.thread_cycle);
-            println!("Thread waiting for locks: {:?}", info.thread_waiting_for_locks);
+            println!(
+                "Thread waiting for locks: {:?}",
+                info.thread_waiting_for_locks
+            );
         }
         Err(_) => {
             panic!("No deadlock detected within timeout period!");

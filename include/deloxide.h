@@ -60,9 +60,26 @@ int deloxide_is_logging_enabled();
 /*
  * @brief Create a new tracked mutex.
  *
+ * The current thread will be registered as the creator of this mutex.
+ * When the creator thread exits, the mutex will be automatically destroyed
+ * if no other thread is using it.
+ *
  * @return Opaque pointer to the mutex, or NULL on allocation failure.
  */
 void* deloxide_create_mutex();
+
+/*
+ * @brief Create a new tracked mutex with a specified creator thread.
+ *
+ * The specified thread will be registered as the creator of this mutex.
+ * When the creator thread exits, the mutex will be automatically destroyed
+ * if no other thread is using it.
+ *
+ * @param creator_thread_id ID of the thread to register as the creator.
+ *
+ * @return Opaque pointer to the mutex, or NULL on allocation failure.
+ */
+void* deloxide_create_mutex_with_creator(unsigned long creator_thread_id);
 
 /*
  * @brief Destroy a tracked mutex.
@@ -97,6 +114,31 @@ int deloxide_lock(void* mutex, unsigned long thread_id);
 int deloxide_unlock(void* mutex, unsigned long thread_id);
 
 /*
+ * @brief Register a thread spawn with the deadlock detector.
+ *
+ * This function should be called when a new thread is created in your application.
+ * It establishes the parent-child relationship between threads for proper resource tracking.
+ *
+ * @param thread_id ID of the newly spawned thread.
+ * @param parent_id ID of the parent thread that created this thread, or 0 for no parent.
+ *
+ * @return 0 on success.
+ */
+int deloxide_register_thread_spawn(unsigned long thread_id, unsigned long parent_id);
+
+/*
+ * @brief Register a thread exit with the deadlock detector.
+ *
+ * This function should be called when a thread is about to exit.
+ * It ensures proper cleanup of resources owned by the thread.
+ *
+ * @param thread_id ID of the exiting thread.
+ *
+ * @return 0 on success.
+ */
+int deloxide_register_thread_exit(unsigned long thread_id);
+
+/*
  * @brief Get a unique identifier for the current thread.
  *
  * This ID should be used when calling lock/unlock functions.
@@ -106,7 +148,16 @@ int deloxide_unlock(void* mutex, unsigned long thread_id);
 unsigned long deloxide_get_thread_id();
 
 /*
- * @brief Popups a browser screen to showcase given log data.
+ * @brief Get the creator thread ID of a mutex.
+ *
+ * @param mutex Pointer to a mutex created with deloxide_create_mutex.
+ *
+ * @return The thread ID of the creator thread, or 0 if the mutex is NULL.
+ */
+unsigned long deloxide_get_mutex_creator(void* mutex);
+
+/*
+ * @brief Opens a browser window to showcase the given log data.
  *
  * @param log_path Path to the log file as a null-terminated UTF-8 string.
  *
@@ -115,6 +166,17 @@ unsigned long deloxide_get_thread_id();
  *         -2 if the showcase operation failed.
  */
 int deloxide_showcase(const char* log_path);
+
+/*
+ * @brief Opens a browser window to showcase the currently active log data.
+ *
+ * This function uses the log file that was specified in deloxide_init().
+ *
+ * @return  0 on success,
+ *         -1 if no active log file exists,
+ *         -2 if the showcase operation failed.
+ */
+int deloxide_showcase_current();
 
 #ifdef __cplusplus
 }

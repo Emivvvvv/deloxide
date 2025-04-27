@@ -1,4 +1,4 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -42,7 +42,7 @@ fn test_partial_deadlock_with_completing_thread() {
     // Thread 1: Locks Resource A, then after a short delay tries to lock Resource B.
     let a_t1 = Arc::clone(&mutex_a);
     let b_t1 = Arc::clone(&mutex_b);
-    let _thread1 = thread::spawn(move || {
+    let _thread1 = TrackedThread::spawn(move || {
         let _guard_a = a_t1.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         // This call will block when Resource B is already held by another thread.
@@ -52,7 +52,7 @@ fn test_partial_deadlock_with_completing_thread() {
     // Thread 2: Locks Resource B, then tries to lock Resource C.
     let b_t2 = Arc::clone(&mutex_b);
     let c_t2 = Arc::clone(&mutex_c);
-    let _thread2 = thread::spawn(move || {
+    let _thread2 = TrackedThread::spawn(move || {
         let _guard_b = b_t2.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _guard_c = c_t2.lock().unwrap();
@@ -61,7 +61,7 @@ fn test_partial_deadlock_with_completing_thread() {
     // Thread 3: Locks Resource C, then tries to lock Resource D.
     let c_t3 = Arc::clone(&mutex_c);
     let d_t3 = Arc::clone(&mutex_d);
-    let _thread3 = thread::spawn(move || {
+    let _thread3 = TrackedThread::spawn(move || {
         let _guard_c = c_t3.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _guard_d = d_t3.lock().unwrap();
@@ -70,7 +70,7 @@ fn test_partial_deadlock_with_completing_thread() {
     // Thread 4: Locks Resource D, then tries to lock Resource A—closing the dependency cycle.
     let d_t4 = Arc::clone(&mutex_d);
     let a_t4 = Arc::clone(&mutex_a);
-    let _thread4 = thread::spawn(move || {
+    let _thread4 = TrackedThread::spawn(move || {
         let _guard_d = d_t4.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _guard_a = a_t4.lock().unwrap();

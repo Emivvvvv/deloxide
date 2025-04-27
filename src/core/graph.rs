@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 /// Represents a directed graph of thread wait relationships
 pub struct WaitForGraph {
     /// Maps a thread to all the threads it is waiting for
-    edges: HashMap<ThreadId, HashSet<ThreadId>>,
+    pub(crate) edges: HashMap<ThreadId, HashSet<ThreadId>>,
 }
 
 impl Default for WaitForGraph {

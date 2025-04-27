@@ -11,11 +11,20 @@ pub mod graph;
 
 // Deadlock detector
 pub mod detector;
-pub use detector::{init_detector, on_lock_acquired, on_lock_attempt, on_lock_release};
+#[allow(unused_imports)]
+pub use detector::{
+    init_detector, on_lock_acquired, on_lock_attempt, on_lock_create, on_lock_destroy,
+    on_lock_release, on_thread_exit, on_thread_spawn,
+};
 
 // Tracked mutex
 pub mod tracked_mutex;
 pub use tracked_mutex::TrackedMutex;
+
+pub mod tracked_thread;
+pub use tracked_thread::TrackedThread;
+
+pub mod utils;
 
 use anyhow::{Context, Result};
 

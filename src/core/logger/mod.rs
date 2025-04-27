@@ -6,5 +6,8 @@
 mod event_logger;
 mod graph_logger;
 
-// Re-export core functionality
-pub use event_logger::{init_logger, is_logging_enabled, log_event, get_current_log_file};
+// Re-export core unified logging functionality
+pub use event_logger::{
+    get_current_log_file, init_logger, is_logging_enabled, log_interaction_event, log_lock_event,
+    log_thread_event,
+};

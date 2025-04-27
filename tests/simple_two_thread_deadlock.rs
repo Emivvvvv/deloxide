@@ -1,4 +1,4 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -41,7 +41,7 @@ fn test_simple_two_thread_deadlock() {
     let mutex_b_clone = Arc::clone(&mutex_b);
 
     // Thread 1: Lock A, then try to lock B
-    let _thread1 = thread::spawn(move || {
+    let _thread1 = TrackedThread::spawn(move || {
         let _guard_a = mutex_a.lock().unwrap();
 
         // Give thread 2 time to acquire lock B
@@ -55,7 +55,7 @@ fn test_simple_two_thread_deadlock() {
     });
 
     // Thread 2: Lock B, then try to lock A
-    let _thread2 = thread::spawn(move || {
+    let _thread2 = TrackedThread::spawn(move || {
         let _guard_b = mutex_b_clone.lock().unwrap();
 
         // Give thread 1 time to acquire lock A

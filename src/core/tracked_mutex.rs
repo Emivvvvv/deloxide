@@ -1,9 +1,9 @@
 use crate::core::detector;
 use crate::core::types::{LockId, ThreadId};
+use crate::core::utils::get_current_thread_id;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
-use std::thread;
 
 // Global counter for generating unique lock IDs
 static NEXT_LOCK_ID: AtomicUsize = AtomicUsize::new(1);
@@ -14,6 +14,8 @@ pub struct TrackedMutex<T> {
     id: LockId,
     /// The wrapped mutex
     inner: Mutex<T>,
+    /// Thread that created this mutex
+    creator_thread_id: ThreadId,
 }
 
 /// Guard for a TrackedMutex, reports lock release when dropped
@@ -30,15 +32,26 @@ impl<T> TrackedMutex<T> {
     /// Create a new TrackedMutex with an automatically assigned ID
     pub fn new(value: T) -> Self {
         let id = NEXT_LOCK_ID.fetch_add(1, Ordering::SeqCst);
+        let creator_thread_id = get_current_thread_id();
+
+        // Register the lock with the detector, including creator thread info
+        detector::on_lock_create(id, Some(creator_thread_id));
+
         TrackedMutex {
             id,
             inner: Mutex::new(value),
+            creator_thread_id,
         }
     }
 
     /// Get the ID of this mutex
     pub fn id(&self) -> LockId {
         self.id
+    }
+
+    /// Get the ID of the thread that created this mutex
+    pub fn creator_thread_id(&self) -> ThreadId {
+        self.creator_thread_id
     }
 
     /// Attempt to acquire the lock, tracking the attempt for deadlock detection
@@ -84,6 +97,13 @@ impl<T> TrackedMutex<T> {
     }
 }
 
+impl<T> Drop for TrackedMutex<T> {
+    fn drop(&mut self) {
+        // Register the lock destruction with the detector
+        detector::on_lock_destroy(self.id);
+    }
+}
+
 impl<T> Deref for TrackedGuard<'_, T> {
     type Target = T;
 
@@ -103,12 +123,4 @@ impl<T> Drop for TrackedGuard<'_, T> {
         // Report lock release
         detector::on_lock_release(self.thread_id, self.lock_id);
     }
-}
-/// Get a unique identifier for the current thread
-fn get_current_thread_id() -> ThreadId {
-    // Convert the ThreadId to a usize for our internal use
-    // This is a bit of a hack but it works for our purposes
-    let id = thread::current().id();
-
-    &id as *const _ as usize
 }

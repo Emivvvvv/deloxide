@@ -4,9 +4,13 @@ use serde::{Deserialize, Serialize};
 pub type ThreadId = usize;
 pub type LockId = usize;
 
-/// Represents the type of lock event that occurred
+/// Represents the type of thread/lock event that occurred
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum LockEvent {
+pub enum Events {
+    /// A new Thread/Lock is spawned
+    Spawn,
+    /// The Thread/Lock is exited/dropped
+    Exit,
     /// Thread is attempting to acquire a lock
     Attempt,
     /// Thread successfully acquired a lock

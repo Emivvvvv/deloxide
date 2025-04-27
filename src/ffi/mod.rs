@@ -1,7 +1,9 @@
 use crate::core::logger;
 use crate::core::{
     ThreadId, TrackedMutex, init_detector, on_lock_acquired, on_lock_attempt, on_lock_release,
+    on_lock_create, on_lock_destroy, on_thread_spawn, on_thread_exit,
 };
+use crate::core::utils::get_current_thread_id;
 use serde_json;
 use std::ffi::{CStr, CString, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
@@ -144,6 +146,27 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
     Box::into_raw(mutex) as *mut c_void
 }
 
+/// Create a new tracked mutex with specified creator thread ID.
+///
+/// # Arguments
+/// * `creator_thread_id` - ID of the thread to be registered as the creator of this mutex.
+///
+/// # Returns
+/// * Void pointer to the mutex, or NULL on allocation failure
+///
+/// # Safety
+/// - The returned pointer is a raw pointer to a heap allocation and must be freed by `deloxide_destroy_mutex`.
+/// - Any usage from C/C++ must ensure not to free or move the returned pointer by other means.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_create_mutex_with_creator(creator_thread_id: c_ulong) -> *mut c_void {
+    let mutex = Box::new(TrackedMutex::new(()));
+
+    // Register the specified thread as the creator
+    on_lock_create(mutex.id(), Some(creator_thread_id as ThreadId));
+
+    Box::into_raw(mutex) as *mut c_void
+}
+
 /// Destroy a tracked mutex.
 ///
 /// # Arguments
@@ -224,20 +247,74 @@ pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void, thread_id: c_ulong)
     0 // Success
 }
 
+/// Register a thread spawn with the global detector.
+///
+/// # Arguments
+/// * `thread_id` - ID of the spawned thread.
+/// * `parent_id` - ID of the parent thread that created this thread, or 0 for no parent.
+///
+/// # Returns
+/// * `0` on success
+///
+/// # Safety
+/// - The caller must ensure thread_id represents a real thread.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_register_thread_spawn(thread_id: c_ulong, parent_id: c_ulong) -> c_int {
+    let parent = if parent_id == 0 { None } else { Some(parent_id as ThreadId) };
+    on_thread_spawn(thread_id as ThreadId, parent);
+    0 // Success
+}
+
+/// Register a thread exit with the global detector.
+///
+/// # Arguments
+/// * `thread_id` - ID of the exiting thread.
+///
+/// # Returns
+/// * `0` on success
+///
+/// # Safety
+/// - The caller must ensure thread_id represents a real thread that is exiting.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_register_thread_exit(thread_id: c_ulong) -> c_int {
+    on_thread_exit(thread_id as ThreadId);
+    0 // Success
+}
+
 /// Get the current thread ID.
 ///
 /// # Returns
 /// A unique identifier for the current thread, to be used with lock/unlock functions
 ///
 /// # Safety
-/// This function is `unsafe` only because it’s exposed as part of the FFI boundary, but it effectively performs a safe
-/// Rust operation (getting the current thread’s ID). Callers must still ensure that this is only used within the context
+/// This function is `unsafe` only because it's exposed as part of the FFI boundary, but it effectively performs a safe
+/// Rust operation (getting the current thread's ID). Callers must still ensure that this is only used within the context
 /// of the same process/threading environment, and that the returned ID is used in the manner the rest of the library expects.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_get_thread_id() -> c_ulong {
-    let id = std::thread::current().id();
-    let id_ptr = &id as *const _ as usize;
-    id_ptr as c_ulong
+    get_current_thread_id() as c_ulong
+}
+
+/// Get the creator thread ID of a mutex.
+///
+/// # Arguments
+/// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
+///
+/// # Returns
+/// * Thread ID of the creator thread, or 0 if the mutex is NULL
+///
+/// # Safety
+/// - The caller must pass a valid pointer to a `TrackedMutex<()>`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulong {
+    if mutex.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let mutex_ref = &*(mutex as *const TrackedMutex<()>);
+        mutex_ref.creator_thread_id() as c_ulong
+    }
 }
 
 /// Showcase the log data by sending it to the showcase server.

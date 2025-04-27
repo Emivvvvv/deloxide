@@ -1,3 +1,4 @@
+#![feature(thread_id_value)]
 //! # Deloxide
 //!
 //! A cross-language deadlock detector with visualization support.
@@ -16,7 +17,7 @@
 
 mod core;
 pub use core::{
-    DeadlockInfo, Deloxide, TrackedMutex,
+    DeadlockInfo, Deloxide, TrackedMutex, TrackedThread,
     types::{LockId, ThreadId},
 };
 
