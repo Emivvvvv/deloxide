@@ -13,8 +13,8 @@ pub mod graph;
 pub mod detector;
 #[allow(unused_imports)]
 pub use detector::{
-    init_detector, on_lock_acquired, on_lock_attempt, on_lock_create, on_lock_destroy,
-    on_lock_release, on_thread_exit, on_thread_spawn,
+    init_detector, on_lock_acquired, on_lock_attempt, on_lock_create, on_lock_release,
+    on_thread_exit, on_thread_spawn,
 };
 
 // Tracked mutex

@@ -111,18 +111,11 @@ impl Detector {
                 // 1) compute intersection of held-locks across the cycle
                 let mut iter = cycle.iter();
                 let first = *iter.next().unwrap();
-                let mut intersection = self
-                    .thread_holds
-                    .get(&first)
-                    .cloned()
-                    .unwrap_or_default();
+                let mut intersection = self.thread_holds.get(&first).cloned().unwrap_or_default();
 
                 for &t in iter {
                     if let Some(holds) = self.thread_holds.get(&t) {
-                        intersection = intersection
-                            .intersection(holds)
-                            .copied()
-                            .collect();
+                        intersection = intersection.intersection(holds).copied().collect();
                     } else {
                         intersection.clear();
                         break;

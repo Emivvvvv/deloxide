@@ -1,9 +1,9 @@
 use crate::core::logger;
-use crate::core::{
-    ThreadId, TrackedMutex, init_detector, on_lock_acquired, on_lock_attempt, on_lock_release,
-    on_lock_create, on_lock_destroy, on_thread_spawn, on_thread_exit,
-};
 use crate::core::utils::get_current_thread_id;
+use crate::core::{
+    ThreadId, TrackedMutex, init_detector, on_lock_acquired, on_lock_attempt, on_lock_create,
+    on_lock_release, on_thread_exit, on_thread_spawn,
+};
 use serde_json;
 use std::ffi::{CStr, CString, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
@@ -158,7 +158,9 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
 /// - The returned pointer is a raw pointer to a heap allocation and must be freed by `deloxide_destroy_mutex`.
 /// - Any usage from C/C++ must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_create_mutex_with_creator(creator_thread_id: c_ulong) -> *mut c_void {
+pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
+    creator_thread_id: c_ulong,
+) -> *mut c_void {
     let mutex = Box::new(TrackedMutex::new(()));
 
     // Register the specified thread as the creator
@@ -259,8 +261,15 @@ pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void, thread_id: c_ulong)
 /// # Safety
 /// - The caller must ensure thread_id represents a real thread.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_register_thread_spawn(thread_id: c_ulong, parent_id: c_ulong) -> c_int {
-    let parent = if parent_id == 0 { None } else { Some(parent_id as ThreadId) };
+pub unsafe extern "C" fn deloxide_register_thread_spawn(
+    thread_id: c_ulong,
+    parent_id: c_ulong,
+) -> c_int {
+    let parent = if parent_id == 0 {
+        None
+    } else {
+        Some(parent_id as ThreadId)
+    };
     on_thread_spawn(thread_id as ThreadId, parent);
     0 // Success
 }

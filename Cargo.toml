@@ -39,3 +39,6 @@ base64 = "0.22.1" # For Base64URL encoding
 # CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
 tempfile = "3.15.0"
+
+# For testing
+rand = "0.9.0-beta.3"
