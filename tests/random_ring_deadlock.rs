@@ -1,4 +1,4 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};  // :contentReference[oaicite:0]{index=0}
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
 use rand::Rng;
 use std::{
     sync::{Arc, Barrier, Mutex, mpsc},
@@ -12,14 +12,13 @@ fn test_random_ring_deadlock() {
     let (tx, rx) = mpsc::channel::<DeadlockInfo>();
 
     // Shared flag & slot for assertions
-    let detected  = Arc::new(Mutex::new(false));
+    let detected = Arc::new(Mutex::new(false));
     let info_slot = Arc::new(Mutex::new(None));
 
     // Initialize Deloxide with our callback
     let flag = detected.clone();
     let slot = info_slot.clone();
     Deloxide::new()
-        .with_log("tests/random_ring_deadlock.log")
         .callback(move |info| {
             *flag.lock().unwrap() = true;
             *slot.lock().unwrap() = Some(info.clone());
@@ -43,9 +42,9 @@ fn test_random_ring_deadlock() {
     let mut handles = Vec::with_capacity(n);
 
     for i in 0..n {
-        let first  = locks[i].clone();
+        let first = locks[i].clone();
         let second = locks[(i + 1) % n].clone();
-        let bar    = barrier.clone();
+        let bar = barrier.clone();
 
         handles.push(thread::spawn(move || {
             let mut rng = rand::rng();

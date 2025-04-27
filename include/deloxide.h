@@ -13,6 +13,82 @@ extern "C" {
 #include <stddef.h>
 
 /*
+ * --- High-Level Macros for Easier Tracked Usage ---
+ *
+ * These macros simplify correct usage of Deloxide from C/C++.
+ *
+ * 1. Tracked Threads:
+ *    - Automatically register spawn and exit events for threads.
+ *    - Example usage:
+ *
+ *        void* worker(void* unused) {
+ *            LOCK(mutex);
+ *            // do work
+ *            UNLOCK(mutex);
+ *            return NULL;
+ *        }
+ *
+ *        DEFINE_TRACKED_THREAD(worker)
+ *
+ *        pthread_t t;
+ *        CREATE_TRACKED_THREAD(t, worker);
+ *
+ * 2. Tracked Mutexes:
+ *    - Simplify locking and unlocking tracked mutexes.
+ *    - Always uses correct thread ID internally.
+ *    - Example:
+ *
+ *        LOCK(mutex);
+ *        ... critical section ...
+ *        UNLOCK(mutex);
+ */
+
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* Macro to define a tracked thread function */
+#define DEFINE_TRACKED_THREAD(fn_name) \
+    void* fn_name##_tracked(void* arg) { \
+        unsigned long parent_tid = (uintptr_t)arg; \
+        unsigned long tid = deloxide_get_thread_id(); \
+        deloxide_register_thread_spawn(tid, parent_tid); \
+        extern void* fn_name(void*); /* forward declare user function */ \
+        void* real_arg = (void*)(uintptr_t)parent_tid; /* unwrap real argument */ \
+        void* ret = fn_name(real_arg); \
+        deloxide_register_thread_exit(tid); \
+        return ret; \
+    }
+
+/* Macro to create a tracked thread */
+#define CREATE_TRACKED_THREAD(thread_var, original_fn, real_arg) do { \
+    pthread_create(&(thread_var), NULL, original_fn##_tracked, (void*)(uintptr_t)(real_arg)); \
+} while(0)
+
+
+/* Macro to lock a tracked mutex with automatic thread ID */
+#define LOCK(mutex_ptr) do { \
+    if (deloxide_lock((mutex_ptr)) != 0) { \
+        fprintf(stderr, "Failed to lock mutex\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/* Macro to unlock a tracked mutex with automatic thread ID */
+#define UNLOCK(mutex_ptr) do { \
+    if (deloxide_unlock((mutex_ptr)) != 0) { \
+        fprintf(stderr, "Failed to unlock mutex\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+
+/*
+ * --- Core Deloxide FFI API ---
+ */
+
+/*
  * @brief Initialize the deadlock detector.
  *
  * @param log_path Path to the log file as a null-terminated UTF-8 string,
@@ -93,25 +169,23 @@ void deloxide_destroy_mutex(void* mutex);
 /*
  * @brief Lock a tracked mutex.
  *
- * @param mutex     Pointer to a mutex created with deloxide_create_mutex.
- * @param thread_id Thread ID obtained from deloxide_get_thread_id().
+ * @param mutex Pointer to a mutex created with deloxide_create_mutex.
  *
  * @return  0 on success
  *         -1 if mutex is NULL
  *         -2 if lock acquisition failed
  */
-int deloxide_lock(void* mutex, unsigned long thread_id);
+int deloxide_lock(void* mutex);
 
 /*
  * @brief Unlock a tracked mutex.
  *
- * @param mutex     Pointer to a mutex created with deloxide_create_mutex.
- * @param thread_id Thread ID obtained from deloxide_get_thread_id().
+ * @param mutex Pointer to a mutex created with deloxide_create_mutex.
  *
  * @return  0 on success
  *         -1 if mutex is NULL
  */
-int deloxide_unlock(void* mutex, unsigned long thread_id);
+int deloxide_unlock(void* mutex);
 
 /*
  * @brief Register a thread spawn with the deadlock detector.

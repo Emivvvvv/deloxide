@@ -13,7 +13,7 @@ readme = "README.md"
 
 [lib]
 name = "deloxide"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [[bin]]
 name = "deloxide"

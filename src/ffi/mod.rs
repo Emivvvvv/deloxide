@@ -1,13 +1,20 @@
 use crate::core::logger;
+use crate::core::tracked_mutex::TrackedGuard;
 use crate::core::utils::get_current_thread_id;
 use crate::core::{
-    ThreadId, TrackedMutex, init_detector, on_lock_acquired, on_lock_attempt, on_lock_create,
-    on_lock_release, on_thread_exit, on_thread_spawn,
+    ThreadId, TrackedMutex, init_detector, on_lock_create, on_thread_exit, on_thread_spawn,
 };
 use serde_json;
+use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+// We’ll keep each Rust guard alive here until the C code calls unlock.
+thread_local! {
+    // Each thread can hold exactly one guard at a time.
+    static FFI_GUARD: RefCell<Option<TrackedGuard<'static, ()>>> = const {RefCell::new(None)};
+}
 
 // Globals to track initialization state
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -190,7 +197,6 @@ pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
 ///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
-/// * `thread_id` - ID of the thread attempting to acquire the lock, typically from `deloxide_get_thread_id()`.
 ///
 /// # Returns
 /// * `0` on successful lock acquisition
@@ -199,10 +205,9 @@ pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
 ///
 /// # Safety
 /// - The caller must pass a valid pointer to a `TrackedMutex<()>`.
-/// - The caller must ensure `thread_id` matches the thread that is calling (so the deadlock detector data remains consistent).
 /// - The lock is re-entrant in the sense of C code, but you must not call `deloxide_lock` twice on the same mutex from the same thread without calling `deloxide_unlock`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void, thread_id: c_ulong) -> c_int {
+pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
     if mutex.is_null() {
         return -1;
     }
@@ -210,14 +215,18 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void, thread_id: c_ulong) -
     unsafe {
         let mutex_ref = &*(mutex as *const TrackedMutex<()>);
 
-        on_lock_attempt(thread_id as ThreadId, mutex_ref.id());
-
         match mutex_ref.lock() {
-            Ok(_) => {
-                on_lock_acquired(thread_id as ThreadId, mutex_ref.id());
-                0 // Success
+            Ok(guard) => {
+                // Transmute the guard’s lifetime so we can store it in thread-local storage
+                let static_guard =
+                    std::mem::transmute::<TrackedGuard<'_, ()>, TrackedGuard<'static, ()>>(guard);
+
+                // Keep it alive until unlock
+                FFI_GUARD.with(|slot| *slot.borrow_mut() = Some(static_guard));
+
+                0
             }
-            Err(_) => -2, // Failed to acquire lock (poisoned)
+            Err(_) => -2,
         }
     }
 }
@@ -226,27 +235,24 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void, thread_id: c_ulong) -
 ///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
-/// * `thread_id` - ID of the thread releasing the lock, typically from `deloxide_get_thread_id()`.
 ///
 /// # Returns
 /// * `0` on success
 /// * `-1` if the mutex pointer is NULL
 ///
 /// # Safety
-/// - The caller must ensure that the mutex is currently locked by the same thread (`thread_id`).
 /// - The pointer must be valid (i.e., a previously created `TrackedMutex<()>`).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void, thread_id: c_ulong) -> c_int {
+pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
     if mutex.is_null() {
         return -1;
     }
 
-    unsafe {
-        let mutex_ref = &*(mutex as *const TrackedMutex<()>);
-        on_lock_release(thread_id as ThreadId, mutex_ref.id());
-    }
-
-    0 // Success
+    // Drop the guard we stashed above; this actually unlocks the Mutex
+    FFI_GUARD.with(|slot| {
+        let _ = slot.borrow_mut().take();
+    });
+    0
 }
 
 /// Register a thread spawn with the global detector.
