@@ -346,6 +346,8 @@ See examples in /tests or /c_tests
  *     `----'
  *
  * "THE COFFEEWARE LICENSE" (Revision 1, Deloxide Edition):
+ * (Inspired by the original Beerware License by Poul-Henning Kamp)
+ *
  * Emirhan Tala and Ulaş Can Demirbağ wrote this file. As long as you retain
  * this notice, you can do whatever you want with this stuff — run it, fork it,
  * deploy it, tattoo it, or summon it in a thread ritual. We don't care.
