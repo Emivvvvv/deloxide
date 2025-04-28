@@ -723,21 +723,71 @@ function processEncodedLog(encodedStr) {
  */
 function processNewFormatLogs(logText) {
   try {
-    // Parse the JSON data
     let jsonData;
     
     // Check if the input is already a parsed object or a string that needs parsing
     if (typeof logText === 'string') {
-      jsonData = JSON.parse(logText);
+      // Handle the line-by-line JSON format
+      if (logText.trim().startsWith("{") && logText.includes('{"event":')) {
+        // Split by newlines and parse each line as a separate JSON object
+        const lines = logText.trim().split('\n');
+        const events = [];
+        const graphState = [];
+        
+        // Process each line as a separate JSON object
+        for (const line of lines) {
+          if (!line.trim()) continue; // Skip empty lines
+          
+          try {
+            const lineData = JSON.parse(line.trim());
+            if (lineData.event) {
+              const { thread_id, lock_id, event, timestamp, parent_id } = lineData.event;
+              
+              // Convert event to event code
+              let eventCode;
+              switch (event) {
+                case 'Attempt': eventCode = 0; break;
+                case 'Acquired': eventCode = 1; break;
+                case 'Released': eventCode = 2; break;
+                case 'Spawn': eventCode = 3; break;
+                case 'Exit': eventCode = 4; break;
+                default: eventCode = -1; // Unknown event
+              }
+              
+              // Create event in the expected format [thread_id, lock_id, event_code, timestamp, parent_id]
+              const formattedEvent = [
+                thread_id, 
+                lock_id, 
+                eventCode, 
+                timestamp,
+                parent_id || 0
+              ];
+              
+              events.push(formattedEvent);
+              
+              // Also store the graph state if available
+              if (lineData.graph) {
+                graphState.push(lineData.graph);
+              }
+            }
+          } catch (lineError) {
+            console.error("Error parsing JSON line:", lineError, line);
+            // Continue with next line instead of failing completely
+          }
+        }
+        
+        // Create the data structure expected by the rest of the code
+        jsonData = { events, graphs: graphState };
+      } else {
+        // Try to parse as a single JSON object
+        jsonData = JSON.parse(logText);
+      }
     } else {
       jsonData = logText;
     }
     
-    // Extract events and graphs from the JSON data
-    const { events, graphs } = jsonData;
-    
     // Process raw logs in the format [thread_id, lock_id, event_code, timestamp, parent_id]
-    const rawLogs = events.map(event => event);
+    const rawLogs = Array.isArray(jsonData.events) ? jsonData.events : [];
 
     // Get all unique thread IDs and lock IDs from the events
     const allThreads = new Set();

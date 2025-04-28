@@ -256,59 +256,12 @@ const initUploadFeature = () => {
 
         // Check if this is the new format (one JSON object per line)
         if (content.trim().startsWith("{") && content.includes('{"event":')) {
-          // Process the new format logs
-          scenario = processNewFormatLogs(content)
+          try {
+            // Process the new format logs - one JSON per line
+            scenario = processNewFormatLogs(content)
 
-          // Store the original content for sharing
-          scenario.rawContent = content
-
-          // Process the transformed data
-          uploadModal.style.display = "none"
-          resetVisualization()
-          currentScenario = scenario
-          logData = scenario.logs
-          graphStateData = scenario.graph_state
-
-          // Show loading state
-          document.getElementById("loading").style.display = "block"
-          document.getElementById("loading").innerHTML =
-            '<div class="spinner"></div><p>Loading visualization...</p>'
-
-          // Hide share button for uploads
-          if (shareBtn) {
-            shareBtn.style.display = "none"
-          }
-
-          // Initialize visualization after a brief delay
-          setTimeout(() => {
-            initVisualization()
-
-            // Hide loading message and show visualization elements
-            showVisualizationElements()
-
-            // Initialize timeline
-            initTimeline()
-
-            // Update visualization for the first step
-            updateVisualization()
-
-            // Auto-start removed - user needs to click play manually
-          }, 100)
-        } else {
-          // Parse the uploaded file as standard JSON
-          const jsonData = JSON.parse(content)
-
-          // Check if this is the new format (raw data array)
-          if (
-            Array.isArray(jsonData) &&
-            jsonData.length >= 1 &&
-            Array.isArray(jsonData[0])
-          ) {
-            // This is the new raw format, transform it using the utility function
-            scenario = transformRawObject(jsonData)
-
-            // Store the original raw data for sharing
-            scenario.rawData = jsonData
+            // Store the original content for sharing
+            scenario.rawContent = content
 
             // Process the transformed data
             uploadModal.style.display = "none"
@@ -342,33 +295,46 @@ const initUploadFeature = () => {
 
               // Auto-start removed - user needs to click play manually
             }, 100)
-          } else {
-            // Check if it's a standard format
-            if (validateDeadlockLog(jsonData)) {
-              // Process the scenario data (old format)
+          } catch (lineFormatError) {
+            console.error("Error processing line-by-line JSON:", lineFormatError)
+            alert("Error processing log file: " + lineFormatError.message)
+          }
+        } else {
+          // Handle standard JSON formats
+          try {
+            // Parse the uploaded file as standard JSON
+            const jsonData = JSON.parse(content)
+
+            // Check if this is the new format (raw data array)
+            if (
+              Array.isArray(jsonData) &&
+              jsonData.length >= 1 &&
+              Array.isArray(jsonData[0])
+            ) {
+              // This is the new raw format, transform it using the utility function
+              scenario = transformRawObject(jsonData)
+
+              // Store the original raw data for sharing
+              scenario.rawData = jsonData
+
+              // Process the transformed data
               uploadModal.style.display = "none"
               resetVisualization()
-              currentScenario = jsonData
-              logData = jsonData.logs
-              graphStateData = jsonData.graph_state
+              currentScenario = scenario
+              logData = scenario.logs
+              graphStateData = scenario.graph_state
 
-              // Update scenario information
-              updateScenarioInfo(jsonData)
-
-              // Initialize visualization
-              currentStep = 1
-
-              // Show loading state while we initialize
+              // Show loading state
               document.getElementById("loading").style.display = "block"
               document.getElementById("loading").innerHTML =
                 '<div class="spinner"></div><p>Loading visualization...</p>'
 
-              // Show share button since we have data loaded
+              // Hide share button for uploads
               if (shareBtn) {
-                shareBtn.style.display = "flex"
+                shareBtn.style.display = "none"
               }
 
-              // Initialize after a brief delay to allow the UI to update
+              // Initialize visualization after a brief delay
               setTimeout(() => {
                 initVisualization()
 
@@ -384,10 +350,55 @@ const initUploadFeature = () => {
                 // Auto-start removed - user needs to click play manually
               }, 100)
             } else {
-              alert(
-                "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
-              )
+              // Check if it's a standard format
+              if (validateDeadlockLog(jsonData)) {
+                // Process the scenario data (old format)
+                uploadModal.style.display = "none"
+                resetVisualization()
+                currentScenario = jsonData
+                logData = jsonData.logs
+                graphStateData = jsonData.graph_state
+
+                // Update scenario information
+                updateScenarioInfo(jsonData)
+
+                // Initialize visualization
+                currentStep = 1
+
+                // Show loading state while we initialize
+                document.getElementById("loading").style.display = "block"
+                document.getElementById("loading").innerHTML =
+                  '<div class="spinner"></div><p>Loading visualization...</p>'
+
+                // Show share button since we have data loaded
+                if (shareBtn) {
+                  shareBtn.style.display = "flex"
+                }
+
+                // Initialize after a brief delay to allow the UI to update
+                setTimeout(() => {
+                  initVisualization()
+
+                  // Hide loading message and show visualization elements
+                  showVisualizationElements()
+
+                  // Initialize timeline
+                  initTimeline()
+
+                  // Update visualization for the first step
+                  updateVisualization()
+
+                  // Auto-start removed - user needs to click play manually
+                }, 100)
+              } else {
+                alert(
+                  "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
+                )
+              }
             }
+          } catch (jsonError) {
+            console.error("Error parsing JSON:", jsonError)
+            alert("Error loading file: " + jsonError.message)
           }
         }
       } catch (error) {
@@ -520,7 +531,35 @@ function openShareModal() {
       // We have the original raw text content available
       console.log("Using raw line-by-line format for sharing")
 
-      // Compress the raw text content
+      // Line-by-line JSON may need special handling
+      const isLineByLine = 
+        typeof currentScenario.rawContent === 'string' && 
+        currentScenario.rawContent.trim().startsWith("{") && 
+        currentScenario.rawContent.includes('{"event":');
+        
+      if (isLineByLine) {
+        // Direct line-by-line format - URL encode it for sharing
+        const encodedContent = encodeURIComponent(currentScenario.rawContent);
+        console.log("Line-by-line JSON format encoded, size:", encodedContent.length);
+        
+        // Generate URL with format parameter to indicate line-by-line
+        const currentUrl = window.location.href.split("?")[0];
+        const shareUrl = `${currentUrl}?format=line-by-line&logs=${encodedContent}&step=${currentStep}`;
+        
+        // Set the input value - if it's too long, warn the user
+        if (shareUrl.length > 8000) {
+          console.warn("Warning: Generated URL is very long and may not work in all browsers");
+          alert("Warning: The generated URL is very long and may not work in all browsers. Consider using a file upload instead.");
+        }
+        
+        shareLinkInput.value = shareUrl;
+        
+        // Show the modal
+        showModalWithAnimation(shareModal);
+        return;
+      }
+      
+      // Handle standard JSON compression for non-line-by-line format
       const compressedData = LZString.compressToEncodedURIComponent(
         currentScenario.rawContent
       )
@@ -629,27 +668,35 @@ function checkForSharedScenario() {
       console.log("Decoding logs from URL parameter...")
       let decodedData;
       
-      try {
-        // Try to parse as JSON first
-        decodedData = JSON.parse(encodedLogs);
-        console.log("Successfully parsed logs as JSON");
-      } catch (e) {
-        // If not valid JSON, try to decode from Base64
+      // Check if it's the line-by-line JSON format
+      if (encodedLogs.trim().startsWith("{") && encodedLogs.includes('{"event":')) {
+        console.log("Detected line-by-line JSON format");
+        decodedData = encodedLogs;
+      } else {
         try {
-          console.log("Not a valid JSON, trying to decode from Base64...");
-          decodedData = decodeLogs(encodedLogs);
-          console.log("Successfully decoded logs from Base64");
-        } catch (decodeError) {
-          throw new Error("Failed to decode logs: " + decodeError.message);
+          // Try to parse as JSON first
+          decodedData = JSON.parse(encodedLogs);
+          console.log("Successfully parsed logs as JSON");
+        } catch (e) {
+          // If not valid JSON, try to decode from Base64
+          try {
+            console.log("Not a valid JSON, trying to decode from Base64...");
+            decodedData = decodeLogs(encodedLogs);
+            console.log("Successfully decoded logs from Base64");
+          } catch (decodeError) {
+            throw new Error("Failed to decode logs: " + decodeError.message);
+          }
         }
       }
       
-      // Process the logs using the updated processor
-      const processed = processEncodedLog(decodedData);
+      // Process the logs using the proper processor based on format
+      let processed;
+      if (format === "line-by-line" || (typeof decodedData === 'string' && decodedData.trim().startsWith("{") && decodedData.includes('{"event":'))) {
+        processed = processNewFormatLogs(decodedData);
+      } else {
+        processed = processEncodedLog(decodedData);
+      }
       
-      // Store original content for potential re-sharing
-      processed.rawContent = decodedData;
-
       // Process the transformed data
       resetVisualization();
       currentScenario = processed;
