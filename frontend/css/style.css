@@ -784,6 +784,13 @@ main {
     background-color: var(--success-color);
 }
 
+.legend-line.released {
+    background-color: var(--neutral-color);
+    background-image: linear-gradient(to right, var(--neutral-color) 75%, transparent 25%);
+    background-size: 8px 100%;
+    background-repeat: repeat-x;
+}
+
 .legend-line.spawn {
     background-color: #9b59b6;
 }
@@ -877,6 +884,12 @@ main {
 .link.acquired {
     stroke: var(--success-color);
     stroke-width: 3px; /* Reduced from 4px */
+}
+
+.link.released {
+    stroke: var(--neutral-color);
+    stroke-width: 2.5px;
+    stroke-dasharray: 3 1;
 }
 
 .link.spawn {
