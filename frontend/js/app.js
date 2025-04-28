@@ -256,59 +256,12 @@ const initUploadFeature = () => {
 
         // Check if this is the new format (one JSON object per line)
         if (content.trim().startsWith("{") && content.includes('{"event":')) {
-          // Process the new format logs
-          scenario = processNewFormatLogs(content)
+          try {
+            // Process the new format logs - one JSON per line
+            scenario = processNewFormatLogs(content)
 
-          // Store the original content for sharing
-          scenario.rawContent = content
-
-          // Process the transformed data
-          uploadModal.style.display = "none"
-          resetVisualization()
-          currentScenario = scenario
-          logData = scenario.logs
-          graphStateData = scenario.graph_state
-
-          // Show loading state
-          document.getElementById("loading").style.display = "block"
-          document.getElementById("loading").innerHTML =
-            '<div class="spinner"></div><p>Loading visualization...</p>'
-
-          // Hide share button for uploads
-          if (shareBtn) {
-            shareBtn.style.display = "none"
-          }
-
-          // Initialize visualization after a brief delay
-          setTimeout(() => {
-            initVisualization()
-
-            // Hide loading message and show visualization elements
-            showVisualizationElements()
-
-            // Initialize timeline
-            initTimeline()
-
-            // Update visualization for the first step
-            updateVisualization()
-
-            // Auto-start removed - user needs to click play manually
-          }, 100)
-        } else {
-          // Parse the uploaded file as standard JSON
-          const jsonData = JSON.parse(content)
-
-          // Check if this is the new format (raw data array)
-          if (
-            Array.isArray(jsonData) &&
-            jsonData.length >= 1 &&
-            Array.isArray(jsonData[0])
-          ) {
-            // This is the new raw format, transform it using the utility function
-            scenario = transformRawObject(jsonData)
-
-            // Store the original raw data for sharing
-            scenario.rawData = jsonData
+            // Store the original content for sharing
+            scenario.rawContent = content
 
             // Process the transformed data
             uploadModal.style.display = "none"
@@ -342,33 +295,46 @@ const initUploadFeature = () => {
 
               // Auto-start removed - user needs to click play manually
             }, 100)
-          } else {
-            // Check if it's a standard format
-            if (validateDeadlockLog(jsonData)) {
-              // Process the scenario data (old format)
+          } catch (lineFormatError) {
+            console.error("Error processing line-by-line JSON:", lineFormatError)
+            alert("Error processing log file: " + lineFormatError.message)
+          }
+        } else {
+          // Handle standard JSON formats
+          try {
+            // Parse the uploaded file as standard JSON
+            const jsonData = JSON.parse(content)
+
+            // Check if this is the new format (raw data array)
+            if (
+              Array.isArray(jsonData) &&
+              jsonData.length >= 1 &&
+              Array.isArray(jsonData[0])
+            ) {
+              // This is the new raw format, transform it using the utility function
+              scenario = transformRawObject(jsonData)
+
+              // Store the original raw data for sharing
+              scenario.rawData = jsonData
+
+              // Process the transformed data
               uploadModal.style.display = "none"
               resetVisualization()
-              currentScenario = jsonData
-              logData = jsonData.logs
-              graphStateData = jsonData.graph_state
+              currentScenario = scenario
+              logData = scenario.logs
+              graphStateData = scenario.graph_state
 
-              // Update scenario information
-              updateScenarioInfo(jsonData)
-
-              // Initialize visualization
-              currentStep = 1
-
-              // Show loading state while we initialize
+              // Show loading state
               document.getElementById("loading").style.display = "block"
               document.getElementById("loading").innerHTML =
                 '<div class="spinner"></div><p>Loading visualization...</p>'
 
-              // Show share button since we have data loaded
+              // Hide share button for uploads
               if (shareBtn) {
-                shareBtn.style.display = "flex"
+                shareBtn.style.display = "none"
               }
 
-              // Initialize after a brief delay to allow the UI to update
+              // Initialize visualization after a brief delay
               setTimeout(() => {
                 initVisualization()
 
@@ -384,10 +350,55 @@ const initUploadFeature = () => {
                 // Auto-start removed - user needs to click play manually
               }, 100)
             } else {
-              alert(
-                "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
-              )
+              // Check if it's a standard format
+              if (validateDeadlockLog(jsonData)) {
+                // Process the scenario data (old format)
+                uploadModal.style.display = "none"
+                resetVisualization()
+                currentScenario = jsonData
+                logData = jsonData.logs
+                graphStateData = jsonData.graph_state
+
+                // Update scenario information
+                updateScenarioInfo(jsonData)
+
+                // Initialize visualization
+                currentStep = 1
+
+                // Show loading state while we initialize
+                document.getElementById("loading").style.display = "block"
+                document.getElementById("loading").innerHTML =
+                  '<div class="spinner"></div><p>Loading visualization...</p>'
+
+                // Show share button since we have data loaded
+                if (shareBtn) {
+                  shareBtn.style.display = "flex"
+                }
+
+                // Initialize after a brief delay to allow the UI to update
+                setTimeout(() => {
+                  initVisualization()
+
+                  // Hide loading message and show visualization elements
+                  showVisualizationElements()
+
+                  // Initialize timeline
+                  initTimeline()
+
+                  // Update visualization for the first step
+                  updateVisualization()
+
+                  // Auto-start removed - user needs to click play manually
+                }, 100)
+              } else {
+                alert(
+                  "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
+                )
+              }
             }
+          } catch (jsonError) {
+            console.error("Error parsing JSON:", jsonError)
+            alert("Error loading file: " + jsonError.message)
           }
         }
       } catch (error) {
@@ -520,7 +531,35 @@ function openShareModal() {
       // We have the original raw text content available
       console.log("Using raw line-by-line format for sharing")
 
-      // Compress the raw text content
+      // Line-by-line JSON may need special handling
+      const isLineByLine = 
+        typeof currentScenario.rawContent === 'string' && 
+        currentScenario.rawContent.trim().startsWith("{") && 
+        currentScenario.rawContent.includes('{"event":');
+        
+      if (isLineByLine) {
+        // Direct line-by-line format - URL encode it for sharing
+        const encodedContent = encodeURIComponent(currentScenario.rawContent);
+        console.log("Line-by-line JSON format encoded, size:", encodedContent.length);
+        
+        // Generate URL with format parameter to indicate line-by-line
+        const currentUrl = window.location.href.split("?")[0];
+        const shareUrl = `${currentUrl}?format=line-by-line&logs=${encodedContent}&step=${currentStep}`;
+        
+        // Set the input value - if it's too long, warn the user
+        if (shareUrl.length > 8000) {
+          console.warn("Warning: Generated URL is very long and may not work in all browsers");
+          alert("Warning: The generated URL is very long and may not work in all browsers. Consider using a file upload instead.");
+        }
+        
+        shareLinkInput.value = shareUrl;
+        
+        // Show the modal
+        showModalWithAnimation(shareModal);
+        return;
+      }
+      
+      // Handle standard JSON compression for non-line-by-line format
       const compressedData = LZString.compressToEncodedURIComponent(
         currentScenario.rawContent
       )
@@ -629,27 +668,35 @@ function checkForSharedScenario() {
       console.log("Decoding logs from URL parameter...")
       let decodedData;
       
-      try {
-        // Try to parse as JSON first
-        decodedData = JSON.parse(encodedLogs);
-        console.log("Successfully parsed logs as JSON");
-      } catch (e) {
-        // If not valid JSON, try to decode from Base64
+      // Check if it's the line-by-line JSON format
+      if (encodedLogs.trim().startsWith("{") && encodedLogs.includes('{"event":')) {
+        console.log("Detected line-by-line JSON format");
+        decodedData = encodedLogs;
+      } else {
         try {
-          console.log("Not a valid JSON, trying to decode from Base64...");
-          decodedData = decodeLogs(encodedLogs);
-          console.log("Successfully decoded logs from Base64");
-        } catch (decodeError) {
-          throw new Error("Failed to decode logs: " + decodeError.message);
+          // Try to parse as JSON first
+          decodedData = JSON.parse(encodedLogs);
+          console.log("Successfully parsed logs as JSON");
+        } catch (e) {
+          // If not valid JSON, try to decode from Base64
+          try {
+            console.log("Not a valid JSON, trying to decode from Base64...");
+            decodedData = decodeLogs(encodedLogs);
+            console.log("Successfully decoded logs from Base64");
+          } catch (decodeError) {
+            throw new Error("Failed to decode logs: " + decodeError.message);
+          }
         }
       }
       
-      // Process the logs using the updated processor
-      const processed = processEncodedLog(decodedData);
+      // Process the logs using the proper processor based on format
+      let processed;
+      if (format === "line-by-line" || (typeof decodedData === 'string' && decodedData.trim().startsWith("{") && decodedData.includes('{"event":'))) {
+        processed = processNewFormatLogs(decodedData);
+      } else {
+        processed = processEncodedLog(decodedData);
+      }
       
-      // Store original content for potential re-sharing
-      processed.rawContent = decodedData;
-
       // Process the transformed data
       resetVisualization();
       currentScenario = processed;
@@ -1148,40 +1195,6 @@ function updateVisualization() {
     }
   }
 
-  // Find main thread ID once - using a more direct approach
-  let mainThreadId = null;
-  
-  // Step 1: Find any thread explicitly marked as main
-  for (const log of logData) {
-    if (log.is_main_thread) {
-      mainThreadId = log.thread_id;
-      console.log("Found explicitly marked main thread:", mainThreadId);
-      break;
-    }
-  }
-  
-  // Step 2: If not found, check for the first spawn event's parent
-  if (mainThreadId === null) {
-    const firstSpawnLog = logData.find(log => log.type === "spawn");
-    if (firstSpawnLog && firstSpawnLog.parent_id) {
-      mainThreadId = firstSpawnLog.parent_id;
-      console.log("Found main thread from first spawn parent:", mainThreadId);
-    }
-  }
-  
-  // Step 3: If still not found, use the first thread in the logs
-  if (mainThreadId === null) {
-    for (const log of logData) {
-      if (log.thread_id && log.thread_id !== 0) {
-        mainThreadId = log.thread_id;
-        console.log("Using first thread as main thread:", mainThreadId);
-        break;
-      }
-    }
-  }
-  
-  console.log("Final determined main thread ID:", mainThreadId);
-  
   // Update nodes with deep clones to avoid reference issues
   nodes = JSON.parse(JSON.stringify(currentState.nodes));
   
@@ -1198,12 +1211,21 @@ function updateVisualization() {
         }
       }
       
-      // Check if this thread is the main thread
-      if (mainThreadId !== null && threadId === mainThreadId) {
+      // Identify main thread
+      let mainThreadId = null;
+      // Find the first thread with parent_id that's not 0 (the main thread)
+      for (let i = 0; i < logData.length; i++) {
+        const log = logData[i];
+        if (log.type === "spawn" && log.parent_id !== 0 && !mainThreadId) {
+          mainThreadId = log.parent_id;
+          break;
+        }
+      }
+      
+      // Mark this node as main thread if it matches
+      if (threadId === mainThreadId) {
         node.is_main_thread = true;
-        // Change the node name to indicate it's the main thread
         node.name = "Main Thread";
-        console.log(`Marked node ${node.id} as main thread`);
       }
       
       // Add parent_id information from log data if available
@@ -1215,14 +1237,23 @@ function updateVisualization() {
         node.parent_id = threadLogEntry.parent_id;
         
         // Check if the parent is the main thread
-        if (mainThreadId !== null && node.parent_id === mainThreadId) {
+        if (threadLogEntry.parent_id === mainThreadId) {
           node.parent_id_is_main = true;
-          console.log(`Marked node ${node.id}'s parent as main thread`);
         }
       }
     } 
     else if (node.type === "resource") {
       const resourceId = node.id.substring(1); // Remove the 'R' prefix
+      
+      // Find main thread ID
+      let mainThreadId = null;
+      for (let i = 0; i < logData.length; i++) {
+        const log = logData[i];
+        if (log.type === "spawn" && log.parent_id !== 0 && !mainThreadId) {
+          mainThreadId = log.parent_id;
+          break;
+        }
+      }
       
       // Add parent_id for resources if available
       const resourceLogEntry = logData.find(entry => 
@@ -1233,9 +1264,8 @@ function updateVisualization() {
         node.parent_id = resourceLogEntry.parent_id;
         
         // Check if the parent is the main thread
-        if (mainThreadId !== null && node.parent_id === mainThreadId) {
+        if (resourceLogEntry.parent_id === mainThreadId) {
           node.parent_id_is_main = true;
-          console.log(`Marked resource ${node.id}'s parent as main thread`);
         }
       }
     }
@@ -1341,10 +1371,7 @@ function updateNodeElements() {
     .attr("r", 0) // Start with radius 0
     .attr("fill", d => {
       if (d.type === "thread") {
-        if (d.is_main_thread) {
-          return "#9b59b6"; // Purple for main thread
-        }
-        return "var(--danger-color)"; // Default color for normal threads
+        return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
       }
       return "var(--primary-color)"; // Default color for resources
     })
@@ -1353,19 +1380,11 @@ function updateNodeElements() {
         if (d.isInCycle) {
           return "#f44336"; // Modern red for deadlock threads
         }
-        if (d.is_main_thread) {
-          return "#8e44ad"; // Darker purple for main thread
-        }
-        return "var(--danger-dark)"; // Default for normal threads
+        return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
       }
-      return "var(--primary-dark)"; // Default for resources
+      return "var(--primary-dark)";
     })
-    .attr("stroke-width", d => {
-      if (d.is_main_thread) {
-        return "3px"; // Thicker border for main thread
-      }
-      return d.isInCycle ? "2px" : "2px";
-    })
+    .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
     .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none")
     .each(function(d) {
       if (d.isInCycle) {
@@ -1408,7 +1427,7 @@ function updateNodeElements() {
       
       // If this is the main thread, display it as such
       if (d.is_main_thread) {
-        tooltipContent = '<span style="color:#9b59b6; font-weight:bold;">Main Thread</span>';
+        tooltipContent = 'Main Thread';
       } else {
         tooltipContent = d.name;
       }
@@ -1417,9 +1436,9 @@ function updateNodeElements() {
       if (d.parent_id) {
         // Check if the parent is the main thread
         if (d.parent_id_is_main) {
-          tooltipContent += `<br><strong>Parent:</strong> <span style="color:#9b59b6; font-weight:bold;">Main Thread</span>`;
+          tooltipContent += `<br>Parent: Main Thread`;
         } else {
-          tooltipContent += `<br><strong>Parent:</strong> Thread ${d.parent_id}`;
+          tooltipContent += `<br>Parent: Thread ${d.parent_id}`;
         }
       }
       
@@ -1602,32 +1621,15 @@ function updateStepInfo() {
         // Create a nicer cycle visualization
         waitGraphContent += `<div class="cycle-visualization animate__animated animate__pulse">`
         cycle.forEach((threadId, index) => {
-          // Check if this thread is the main thread
-          const isMainThread = threadId === mainThreadId;
-          
-          if (isMainThread) {
-            waitGraphContent += `<span class="main-thread">Main Thread</span>`;
-          } else {
-            waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`;
-          }
-          
+          waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
           if (index < cycle.length - 1) {
-            waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `;
+            waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `
           }
         })
 
         // Add arrow back to first thread to show the cycle clearly
         if (cycle.length > 1) {
-          // Check if the first thread is the main thread
-          const isFirstThreadMain = cycle[0] === mainThreadId;
-          
-          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `;
-          
-          if (isFirstThreadMain) {
-            waitGraphContent += `<span class="main-thread">Main Thread</span>`;
-          } else {
-            waitGraphContent += `<span class="thread-id">Thread ${cycle[0]}</span>`;
-          }
+          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
         }
 
         // Add non-breaking spaces for visible spacing at the end (using &nbsp;)

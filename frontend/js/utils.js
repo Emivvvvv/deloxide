@@ -38,17 +38,6 @@ function transformLogs(rawLogs, resourceMapping) {
     }
   }
   
-  // If no non-zero parent ID was found, use the first thread ID that appears
-  if (mainThreadId === null) {
-    for (const log of rawLogs) {
-      const [rawThread, lockNum, eventCode, timestamp, parentId] = log;
-      if (rawThread !== 0 && mainThreadId === null) {
-        mainThreadId = rawThread;
-        break;
-      }
-    }
-  }
-  
   console.log("Identified main thread ID:", mainThreadId);
     
   // Normal logs: Each thread_id is kept as the original raw value
@@ -135,8 +124,8 @@ function transformLogs(rawLogs, resourceMapping) {
       }
       
       logs.push({
-        step: idx + 2, // init step is 1, so we start from 2
-        timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
+      step: idx + 2, // init step is 1, so we start from 2
+      timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
         thread_id: rawThread,
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
@@ -234,29 +223,29 @@ function transformLogs(rawLogs, resourceMapping) {
     let deadlockDescription = `<strong>DEADLOCK DETECTED:</strong><br>`;
     deadlockDescription += deadlockDescriptions.join('<br>');
 
-    // Last log timestamp: 100 ms after the last event (in milliseconds)
-    const lastTimestamp = rawLogs.length
-      ? rawLogs[rawLogs.length - 1][3]
+  // Last log timestamp: 100 ms after the last event (in milliseconds)
+  const lastTimestamp = rawLogs.length
+    ? rawLogs[rawLogs.length - 1][3]
         : Date.now() / 1000;
       const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000);
       
-    const deadlockLog = {
+  const deadlockLog = {
         step: logs.length + 1,
-      timestamp: deadlockTimestamp,
-      type: "deadlock",
-      cycle: deadlockCycle,
-      description: deadlockDescription,
-      deadlock_details: {
-        thread_cycle: deadlockCycle,
+    timestamp: deadlockTimestamp,
+    type: "deadlock",
+    cycle: deadlockCycle,
+    description: deadlockDescription,
+    deadlock_details: {
+      thread_cycle: deadlockCycle,
           thread_waiting_for_locks: Object.entries(threadWaiting)
             .filter(([threadId]) => deadlockCycle.includes(parseInt(threadId)) || deadlockCycle.includes(threadId))
             .map(([threadId, resourceId]) => ({
               thread_id: parseInt(threadId),
               lock_id: resourceMapping[resourceId],
               resource_id: resourceId
-    })),
-        timestamp: deadlockTimestamp,
-      },
+      })),
+      timestamp: deadlockTimestamp,
+    },
       };
       
       logs.push(deadlockLog);
@@ -734,21 +723,71 @@ function processEncodedLog(encodedStr) {
  */
 function processNewFormatLogs(logText) {
   try {
-    // Parse the JSON data
     let jsonData;
     
     // Check if the input is already a parsed object or a string that needs parsing
     if (typeof logText === 'string') {
-      jsonData = JSON.parse(logText);
+      // Handle the line-by-line JSON format
+      if (logText.trim().startsWith("{") && logText.includes('{"event":')) {
+        // Split by newlines and parse each line as a separate JSON object
+        const lines = logText.trim().split('\n');
+        const events = [];
+        const graphState = [];
+        
+        // Process each line as a separate JSON object
+        for (const line of lines) {
+          if (!line.trim()) continue; // Skip empty lines
+          
+          try {
+            const lineData = JSON.parse(line.trim());
+            if (lineData.event) {
+              const { thread_id, lock_id, event, timestamp, parent_id } = lineData.event;
+              
+              // Convert event to event code
+              let eventCode;
+              switch (event) {
+                case 'Attempt': eventCode = 0; break;
+                case 'Acquired': eventCode = 1; break;
+                case 'Released': eventCode = 2; break;
+                case 'Spawn': eventCode = 3; break;
+                case 'Exit': eventCode = 4; break;
+                default: eventCode = -1; // Unknown event
+              }
+              
+              // Create event in the expected format [thread_id, lock_id, event_code, timestamp, parent_id]
+              const formattedEvent = [
+                thread_id, 
+                lock_id, 
+                eventCode, 
+                timestamp,
+                parent_id || 0
+              ];
+              
+              events.push(formattedEvent);
+              
+              // Also store the graph state if available
+              if (lineData.graph) {
+                graphState.push(lineData.graph);
+              }
+            }
+          } catch (lineError) {
+            console.error("Error parsing JSON line:", lineError, line);
+            // Continue with next line instead of failing completely
+          }
+        }
+        
+        // Create the data structure expected by the rest of the code
+        jsonData = { events, graphs: graphState };
+      } else {
+        // Try to parse as a single JSON object
+        jsonData = JSON.parse(logText);
+      }
     } else {
       jsonData = logText;
     }
     
-    // Extract events and graphs from the JSON data
-    const { events, graphs } = jsonData;
-    
     // Process raw logs in the format [thread_id, lock_id, event_code, timestamp, parent_id]
-    const rawLogs = events.map(event => event);
+    const rawLogs = Array.isArray(jsonData.events) ? jsonData.events : [];
 
     // Get all unique thread IDs and lock IDs from the events
     const allThreads = new Set();
