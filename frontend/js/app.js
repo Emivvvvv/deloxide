@@ -1001,67 +1001,72 @@ function resetVisualization() {
 function initVisualization() {
   // Disable the previous button initially
   document.getElementById("prev-btn").disabled = true
-  document.getElementById("next-btn").disabled = false
 
-  // Get the container dimensions
-  const graphElement = document.getElementById("graph")
-  const width = graphElement.clientWidth
-  const height = graphElement.clientHeight
+  // Get the graph container
+  const graphContainer = document.getElementById("graph")
 
-  // Center coordinates
+  // Clear any previous SVG
+  graphContainer.innerHTML = ""
+
+  // Get dimensions of the graph container
+  const width = graphContainer.clientWidth
+  const height = graphContainer.clientHeight
   const centerX = width / 2
   const centerY = height / 2
 
-  // Remove any existing SVG content
-  d3.select("#graph svg").remove()
-
-  // Create new SVG element
+  // Create svg element to hold the visualization
   svg = d3
     .select("#graph")
     .append("svg")
-    .attr("viewBox", [0, 0, width, height])
-    .attr("width", width)
-    .attr("height", height)
+    .attr("width", "100%")
+    .attr("height", "100%")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
 
-  // Create defs section for markers
-  const defs = svg.append("defs");
-  
-  // Add arrow markers for normal links
-  defs.append("marker")
+  // Add arrow markers for link directionality
+  svg
+    .append("defs")
+    .append("marker")
     .attr("id", "arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 25) // Position relative to the node
+    .attr("refX", 26) // Push the arrowhead back to be behind the node circle
     .attr("refY", 0)
+    .attr("orient", "auto")
     .attr("markerWidth", 6)
     .attr("markerHeight", 6)
-    .attr("orient", "auto")
+    .attr("xoverflow", "visible")
     .append("path")
-    .attr("d", "M0,-5L10,0L0,5")
-    .attr("fill", "var(--neutral-color)");
+    .attr("d", "M 0,-5 L 10,0 L 0,5")
+    .attr("fill", "var(--primary-color)")
+    .style("stroke", "none")
 
-  // Add larger, more visible deadlock arrow marker
-  defs.append("marker")
+  // Add special marker for deadlock arrows
+  svg
+    .append("defs")
+    .append("marker")
     .attr("id", "deadlock-arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 20) // Position closer to the end of the line for thicker links
+    .attr("refX", 26) // Push the arrowhead back to be behind the node circle
     .attr("refY", 0)
-    .attr("markerWidth", 4) // Smaller size for more modern look
-    .attr("markerHeight", 4) // Smaller size for more modern look
     .attr("orient", "auto")
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("xoverflow", "visible")
     .append("path")
-    .attr("d", "M0,-5L10,0L0,5")
-    .attr("fill", "#f44336");
+    .attr("d", "M 0,-5 L 10,0 L 0,5")
+    .attr("fill", "#f44336")
+    .style("stroke", "none")
 
-  // Create group elements for the links and nodes
-  linkGroup = svg.append("g").attr("class", "links")
-  nodeGroup = svg.append("g").attr("class", "nodes")
-
-  // Initialize tooltip
+  // Create tooltip
   tooltip = d3
     .select("body")
     .append("div")
     .attr("class", "tooltip")
     .style("opacity", 0)
+
+  // Define groups for links and nodes
+  linkGroup = svg.append("g").attr("class", "links")
+  nodeGroup = svg.append("g").attr("class", "nodes")
 
   // Create the force simulation
   simulation = d3
@@ -1071,11 +1076,13 @@ function initVisualization() {
       d3
         .forceLink()
         .id((d) => d.id)
-        .distance(120)
+        .distance(150) // Increased from 120 for more spacing between nodes
     )
-    .force("charge", d3.forceManyBody().strength(-600))
+    .force("charge", d3.forceManyBody().strength(-800)) // Increased from -600 for stronger repulsion
     .force("center", d3.forceCenter(centerX, centerY))
-    .force("collide", d3.forceCollide().radius(60))
+    .force("collide", d3.forceCollide().radius(80)) // Increased from 60 to avoid overlapping
+    .force("x", d3.forceX(centerX).strength(0.1)) // Add force to pull nodes toward center X
+    .force("y", d3.forceY(centerY).strength(0.1)) // Add force to pull nodes toward center Y
     .on("tick", ticked)
 
   // Fixed initial positions for better visual consistency during reset
@@ -1147,11 +1154,32 @@ function updateVisualization() {
       const hasDeadlockLinks = nextState.links.some(link => link.type === "deadlock");
       if (hasDeadlockLinks) {
         console.log("Found dedicated deadlock state - using it");
-        // Use the next state which should have the deadlock links
-        nodes = JSON.parse(JSON.stringify(nextState.nodes));
-        links = [];
         
-        // Process each link to ensure it has proper references to node objects
+        // Instead of recreating the array and losing reference, update existing nodes
+        // First, create a map of existing nodes by ID for quick lookup
+        const nodeMap = {};
+        nodes.forEach(node => {
+          nodeMap[node.id] = node;
+        });
+        
+        // Update existing nodes with new data, preserving positions
+        const newNodes = JSON.parse(JSON.stringify(nextState.nodes));
+        const updatedNodes = newNodes.map(newNode => {
+          const existingNode = nodeMap[newNode.id];
+          if (existingNode) {
+            // Keep the existing position to avoid jumping
+            newNode.x = existingNode.x;
+            newNode.y = existingNode.y;
+            return {...existingNode, ...newNode};
+          }
+          return newNode;
+        });
+        
+        // Update nodes reference with the updated data
+        nodes = updatedNodes;
+        
+        // Handle links - create a new array but with proper node references
+        links = [];
         JSON.parse(JSON.stringify(nextState.links)).forEach(link => {
           const sourceNode = typeof link.source === 'object' ? 
             nodes.find(n => n.id === link.source.id) : 
@@ -1195,11 +1223,17 @@ function updateVisualization() {
     }
   }
 
-  // Update nodes with deep clones to avoid reference issues
-  nodes = JSON.parse(JSON.stringify(currentState.nodes));
+  // Create a map of existing nodes by ID for quick lookup
+  const nodeMap = {};
+  nodes.forEach(node => {
+    nodeMap[node.id] = node;
+  });
+  
+  // Create a new array of nodes with transition-friendly updates
+  const newNodes = JSON.parse(JSON.stringify(currentState.nodes));
   
   // Add parent_id information for all nodes from log data
-  nodes.forEach(node => {
+  newNodes.forEach(node => {
     if (node.type === "thread") {
       const threadId = parseInt(node.id.substring(1)); // Remove the 'T' prefix and convert to number
       
@@ -1241,7 +1275,7 @@ function updateVisualization() {
           node.parent_id_is_main = true;
         }
       }
-    } 
+    }
     else if (node.type === "resource") {
       const resourceId = node.id.substring(1); // Remove the 'R' prefix
       
@@ -1269,7 +1303,17 @@ function updateVisualization() {
         }
       }
     }
+    
+    // Preserve position for smooth transition if the node already exists
+    const existingNode = nodeMap[node.id];
+    if (existingNode) {
+      node.x = existingNode.x;
+      node.y = existingNode.y;
+    }
   });
+
+  // Update the nodes array
+  nodes = newNodes;
 
   // First update simulation with just the nodes
   simulation.nodes(nodes);
@@ -1347,13 +1391,20 @@ function updateVisualization() {
 
 // Helper function to update node elements
 function updateNodeElements() {
-  // Clear existing nodes
-  nodeGroup.selectAll("*").remove();
-  
-  // Create all nodes from scratch
-  const nodeElements = nodeGroup
+  // Instead of removing all nodes, we'll use D3's enter/update/exit pattern
+  const nodeSelection = nodeGroup
     .selectAll(".node")
-    .data(nodes)
+    .data(nodes, d => d.id); // Key function to maintain identity
+  
+  // Exit - remove nodes that no longer exist with animation
+  nodeSelection.exit()
+    .transition()
+    .duration(300)
+    .style("opacity", 0)
+    .remove();
+  
+  // Enter - add new nodes
+  const nodeEnter = nodeSelection
     .enter()
     .append("g")
     .attr("class", d => `node ${d.type}`)
@@ -1365,8 +1416,8 @@ function updateNodeElements() {
       .on("drag", dragged)
       .on("end", dragended));
   
-  // Add circles to nodes with scale animation
-  nodeElements
+  // Add circles to new nodes
+  nodeEnter
     .append("circle")
     .attr("r", 0) // Start with radius 0
     .attr("fill", d => {
@@ -1385,43 +1436,72 @@ function updateNodeElements() {
       return "var(--primary-dark)";
     })
     .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
-    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none")
-    .each(function(d) {
-      if (d.isInCycle) {
-        // Add a subtle glow effect for threads in deadlock
-        d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
-      } else if (d.is_main_thread) {
-        // Add a subtle glow effect for main thread
-        d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
-      }
-    });
+    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none");
   
-  // Add text labels
-  nodeElements
+  // Add text labels to new nodes
+  nodeEnter
     .append("text")
     .attr("dy", 5)
     .text(d => d.id)
     .attr("fill", "white")
     .style("opacity", 0); // Start with transparent text
   
-  // Animate nodes appearing
-  nodeElements
+  // Apply special effects for new nodes
+  nodeEnter.selectAll("circle").each(function(d) {
+    if (d.isInCycle) {
+      // Add a subtle glow effect for threads in deadlock
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
+    } else if (d.is_main_thread) {
+      // Add a subtle glow effect for main thread
+      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
+    }
+  });
+  
+  // Animate new nodes appearing
+  nodeEnter
     .transition()
     .duration(400)
     .style("opacity", 1) // Fade in the node
     .select("circle")
     .attr("r", 25); // Grow to full size
     
-  // Animate text appearing
-  nodeElements
+  // Animate text appearing in new nodes
+  nodeEnter
     .select("text")
     .transition()
     .delay(200) // Slight delay after the circle starts growing
     .duration(200)
     .style("opacity", 1);
+    
+  // Update - handle existing nodes
+  const nodeUpdate = nodeSelection
+    .transition()
+    .duration(500)
+    .attr("data-in-cycle", d => d.isInCycle === true ? "true" : "false")
+    .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`);
+    
+  // Update attributes of existing circles
+  nodeUpdate.select("circle")
+    .attr("fill", d => {
+      if (d.type === "thread") {
+        return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
+      }
+      return "var(--primary-color)"; // Default color for resources
+    })
+    .attr("stroke", d => {
+      if (d.type === "thread") {
+        if (d.isInCycle) {
+          return "#f44336"; // Modern red for deadlock threads
+        }
+        return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
+      }
+      return "var(--primary-dark)";
+    })
+    .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
+    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none");
   
-  // Add tooltips
-  nodeElements
+  // Merge enter and update for event handlers
+  nodeSelection.merge(nodeEnter)
     .on("mouseover", function(event, d) {
       let tooltipContent;
       
@@ -1452,24 +1532,35 @@ function updateNodeElements() {
       d3.select(".tooltip")
         .style("opacity", 0);
     });
+    
+  // Update filter effects for existing nodes
+  nodeSelection.select("circle").each(function(d) {
+    if (d.isInCycle) {
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
+    } else if (d.is_main_thread) {
+      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
+    } else {
+      d3.select(this).style("filter", "none");
+    }
+  });
 }
 
 // Helper function to update link elements
 function updateLinkElements() {
-  // Clear existing links first
-  linkGroup.selectAll("*").remove();
-  
-  console.log("Updating links, count:", links.length); // Debug
-  
-  // Create all links from scratch
-  links.forEach(link => {
-    console.log("Link:", link.source.id, "->", link.target.id, "type:", link.type); // Debug
-  });
-  
-  // Add all links as SVG lines
-  const linkElements = linkGroup
+  // Use D3's enter/update/exit pattern for links
+  const linkSelection = linkGroup
     .selectAll(".link")
-    .data(links)
+    .data(links, d => `${d.source.id}-${d.target.id}-${d.type}`); // Key function to maintain identity
+  
+  // Exit - remove links that no longer exist with animation
+  linkSelection.exit()
+    .transition()
+    .duration(300)
+    .style("opacity", 0)
+    .remove();
+  
+  // Enter - add new links
+  const linkEnter = linkSelection
     .enter()
     .append("line")
     .attr("class", d => `link ${d.type}`)
@@ -1480,22 +1571,46 @@ function updateLinkElements() {
     .attr("x2", d => d.target.x || 0)
     .attr("y2", d => d.target.y || 0)
     .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)")
-    .style("opacity", 0) // Start invisible for fade-in
-    .each(function(d) {
-      // Directly apply the SVG filter for deadlock links
-      if (d.type === "deadlock") {
-        d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
-        // Add a subtle dash pattern to make it more modern
-        d3.select(this).style("stroke-dashoffset", "0");
-      }
-    });
-    
-  // Animate links appearing with slight delay after nodes start appearing
-  linkElements
+    .style("opacity", 0); // Start invisible for fade-in
+  
+  // Apply special effects for new links
+  linkEnter.each(function(d) {
+    // Directly apply the SVG filter for deadlock links
+    if (d.type === "deadlock") {
+      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
+      // Add a subtle dash pattern to make it more modern
+      d3.select(this).style("stroke-dashoffset", "0");
+    }
+  });
+  
+  // Animate new links appearing with slight delay
+  linkEnter
     .transition()
     .delay(200)
     .duration(300)
     .style("opacity", 1);
+  
+  // Update - handle existing links
+  linkSelection
+    .transition()
+    .duration(500)
+    .attr("x1", d => d.source.x || 0)
+    .attr("y1", d => d.source.y || 0)
+    .attr("x2", d => d.target.x || 0)
+    .attr("y2", d => d.target.y || 0)
+    .attr("stroke", d => d.type === "deadlock" ? "#f44336" : null)
+    .attr("stroke-width", d => d.type === "deadlock" ? "4" : null)
+    .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)");
+    
+  // Update filter effects for existing links
+  linkSelection.each(function(d) {
+    if (d.type === "deadlock") {
+      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
+      d3.select(this).style("stroke-dashoffset", "0");
+    } else {
+      d3.select(this).style("filter", "none");
+    }
+  });
 }
 
 /**
@@ -1704,7 +1819,7 @@ function ticked() {
   if (!svgElement) return
 
   const svgBounds = svgElement.getBoundingClientRect()
-  const padding = 30 // Padding to keep nodes away from edges
+  const padding = 40 // Increased padding to keep nodes away from edges
 
   // Update node positions while keeping them within bounds
   nodes.forEach((d) => {
@@ -1714,25 +1829,45 @@ function ticked() {
     const minY = padding
     const maxY = svgBounds.height - padding
 
-    // Enforce the bounds gently to avoid jittering
-    if (d.x < minX) d.x = minX
-    if (d.x > maxX) d.x = maxX
-    if (d.y < minY) d.y = minY
-    if (d.y > maxY) d.y = maxY
+    // Apply smoother boundary constraints
+    d.x = Math.max(minX, Math.min(maxX, d.x))
+    d.y = Math.max(minY, Math.min(maxY, d.y))
+    
+    // Apply a gentle push toward the center if nodes are getting too far away
+    const distFromCenter = Math.sqrt(
+      Math.pow(d.x - svgBounds.width/2, 2) + 
+      Math.pow(d.y - svgBounds.height/2, 2)
+    );
+    
+    const maxDist = Math.min(svgBounds.width, svgBounds.height) * 0.4;
+    
+    if (distFromCenter > maxDist) {
+      // Calculate vector from current position to center
+      const cx = svgBounds.width/2;
+      const cy = svgBounds.height/2;
+      const dx = cx - d.x;
+      const dy = cy - d.y;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      
+      // Apply a gentle push toward the center
+      const pushFactor = 0.1;
+      d.x += (dx / len) * pushFactor * (distFromCenter - maxDist);
+      d.y += (dy / len) * pushFactor * (distFromCenter - maxDist);
+    }
   })
 
-  // Update node positions
+  // Update node positions with smooth transitions
   nodeGroup
     .selectAll(".node")
-    .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`)
 
-  // Update link positions
+  // Update link positions with smooth transitions  
   linkGroup
     .selectAll(".link")
     .attr("x1", d => d.source.x)
     .attr("y1", d => d.source.y)
     .attr("x2", d => d.target.x)
-    .attr("y2", d => d.target.y);
+    .attr("y2", d => d.target.y)
 }
 
 /**
@@ -1740,20 +1875,52 @@ function ticked() {
  */
 function dragstarted(event, d) {
   if (!event.active) simulation.alphaTarget(0.3).restart()
+  
+  // Fix the node's position while dragging
   d.fx = d.x
   d.fy = d.y
+  
+  // Increase the node size slightly to give feedback
+  const circle = d3.select(this).select("circle");
+  circle
+    .transition()
+    .duration(100)
+    .attr("r", 30); // Increase from default 25
 }
 
 function dragged(event, d) {
+  // Update the fixed position
   d.fx = event.x
   d.fy = event.y
+  
+  // Apply boundary constraints
+  const svgElement = document.querySelector("#graph svg")
+  if (svgElement) {
+    const svgBounds = svgElement.getBoundingClientRect()
+    const padding = 40
+    
+    // Keep node within bounds
+    d.fx = Math.max(padding, Math.min(svgBounds.width - padding, d.fx));
+    d.fy = Math.max(padding, Math.min(svgBounds.height - padding, d.fy));
+  }
 }
 
 function dragended(event, d) {
   if (!event.active) simulation.alphaTarget(0)
-  // Keep the node fixed where it was dragged
-  // d.fx = null;
-  // d.fy = null;
+  
+  // Keep the node fixed at its final position unless shift key is pressed
+  if (event.sourceEvent.shiftKey) {
+    // Release the node to be affected by forces again
+    d.fx = null;
+    d.fy = null;
+  }
+  
+  // Reset the node size back to normal
+  const circle = d3.select(this).select("circle");
+  circle
+    .transition()
+    .duration(200)
+    .attr("r", 25); // Reset to default size
 }
 
 /**
@@ -1804,6 +1971,9 @@ function initTimeline() {
   }
 }
 
+// Variable to track if animation is in progress
+let isAnimating = false;
+
 /**
  * Toggle play/pause of animation
  */
@@ -1826,20 +1996,56 @@ function togglePlay() {
       currentStep = 1
     }
 
+    isAnimating = true;
+    disableNavigationButtons();
+    
     updateVisualization()
 
-    let step = currentStep + 1
-    animationInterval = setInterval(() => {
-      if (step > logData.length) {
-        stopAnimation();
-        return
-      }
+    // Enable buttons after animation completes
+    setTimeout(() => {
+      isAnimating = false;
+      enableNavigationButtons();
+      
+      let step = currentStep + 1
+      animationInterval = setInterval(() => {
+        if (step > logData.length) {
+          stopAnimation();
+          return
+        }
 
-      currentStep = step
-      updateVisualization()
-      step++
-    }, 1000) // Increased from 500ms to 1000ms to slow down the animation
+        currentStep = step
+        isAnimating = true;
+        disableNavigationButtons();
+        
+        updateVisualization()
+        
+        // Enable buttons after animation completes
+        setTimeout(() => {
+          isAnimating = false;
+          enableNavigationButtons();
+          step++;
+        }, 600); // Wait for animations to complete
+      }, 1500) // Increased to 1.5 seconds to allow transitions to complete
+    }, 600); // Wait for initial animations to complete
   }
+}
+
+/**
+ * Helper function to disable navigation buttons during animation
+ */
+function disableNavigationButtons() {
+  document.getElementById("prev-btn").disabled = true;
+  document.getElementById("next-btn").disabled = true;
+}
+
+/**
+ * Helper function to enable navigation buttons after animation
+ */
+function enableNavigationButtons() {
+  // Only enable prev button if not at first step
+  document.getElementById("prev-btn").disabled = currentStep <= 1;
+  // Only enable next button if not at last step
+  document.getElementById("next-btn").disabled = currentStep >= logData.length;
 }
 
 /**
@@ -1847,32 +2053,57 @@ function togglePlay() {
  */
 function setupEventListeners() {
   document.getElementById("prev-btn").addEventListener("click", () => {
+    // Don't allow navigation while animating
+    if (isAnimating) return;
+    
     // Stop any ongoing animation first
     if (isPlaying) {
       stopAnimation();
     }
-    
+ 
     if (currentStep > 1) {
-      currentStep--
-      updateVisualization()
+      currentStep--;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Enable buttons after animation completes
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+      }, 600); // Wait for animations to complete
     }
   })
 
   document.getElementById("next-btn").addEventListener("click", () => {
+    // Don't allow navigation while animating
+    if (isAnimating) return;
+    
     // Stop any ongoing animation first
     if (isPlaying) {
       stopAnimation();
     }
     
     if (currentStep < logData.length) {
-      currentStep++
-      updateVisualization()
+      currentStep++;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Enable buttons after animation completes
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+      }, 600); // Wait for animations to complete
     }
   })
 
   document.getElementById("play-btn").addEventListener("click", togglePlay)
 
   document.getElementById("reset-btn").addEventListener("click", () => {
+    // Don't allow reset while animating
+    if (isAnimating) return;
+    
     // Stop animation if it's playing
     if (isPlaying) {
       stopAnimation();
@@ -1889,39 +2120,52 @@ function setupEventListeners() {
   })
 
   // Add keyboard navigation
-  document.addEventListener("keydown", (e) => {
-    // Left arrow key
-    if (e.keyCode === 37) {
-      // Stop any ongoing animation first
+  document.addEventListener("keydown", (event) => {
+    // Don't respond to keyboard during animation
+    if (isAnimating) return;
+    
+    // Left arrow key for previous step
+    if (event.key === "ArrowLeft" && currentStep > 1) {
+      event.preventDefault()
+      
       if (isPlaying) {
         stopAnimation();
       }
       
-      if (currentStep > 1) {
-        currentStep--
-        updateVisualization()
-      }
+      currentStep--;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+      }, 600);
     }
-    // Right arrow key
-    else if (e.keyCode === 39) {
-      // Stop any ongoing animation first
+    
+    // Right arrow key for next step
+    if (event.key === "ArrowRight" && currentStep < logData.length) {
+      event.preventDefault()
+      
       if (isPlaying) {
         stopAnimation();
       }
       
-      if (currentStep < logData.length) {
-        currentStep++
-        updateVisualization()
-      }
+      currentStep++;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+      }, 600);
     }
-    // Space key to play/pause
-    else if (e.keyCode === 32 && !e.target.matches("button, input")) {
-      e.preventDefault()
+    
+    // Spacebar for play/pause
+    if (event.key === " " || event.key === "Spacebar") {
+      event.preventDefault()
       togglePlay()
-    }
-    // R key to reset
-    else if (e.keyCode === 82 && !e.target.matches("input, textarea")) {
-      document.getElementById("reset-btn").click()
     }
   })
 

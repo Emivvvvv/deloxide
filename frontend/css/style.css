@@ -439,7 +439,7 @@ main {
     100% { transform: rotate(360deg); }
 }
 
-/* Side-by-side layout for graph and info */
+/* Graph Visualization */
 .visualization-container {
     display: flex;
     gap: 8px;
@@ -499,6 +499,127 @@ main {
     display: flex !important; /* Make sure the graph is displayed as flex */
     justify-content: center;
     align-items: center;
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+/* Node and Edge Styles */
+.node {
+    cursor: pointer;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.node circle {
+    transition: r 0.4s ease, fill 0.3s ease, stroke 0.3s ease, stroke-width 0.3s ease, stroke-dasharray 0.3s ease, filter 0.4s ease;
+    fill-opacity: 0.9;
+}
+
+.node text {
+    font-size: 13px; /* Reduced from 14px */
+    font-weight: bold;
+    fill: white;
+    pointer-events: none;
+    user-select: none;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    transition: opacity 0.3s ease;
+}
+
+.node:hover circle {
+    stroke-width: 3px; /* Reduced from 4px */
+    filter: brightness(1.1);
+    fill-opacity: 1;
+}
+
+.resource circle {
+    fill: var(--primary-color);
+    stroke: var(--primary-dark);
+    stroke-width: 2px; /* Reduced from 3px */
+}
+
+.thread circle {
+    fill: var(--danger-color);
+    stroke: var(--danger-dark);
+    stroke-width: 2px; /* Reduced from 3px */
+}
+
+/* Special highlighting for nodes in a deadlock cycle */
+.node.thread[data-in-cycle="true"] circle {
+    fill: var(--danger-color);
+    stroke: #ff0000;
+    stroke-width: 3px;
+    stroke-dasharray: 3;
+    animation: pulse 1.5s infinite alternate;
+}
+
+@keyframes pulse {
+    from {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+        stroke-width: 3px;
+    }
+    to {
+        box-shadow: 0 0 0 5px rgba(255, 0, 0, 0);
+        stroke-width: 4px;
+    }
+}
+
+.link {
+    stroke: var(--neutral-color);
+    stroke-width: 2px; /* Reduced from 3px */
+    transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease, filter 0.4s ease;
+}
+
+.link.attempt {
+    stroke: var(--warning-color);
+    stroke-dasharray: 4; /* Reduced from 5 */
+    stroke-width: 2px; /* Reduced from 3px */
+}
+
+.link.acquired {
+    stroke: var(--success-color);
+    stroke-width: 3px; /* Reduced from 4px */
+}
+
+.link.released {
+    stroke: var(--neutral-color);
+    stroke-width: 2.5px;
+    stroke-dasharray: 5;
+}
+
+.link.spawn {
+    stroke: #9b59b6; /* Purple color for spawn links */
+    stroke-width: 2.5px;
+}
+
+.link.exit {
+    stroke: #34495e; /* Dark blue color for exit links */
+    stroke-width: 2.5px;
+    stroke-dasharray: 2;
+}
+
+.link.deadlock {
+    stroke: #f44336;
+    stroke-width: 4px; 
+    animation: pulse-link 3s infinite;
+    stroke-opacity: 0.9;
+    filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7));
+    z-index: 1000;
 }
 
 /* Controls */
@@ -805,121 +926,6 @@ main {
 .legend-line.deadlock {
     background-color: var(--danger-color);
     height: 5px; /* Reduced from 6px */
-}
-
-/* Tooltip */
-.tooltip {
-    position: absolute;
-    background-color: rgba(0, 0, 0, 0.75);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 14px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-    z-index: 1000;
-    max-width: 300px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    white-space: nowrap;
-    line-height: 1.4;
-}
-
-/* Node and Edge Styles */
-.node circle {
-    transition: stroke 0.1s, stroke-width 0.1s;
-    fill-opacity: 0.9;
-}
-
-.node:hover circle {
-    stroke-width: 3px; /* Reduced from 4px */
-    filter: brightness(1.1);
-    fill-opacity: 1;
-}
-
-.resource circle {
-    fill: var(--primary-color);
-    stroke: var(--primary-dark);
-    stroke-width: 2px; /* Reduced from 3px */
-}
-
-.thread circle {
-    fill: var(--danger-color);
-    stroke: var(--danger-dark);
-    stroke-width: 2px; /* Reduced from 3px */
-}
-
-/* Special highlighting for nodes in a deadlock cycle */
-.node.thread[data-in-cycle="true"] circle {
-    fill: var(--danger-color);
-    stroke: #ff0000;
-    stroke-width: 3px;
-    stroke-dasharray: 3;
-    animation: pulse 1.5s infinite alternate;
-}
-
-@keyframes pulse {
-    from {
-        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
-        stroke-width: 3px;
-    }
-    to {
-        box-shadow: 0 0 0 5px rgba(255, 0, 0, 0);
-        stroke-width: 4px;
-    }
-}
-
-.link {
-    stroke: var(--neutral-color);
-    stroke-width: 2px; /* Reduced from 3px */
-    transition: stroke 0.3s, stroke-width 0.3s;
-}
-
-.link.attempt {
-    stroke: var(--warning-color);
-    stroke-dasharray: 4; /* Reduced from 5 */
-    stroke-width: 2px; /* Reduced from 3px */
-}
-
-.link.acquired {
-    stroke: var(--success-color);
-    stroke-width: 3px; /* Reduced from 4px */
-}
-
-.link.released {
-    stroke: var(--neutral-color);
-    stroke-width: 2.5px;
-    stroke-dasharray: 5;
-}
-
-.link.spawn {
-    stroke: #9b59b6; /* Purple color for spawn links */
-    stroke-width: 2.5px;
-}
-
-.link.exit {
-    stroke: #34495e; /* Dark blue color for exit links */
-    stroke-width: 2.5px;
-    stroke-dasharray: 2;
-}
-
-.link.deadlock {
-    stroke: #f44336;
-    stroke-width: 4px; 
-    animation: pulse-link 3s infinite;
-    stroke-opacity: 0.9;
-    filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7));
-    z-index: 1000;
-}
-
-.node text {
-    font-size: 13px; /* Reduced from 14px */
-    font-weight: bold;
-    fill: white;
-    pointer-events: none;
-    user-select: none;
-    text-anchor: middle;
-    dominant-baseline: middle;
 }
 
 /* Footer */
