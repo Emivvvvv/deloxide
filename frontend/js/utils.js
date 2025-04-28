@@ -27,6 +27,29 @@ function transformLogs(rawLogs, resourceMapping) {
   // Create a mapping for thread IDs
   const threadMapping = {}
   let nextThreadIdx = 1;
+  
+  // Find the first parent_id that's not 0 for marking as main thread
+  let mainThreadId = null;
+  for (const log of rawLogs) {
+    const [rawThread, lockNum, eventCode, timestamp, parentId] = log;
+    if (parentId !== 0 && mainThreadId === null) {
+      mainThreadId = parentId;
+      break;
+    }
+  }
+  
+  // If no non-zero parent ID was found, use the first thread ID that appears
+  if (mainThreadId === null) {
+    for (const log of rawLogs) {
+      const [rawThread, lockNum, eventCode, timestamp, parentId] = log;
+      if (rawThread !== 0 && mainThreadId === null) {
+        mainThreadId = rawThread;
+        break;
+      }
+    }
+  }
+  
+  console.log("Identified main thread ID:", mainThreadId);
     
   // Normal logs: Each thread_id is kept as the original raw value
   // The timestamp value is converted to milliseconds if the raw data is in seconds
@@ -87,11 +110,27 @@ function transformLogs(rawLogs, resourceMapping) {
       
       if (rawThread !== 0) {
         // Thread spawn - parentId is the thread that spawned it
-        const parentName = parentId !== 0 ? `Thread ${parentId}` : "main thread";
+        let parentName;
+        if (parentId === 0) {
+          parentName = "main thread";
+        } else if (parentId === mainThreadId) {
+          parentName = `<span class="main-thread">Main Thread</span>`;
+        } else {
+          parentName = `<span class="thread-id">Thread ${parentId}</span>`;
+        }
+        
         description = `${parentName} spawned <span class="thread-id">Thread ${rawThread}</span>.`;
       } else if (lockNum !== 0) {
         // Resource creation
-        const parentName = parentId !== 0 ? `Thread ${parentId}` : "main thread";
+        let parentName;
+        if (parentId === 0) {
+          parentName = "main thread";
+        } else if (parentId === mainThreadId) {
+          parentName = `<span class="main-thread">Main Thread</span>`;
+        } else {
+          parentName = `<span class="thread-id">Thread ${parentId}</span>`;
+        }
+        
         description = `<span class="resource-id">Resource ${resourceMapping[lockNum]}</span> generated in ${parentName}.`;
       }
       
@@ -103,6 +142,7 @@ function transformLogs(rawLogs, resourceMapping) {
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
         parent_id: parentId,
         description,
+        is_main_thread: rawThread === mainThreadId, // Mark if this is the main thread
       });
     } 
     // For exit events: Either a thread exits or a resource is dropped
@@ -111,7 +151,11 @@ function transformLogs(rawLogs, resourceMapping) {
       
       if (rawThread !== 0) {
         // Thread exit
-        description = `<span class="thread-id">Thread ${rawThread}</span> exited.`;
+        if (rawThread === mainThreadId) {
+          description = `<span class="main-thread">Main Thread</span> exited.`;
+        } else {
+          description = `<span class="thread-id">Thread ${rawThread}</span> exited.`;
+        }
         
         // Clean up tracking for this thread
         delete threadWaiting[rawThread];
@@ -136,17 +180,26 @@ function transformLogs(rawLogs, resourceMapping) {
         thread_id: rawThread,
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
         description,
+        is_main_thread: rawThread === mainThreadId, // Mark if this is the main thread
       });
     }
     // For normal resource events
     else {
+      let threadDescription;
+      if (rawThread === mainThreadId) {
+        threadDescription = `<span class="main-thread">Main Thread</span>`;
+      } else {
+        threadDescription = `<span class="thread-id">Thread ${rawThread}</span>`;
+      }
+      
       logs.push({
         step: idx + 2, // init step is 1, so we start from 2
         timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
         thread_id: rawThread,
         resource_id: resourceMapping[lockNum],
-        description: `<span class="thread-id">Thread ${rawThread}</span> ${type} <span class="resource-id">Resource ${resourceMapping[lockNum]}</span>`,
+        description: `${threadDescription} ${type} <span class="resource-id">Resource ${resourceMapping[lockNum]}</span>`,
+        is_main_thread: rawThread === mainThreadId, // Mark if this is the main thread
       });
     }
   });
@@ -164,43 +217,53 @@ function transformLogs(rawLogs, resourceMapping) {
       const resourceHeldByThread = resourceOwners[waitingForResource];
       const resourceSymbol = resourceMapping[waitingForResource];
       
-      deadlockDescriptions.push(`<span class="thread-id">Thread ${threadId}</span> is waiting for <span class="resource-id">Resource ${resourceSymbol}</span> held by <span class="thread-id">Thread ${resourceHeldByThread}</span>`);
+      // Format thread display based on whether it's the main thread
+      const threadDisplay = threadId === mainThreadId 
+        ? `<span class="main-thread">Main Thread</span>` 
+        : `<span class="thread-id">Thread ${threadId}</span>`;
+      
+      // Format resource owner display based on whether it's the main thread
+      const resourceOwnerDisplay = resourceHeldByThread === mainThreadId
+        ? `<span class="main-thread">Main Thread</span>`
+        : `<span class="thread-id">Thread ${resourceHeldByThread}</span>`;
+      
+      deadlockDescriptions.push(`${threadDisplay} is waiting for <span class="resource-id">Resource ${resourceSymbol}</span> held by ${resourceOwnerDisplay}`);
     }
 
-  // Join descriptions with proper separators for better readability
+    // Join descriptions with proper separators for better readability
     let deadlockDescription = `<strong>DEADLOCK DETECTED:</strong><br>`;
     deadlockDescription += deadlockDescriptions.join('<br>');
 
-  // Last log timestamp: 100 ms after the last event (in milliseconds)
-  const lastTimestamp = rawLogs.length
-    ? rawLogs[rawLogs.length - 1][3]
-      : Date.now() / 1000;
-    const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000);
-    
-  const deadlockLog = {
-      step: logs.length + 1,
-    timestamp: deadlockTimestamp,
-    type: "deadlock",
-    cycle: deadlockCycle,
-    description: deadlockDescription,
-    deadlock_details: {
-      thread_cycle: deadlockCycle,
-        thread_waiting_for_locks: Object.entries(threadWaiting)
-          .filter(([threadId]) => deadlockCycle.includes(parseInt(threadId)) || deadlockCycle.includes(threadId))
-          .map(([threadId, resourceId]) => ({
-            thread_id: parseInt(threadId),
-            lock_id: resourceMapping[resourceId],
-            resource_id: resourceId
-      })),
+    // Last log timestamp: 100 ms after the last event (in milliseconds)
+    const lastTimestamp = rawLogs.length
+      ? rawLogs[rawLogs.length - 1][3]
+        : Date.now() / 1000;
+      const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000);
+      
+    const deadlockLog = {
+        step: logs.length + 1,
       timestamp: deadlockTimestamp,
-    },
-    };
-    
-    logs.push(deadlockLog);
+      type: "deadlock",
+      cycle: deadlockCycle,
+      description: deadlockDescription,
+      deadlock_details: {
+        thread_cycle: deadlockCycle,
+          thread_waiting_for_locks: Object.entries(threadWaiting)
+            .filter(([threadId]) => deadlockCycle.includes(parseInt(threadId)) || deadlockCycle.includes(threadId))
+            .map(([threadId, resourceId]) => ({
+              thread_id: parseInt(threadId),
+              lock_id: resourceMapping[resourceId],
+              resource_id: resourceId
+    })),
+        timestamp: deadlockTimestamp,
+      },
+      };
+      
+      logs.push(deadlockLog);
+    }
+
+    return logs;
   }
-  
-  return logs;
-}
 
 /**
  * Detects a deadlock cycle in the system
@@ -328,7 +391,7 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
     nodes: [], 
     links: [] 
   });
-  
+
   // Cumulative link state: key format is "T{thread_id}-R{resource_id}"
   const cumulativeLinks = {};
   
@@ -503,7 +566,7 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
       links: currentLinks,
     });
   });
-  
+
   // If the last event was a deadlock, add deadlock links between threads in the cycle
   const deadlockLog = logs.find(log => log.type === "deadlock");
   if (deadlockLog && deadlockLog.cycle && deadlockLog.cycle.length >= 2) {
@@ -633,7 +696,7 @@ function decodeLogs(encodedStr) {
     
   for (var i = 0; i < len; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
-    }
+  }
     
     var decompressed = pako.ungzip(bytes);
     var logsData = msgpack.decode(decompressed);
