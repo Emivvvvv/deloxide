@@ -1,3 +1,11 @@
+/// FFI bindings for Deloxide C API
+///
+/// This module provides the C API bindings for the Deloxide deadlock detection library.
+/// It maps C function calls to their Rust implementations, handling memory management,
+/// thread tracking, and callback mechanisms to bridge the language boundary.
+///
+/// The FFI interface provides all the functionality needed to use Deloxide from C or C++,
+/// including initialization, mutex tracking, thread tracking, and deadlock detection.
 use crate::core::logger;
 use crate::core::tracked_mutex::TrackedGuard;
 use crate::core::utils::get_current_thread_id;
@@ -10,7 +18,7 @@ use std::ffi::{CStr, CString, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// We’ll keep each Rust guard alive here until the C code calls unlock.
+// We'll keep each Rust guard alive here until the C code calls unlock.
 thread_local! {
     // Each thread can hold exactly one guard at a time.
     static FFI_GUARD: RefCell<Option<TrackedGuard<'static, ()>>> = const {RefCell::new(None)};
@@ -24,6 +32,9 @@ static mut DEADLOCK_DETECTED: AtomicBool = AtomicBool::new(false);
 static mut DEADLOCK_CALLBACK: Option<extern "C" fn(*const c_char)> = None;
 
 /// Initialize deloxide.
+///
+/// This function initializes the deadlock detector with optional logging and
+/// callback functionality. It must be called before any other Deloxide functions.
 ///
 /// # Arguments
 /// * `log_path` - Path to log file as a null-terminated C string, or NULL to disable logging.
@@ -91,6 +102,9 @@ pub unsafe extern "C" fn deloxide_init(
 
 /// Check if a deadlock has been detected.
 ///
+/// This function returns whether the deadlock detector has detected a deadlock
+/// since initialization or since the last call to deloxide_reset_deadlock_flag().
+///
 /// # Returns
 /// * `1` if a deadlock was detected
 /// * `0` if no deadlock has been detected
@@ -113,6 +127,8 @@ pub unsafe extern "C" fn deloxide_is_deadlock_detected() -> c_int {
 /// Reset the deadlock detected flag.
 ///
 /// This allows the detector to report future deadlocks after one has been handled.
+/// Call this function after processing a deadlock notification if you want to
+/// continue monitoring for additional deadlocks.
 ///
 /// # Safety
 /// This function writes to a mutable global static (`DEADLOCK_DETECTED`).
@@ -132,8 +148,7 @@ pub unsafe extern "C" fn deloxide_reset_deadlock_flag() {
 /// * `0` if logging is disabled
 ///
 /// # Safety
-/// This function is marked `unsafe` because it is part of the FFI boundary, but it only calls a safe Rust
-/// function to check logging status. The caller must still respect all FFI constraints regarding function calls.
+/// This function is safe to call from FFI contexts.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_is_logging_enabled() -> c_int {
     if logger::is_logging_enabled() { 1 } else { 0 }
@@ -141,12 +156,15 @@ pub unsafe extern "C" fn deloxide_is_logging_enabled() -> c_int {
 
 /// Create a new tracked mutex.
 ///
+/// Creates a mutex that will be tracked by the deadlock detector. The current
+/// thread will be recorded as the creator of this mutex.
+///
 /// # Returns
 /// * Void pointer to the mutex, or NULL on allocation failure
 ///
 /// # Safety
 /// - The returned pointer is a raw pointer to a heap allocation and must be freed by `deloxide_destroy_mutex`.
-/// - Any usage from C/C++ must ensure not to free or move the returned pointer by other means.
+/// - Any usage from C must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
     let mutex = Box::new(TrackedMutex::new(()));
@@ -154,6 +172,9 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
 }
 
 /// Create a new tracked mutex with specified creator thread ID.
+///
+/// Similar to deloxide_create_mutex(), but allows specifying which thread
+/// should be considered the "owner" for resource tracking purposes.
 ///
 /// # Arguments
 /// * `creator_thread_id` - ID of the thread to be registered as the creator of this mutex.
@@ -163,7 +184,7 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
 ///
 /// # Safety
 /// - The returned pointer is a raw pointer to a heap allocation and must be freed by `deloxide_destroy_mutex`.
-/// - Any usage from C/C++ must ensure not to free or move the returned pointer by other means.
+/// - Any usage from C must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
     creator_thread_id: c_ulong,
@@ -177,6 +198,9 @@ pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
 }
 
 /// Destroy a tracked mutex.
+///
+/// Frees the memory associated with a tracked mutex and removes it from
+/// the deadlock detector's tracking.
 ///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
@@ -194,6 +218,9 @@ pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
 }
 
 /// Lock a tracked mutex.
+///
+/// Attempts to acquire the lock on a mutex while tracking the operation
+/// for deadlock detection.
 ///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
@@ -224,6 +251,8 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
 
 /// Unlock a tracked mutex.
 ///
+/// Releases a lock on a mutex while tracking the operation for deadlock detection.
+///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
 ///
@@ -233,6 +262,7 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
 ///
 /// # Safety
 /// - The pointer must be valid (i.e., a previously created `TrackedMutex<()>`).
+/// - The mutex must have been previously locked by the current thread.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
     if mutex.is_null() {
@@ -249,6 +279,9 @@ pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
 
 /// Register a thread spawn with the global detector.
 ///
+/// This function should be called when a new thread is created to enable
+/// proper tracking of thread relationships and resources.
+///
 /// # Arguments
 /// * `thread_id` - ID of the spawned thread.
 /// * `parent_id` - ID of the parent thread that created this thread, or 0 for no parent.
@@ -258,6 +291,7 @@ pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
 ///
 /// # Safety
 /// - The caller must ensure thread_id represents a real thread.
+/// - This function is normally called automatically by the CREATE_TRACKED_THREAD macro.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_register_thread_spawn(
     thread_id: c_ulong,
@@ -274,6 +308,9 @@ pub unsafe extern "C" fn deloxide_register_thread_spawn(
 
 /// Register a thread exit with the global detector.
 ///
+/// This function should be called when a thread is about to exit to ensure
+/// proper cleanup of resources owned by the thread.
+///
 /// # Arguments
 /// * `thread_id` - ID of the exiting thread.
 ///
@@ -282,6 +319,7 @@ pub unsafe extern "C" fn deloxide_register_thread_spawn(
 ///
 /// # Safety
 /// - The caller must ensure thread_id represents a real thread that is exiting.
+/// - This function is normally called automatically by the CREATE_TRACKED_THREAD macro.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_register_thread_exit(thread_id: c_ulong) -> c_int {
     on_thread_exit(thread_id as ThreadId);
@@ -290,19 +328,22 @@ pub unsafe extern "C" fn deloxide_register_thread_exit(thread_id: c_ulong) -> c_
 
 /// Get the current thread ID.
 ///
+/// Returns a unique identifier for the current thread that can be used
+/// with other Deloxide functions.
+///
 /// # Returns
-/// A unique identifier for the current thread, to be used with lock/unlock functions
+/// A unique identifier for the current thread as an unsigned long
 ///
 /// # Safety
-/// This function is `unsafe` only because it's exposed as part of the FFI boundary, but it effectively performs a safe
-/// Rust operation (getting the current thread's ID). Callers must still ensure that this is only used within the context
-/// of the same process/threading environment, and that the returned ID is used in the manner the rest of the library expects.
+/// This function is safe to call from FFI contexts.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_get_thread_id() -> c_ulong {
     get_current_thread_id() as c_ulong
 }
 
 /// Get the creator thread ID of a mutex.
+///
+/// Returns the ID of the thread that created the specified mutex.
 ///
 /// # Arguments
 /// * `mutex` - Pointer to a mutex created with `deloxide_create_mutex`.
@@ -325,6 +366,9 @@ pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulo
 }
 
 /// Showcase the log data by sending it to the showcase server.
+///
+/// This function processes a log file and opens a web browser to visualize
+/// the thread-lock relationships recorded in the log.
 ///
 /// # Arguments
 /// * `log_path` - Path to the log file as a null-terminated C string.
@@ -363,6 +407,10 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
 }
 
 /// Showcase the current active log data by sending it to the showcase server.
+///
+/// This is a convenience function that showcases the log file that was specified
+/// in the deloxide_init() call. It's useful when you don't want to keep track of
+/// the log file path manually.
 ///
 /// # Returns
 /// * `0` on success

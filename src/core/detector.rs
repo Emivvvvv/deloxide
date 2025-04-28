@@ -7,6 +7,18 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 /// Main deadlock detector that maintains thread-lock relationships
+///
+/// The Detector is the heart of Deloxide. It tracks which threads own which locks,
+/// which threads are waiting for which locks, and uses this information to detect
+/// potential deadlock cycles.
+///
+/// # How it works
+///
+/// 1. The detector maintains a directed graph of threads waiting for other threads
+/// 2. When a thread attempts to acquire a lock owned by another thread, an edge is added
+/// 3. When a lock is acquired or released, the graph is updated
+/// 4. Cycle detection is performed to identify potential deadlocks
+/// 5. When a cycle is detected, the deadlock callback is invoked
 pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
@@ -39,6 +51,9 @@ impl Detector {
     }
 
     /// Set callback to be invoked when a deadlock is detected
+    ///
+    /// # Arguments
+    /// * `callback` - Function to call when a deadlock is detected
     pub fn set_deadlock_callback<F>(&mut self, callback: F)
     where
         F: Fn(DeadlockInfo) + Send + 'static,
@@ -47,6 +62,14 @@ impl Detector {
     }
 
     /// Register a thread spawn
+    ///
+    /// This method is called when a new thread is created. It records the thread
+    /// in the wait-for graph and establishes parent-child relationships for proper
+    /// resource tracking.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the newly spawned thread
+    /// * `parent_id` - Optional ID of the parent thread that created this thread
     pub fn on_thread_spawn(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
         if logger::is_logging_enabled() {
             logger::log_thread_event(thread_id, parent_id, Events::Spawn);
@@ -56,6 +79,12 @@ impl Detector {
     }
 
     /// Register a thread exit
+    ///
+    /// This method is called when a thread is about to exit. It cleans up resources
+    /// associated with the thread and updates the wait-for graph.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the exiting thread
     pub fn on_thread_exit(&mut self, thread_id: ThreadId) {
         if logger::is_logging_enabled() {
             logger::log_thread_event(thread_id, None, Events::Exit);
@@ -67,6 +96,13 @@ impl Detector {
     }
 
     /// Register a lock creation
+    ///
+    /// This method is called when a new mutex is created. It records which thread
+    /// created the mutex for proper resource tracking.
+    ///
+    /// # Arguments
+    /// * `lock_id` - ID of the created lock
+    /// * `creator_id` - Optional ID of the thread that created this lock
     pub fn on_lock_create(&mut self, lock_id: LockId, creator_id: Option<ThreadId>) {
         let creator = creator_id.unwrap_or_else(get_current_thread_id);
         if logger::is_logging_enabled() {
@@ -75,6 +111,12 @@ impl Detector {
     }
 
     /// Register a lock destruction
+    ///
+    /// This method is called when a mutex is being destroyed. It cleans up
+    /// all references to the lock in the detector's data structures.
+    ///
+    /// # Arguments
+    /// * `lock_id` - ID of the lock being destroyed
     pub fn on_lock_destroy(&mut self, lock_id: LockId) {
         // remove ownership
         self.lock_owners.remove(&lock_id);
@@ -96,6 +138,14 @@ impl Detector {
     }
 
     /// Register a lock attempt by a thread
+    ///
+    /// This method is called when a thread attempts to acquire a mutex. It records
+    /// the attempt in the thread-lock relationship graph and checks for potential
+    /// deadlock cycles.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the thread attempting to acquire the lock
+    /// * `lock_id` - ID of the lock being attempted
     pub fn on_lock_attempt(&mut self, thread_id: ThreadId, lock_id: LockId) {
         if logger::is_logging_enabled() {
             logger::log_interaction_event(thread_id, lock_id, Events::Attempt);
@@ -142,6 +192,13 @@ impl Detector {
     }
 
     /// Register successful lock acquisition by a thread
+    ///
+    /// This method is called when a thread successfully acquires a mutex. It updates
+    /// the ownership information and clears any wait-for edges in the graph.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the thread that acquired the lock
+    /// * `lock_id` - ID of the lock that was acquired
     pub fn on_lock_acquired(&mut self, thread_id: ThreadId, lock_id: LockId) {
         if logger::is_logging_enabled() {
             logger::log_interaction_event(thread_id, lock_id, Events::Acquired);
@@ -159,6 +216,13 @@ impl Detector {
     }
 
     /// Register lock release by a thread
+    ///
+    /// This method is called when a thread releases a mutex. It updates the ownership
+    /// information in the detector's data structures.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the thread releasing the lock
+    /// * `lock_id` - ID of the lock being released
     pub fn on_lock_release(&mut self, thread_id: ThreadId, lock_id: LockId) {
         if logger::is_logging_enabled() {
             logger::log_interaction_event(thread_id, lock_id, Events::Released);
@@ -182,6 +246,12 @@ lazy_static::lazy_static! {
 }
 
 /// Initialize the global detector with a deadlock callback
+///
+/// This function sets up the global deadlock detector with a callback function
+/// that will be invoked when a deadlock is detected.
+///
+/// # Arguments
+/// * `callback` - Function to call when a deadlock is detected
 pub fn init_detector<F>(callback: F)
 where
     F: Fn(DeadlockInfo) + Send + 'static,
@@ -203,6 +273,9 @@ pub fn on_thread_spawn(thread_id: ThreadId, parent_id: Option<ThreadId>) {
 }
 
 /// Register a thread exit with the global detector
+///
+/// # Arguments
+/// * `thread_id` - ID of the exiting thread
 pub fn on_thread_exit(thread_id: ThreadId) {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.on_thread_exit(thread_id);
@@ -221,6 +294,9 @@ pub fn on_lock_create(lock_id: LockId, creator_id: Option<ThreadId>) {
 }
 
 /// Register a lock destruction with the global detector
+///
+/// # Arguments
+/// * `lock_id` - ID of the lock being destroyed
 pub fn on_lock_destroy(lock_id: LockId) {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.on_lock_destroy(lock_id);
@@ -228,6 +304,10 @@ pub fn on_lock_destroy(lock_id: LockId) {
 }
 
 /// Register a lock attempt with the global detector
+///
+/// # Arguments
+/// * `thread_id` - ID of the thread attempting to acquire the lock
+/// * `lock_id` - ID of the lock being attempted
 pub fn on_lock_attempt(thread_id: ThreadId, lock_id: LockId) {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.on_lock_attempt(thread_id, lock_id);
@@ -235,6 +315,10 @@ pub fn on_lock_attempt(thread_id: ThreadId, lock_id: LockId) {
 }
 
 /// Register a lock acquisition with the global detector
+///
+/// # Arguments
+/// * `thread_id` - ID of the thread that acquired the lock
+/// * `lock_id` - ID of the lock that was acquired
 pub fn on_lock_acquired(thread_id: ThreadId, lock_id: LockId) {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.on_lock_acquired(thread_id, lock_id);
@@ -242,6 +326,10 @@ pub fn on_lock_acquired(thread_id: ThreadId, lock_id: LockId) {
 }
 
 /// Register a lock release with the global detector
+///
+/// # Arguments
+/// * `thread_id` - ID of the thread releasing the lock
+/// * `lock_id` - ID of the lock being released
 pub fn on_lock_release(thread_id: ThreadId, lock_id: LockId) {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.on_lock_release(thread_id, lock_id);

@@ -1,3 +1,10 @@
+//! Core module for Deloxide deadlock detection
+//!
+//! This module contains the central implementation of the deadlock detection
+//! algorithm, tracked synchronization primitives, and supporting infrastructure.
+//! It defines the main Deloxide configuration builder, types for representing
+//! deadlock information, and the interfaces for tracking thread-lock relationships.
+
 // Core types
 pub mod types;
 pub use types::*;
@@ -28,11 +35,37 @@ pub mod utils;
 
 use anyhow::{Context, Result};
 
-/// Deloxide configuration struct
+/// Deloxide configuration builder struct
+///
+/// This struct provides a fluent builder API for configuring and initializing
+/// the Deloxide deadlock detector.
+///
+/// # Example
+///
+/// ```no_run
+/// use deloxide::{showcase_this, Deloxide};
+///
+/// // Initialize with default settings
+/// Deloxide::new().start().expect("Failed to initialize detector");
+///
+/// // Initialize with logging and a custom callback
+/// Deloxide::new()
+///     .with_log("deadlock_logs.json")
+///     .callback(|info| {
+///         showcase_this().expect("Failed to launch visualization");
+///         eprintln!("Deadlock detected! Threads: {:?}", info.thread_cycle);
+///     })
+///     .start()
+///     .expect("Failed to initialize detector");
+/// ```
 pub struct Deloxide {
+    /// Path to store log file, or None to disable logging
     log_path: Option<String>,
+
+    /// Callback function to invoke when a deadlock is detected
     callback: Box<dyn Fn(DeadlockInfo) + Send + 'static>,
 }
+
 impl Default for Deloxide {
     fn default() -> Self {
         Self::new()
@@ -40,7 +73,7 @@ impl Default for Deloxide {
 }
 
 impl Deloxide {
-    /// Create a new Deloxide with default settings
+    /// Create a new Deloxide configuration with default settings
     ///
     /// By default:
     /// - Logging is disabled
@@ -57,7 +90,11 @@ impl Deloxide {
         }
     }
 
-    /// Activate logger and set the path for the log file
+    /// Enable logging and set the path for the log file
+    ///
+    /// This function enables logging of all mutex operations and thread events
+    /// to a file at the specified path. This log can later be visualized using
+    /// the `showcase` function.
     ///
     /// # Arguments
     /// * `path` - Path to the log file. If the path contains "{timestamp}",
@@ -65,6 +102,15 @@ impl Deloxide {
     ///
     /// # Returns
     /// The builder for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::Deloxide;
+    ///
+    /// let config = Deloxide::new()
+    ///     .with_log("logs/deadlock_{timestamp}.json");
+    /// ```
     pub fn with_log<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
         self.log_path = Some(path.as_ref().to_string_lossy().into_owned());
         self
@@ -77,6 +123,18 @@ impl Deloxide {
     ///
     /// # Returns
     /// The builder for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::{Deloxide, DeadlockInfo};
+    ///
+    /// let config = Deloxide::new()
+    ///     .callback(|info: DeadlockInfo| {
+    ///         eprintln!("Deadlock detected! Thread cycle: {:?}", info.thread_cycle);
+    ///         // Take remedial action, log to external system, etc.
+    ///     });
+    /// ```
     pub fn callback<F>(mut self, callback: F) -> Self
     where
         F: Fn(DeadlockInfo) + Send + 'static,
@@ -87,11 +145,29 @@ impl Deloxide {
 
     /// Initialize the deloxide deadlock detector with the configured settings
     ///
+    /// This finalizes the configuration and starts the deadlock detector.
+    /// After calling this method, the detector will begin monitoring lock
+    /// operations and can detect deadlocks.
+    ///
     /// # Returns
     /// A Result that is Ok if initialization succeeded, or an error if it failed
     ///
     /// # Errors
     /// Returns an error if logger initialization fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use deloxide::Deloxide;
+    ///
+    /// Deloxide::new()
+    ///     .with_log("deadlock_log.json")
+    ///     .callback(|info| {
+    ///         println!("Deadlock detected: {:?}", info);
+    ///     })
+    ///     .start()
+    ///     .expect("Failed to initialize deadlock detector");
+    /// ```
     pub fn start(self) -> Result<()> {
         // Initialize the logger if a path was provided
         if let Some(log_path) = self.log_path {

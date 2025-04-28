@@ -2,6 +2,18 @@ use crate::core::types::ThreadId;
 use std::collections::{HashMap, HashSet};
 
 /// Represents a directed graph of thread wait relationships
+///
+/// The WaitForGraph tracks which threads are waiting for which other threads,
+/// allowing the detector to identify cycles that indicate potential deadlocks.
+///
+/// # How it works
+///
+/// The graph is represented as an adjacency list, where each node is a thread ID
+/// and each edge represents a "waits for" relationship. When thread A attempts to
+/// acquire a lock owned by thread B, an edge is added from A to B.
+///
+/// Deadlock detection works by searching for cycles in this graph. A cycle indicates
+/// a circular wait condition that can lead to a deadlock.
 pub struct WaitForGraph {
     /// Maps a thread to all the threads it is waiting for
     pub(crate) edges: HashMap<ThreadId, HashSet<ThreadId>>,
@@ -22,6 +34,13 @@ impl WaitForGraph {
     }
 
     /// Add a directed edge: `from` thread waits for `to` thread
+    ///
+    /// This method adds a "waits for" relationship between two threads, indicating
+    /// that the `from` thread is waiting to acquire a resource held by the `to` thread.
+    ///
+    /// # Arguments
+    /// * `from` - The thread ID that is waiting
+    /// * `to` - The thread ID that holds the resource
     pub fn add_edge(&mut self, from: ThreadId, to: ThreadId) {
         self.edges.entry(from).or_default().insert(to);
         // Ensure 'to' exists in the graph even if it has no outgoing edges
@@ -29,6 +48,12 @@ impl WaitForGraph {
     }
 
     /// Remove all edges for the specified thread (both incoming and outgoing)
+    ///
+    /// This method is called when a thread exits or acquires a lock, to clean up
+    /// any wait relationships that are no longer valid.
+    ///
+    /// # Arguments
+    /// * `thread_id` - ID of the thread to remove from the graph
     pub fn remove_thread(&mut self, thread_id: ThreadId) {
         // Remove outgoing edges
         self.edges.remove(&thread_id);
@@ -40,7 +65,16 @@ impl WaitForGraph {
     }
 
     /// Detect if there is a cycle in the graph, starting from the given thread.
-    /// Returns the cycle as a vector of thread IDs if found.
+    ///
+    /// This method uses a depth-first search (DFS) algorithm to detect cycles in the
+    /// wait-for graph. A cycle indicates a potential deadlock situation.
+    ///
+    /// # Arguments
+    /// * `start` - The thread ID to start the search from
+    ///
+    /// # Returns
+    /// * `Some(Vec<ThreadId>)` - The cycle as a vector of thread IDs if found
+    /// * `None` - If no cycle is found
     pub fn detect_cycle_from(&self, start: ThreadId) -> Option<Vec<ThreadId>> {
         if !self.edges.contains_key(&start) {
             return None;
@@ -89,7 +123,13 @@ impl WaitForGraph {
     }
 
     /// Detect any cycle in the graph.
-    /// Returns the cycle as a vector of thread IDs if found.
+    ///
+    /// This method checks every node in the graph as a potential starting point
+    /// for detecting a cycle. It is used for testing and validation of the graph.
+    ///
+    /// # Returns
+    /// * `Some(Vec<ThreadId>)` - The cycle as a vector of thread IDs if found
+    /// * `None` - If no cycle is found
     #[cfg(test)]
     pub fn detect_cycle(&self) -> Option<Vec<ThreadId>> {
         for &thread_id in self.edges.keys() {
