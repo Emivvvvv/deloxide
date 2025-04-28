@@ -38,17 +38,6 @@ function transformLogs(rawLogs, resourceMapping) {
     }
   }
   
-  // If no non-zero parent ID was found, use the first thread ID that appears
-  if (mainThreadId === null) {
-    for (const log of rawLogs) {
-      const [rawThread, lockNum, eventCode, timestamp, parentId] = log;
-      if (rawThread !== 0 && mainThreadId === null) {
-        mainThreadId = rawThread;
-        break;
-      }
-    }
-  }
-  
   console.log("Identified main thread ID:", mainThreadId);
     
   // Normal logs: Each thread_id is kept as the original raw value
@@ -135,8 +124,8 @@ function transformLogs(rawLogs, resourceMapping) {
       }
       
       logs.push({
-        step: idx + 2, // init step is 1, so we start from 2
-        timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
+      step: idx + 2, // init step is 1, so we start from 2
+      timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
         thread_id: rawThread,
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
@@ -234,29 +223,29 @@ function transformLogs(rawLogs, resourceMapping) {
     let deadlockDescription = `<strong>DEADLOCK DETECTED:</strong><br>`;
     deadlockDescription += deadlockDescriptions.join('<br>');
 
-    // Last log timestamp: 100 ms after the last event (in milliseconds)
-    const lastTimestamp = rawLogs.length
-      ? rawLogs[rawLogs.length - 1][3]
+  // Last log timestamp: 100 ms after the last event (in milliseconds)
+  const lastTimestamp = rawLogs.length
+    ? rawLogs[rawLogs.length - 1][3]
         : Date.now() / 1000;
       const deadlockTimestamp = Math.floor((lastTimestamp + 0.1) * 1000);
       
-    const deadlockLog = {
+  const deadlockLog = {
         step: logs.length + 1,
-      timestamp: deadlockTimestamp,
-      type: "deadlock",
-      cycle: deadlockCycle,
-      description: deadlockDescription,
-      deadlock_details: {
-        thread_cycle: deadlockCycle,
+    timestamp: deadlockTimestamp,
+    type: "deadlock",
+    cycle: deadlockCycle,
+    description: deadlockDescription,
+    deadlock_details: {
+      thread_cycle: deadlockCycle,
           thread_waiting_for_locks: Object.entries(threadWaiting)
             .filter(([threadId]) => deadlockCycle.includes(parseInt(threadId)) || deadlockCycle.includes(threadId))
             .map(([threadId, resourceId]) => ({
               thread_id: parseInt(threadId),
               lock_id: resourceMapping[resourceId],
               resource_id: resourceId
-    })),
-        timestamp: deadlockTimestamp,
-      },
+      })),
+      timestamp: deadlockTimestamp,
+    },
       };
       
       logs.push(deadlockLog);

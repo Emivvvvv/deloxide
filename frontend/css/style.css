@@ -786,8 +786,8 @@ main {
 
 .legend-line.released {
     background-color: var(--neutral-color);
-    background-image: linear-gradient(to right, var(--neutral-color) 75%, transparent 25%);
-    background-size: 8px 100%;
+    background-image: linear-gradient(to right, var(--neutral-color) 70%, transparent 30%);
+    background-size: 10px 100%; 
     background-repeat: repeat-x;
 }
 
@@ -889,7 +889,7 @@ main {
 .link.released {
     stroke: var(--neutral-color);
     stroke-width: 2.5px;
-    stroke-dasharray: 3 1;
+    stroke-dasharray: 5;
 }
 
 .link.spawn {
