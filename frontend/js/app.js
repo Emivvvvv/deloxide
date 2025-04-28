@@ -615,159 +615,86 @@ function checkForSharedScenario() {
   const encodedLogs = urlParams.get("logs") || urlParams.get("log") // Support both 'logs' and 'log' parameters
   const format = urlParams.get("format") // New parameter to indicate line-by-line format
 
-  // Handle line-by-line formatted logs
-  if (format === "line" && encodedData) {
-    try {
-      console.log("Found line-by-line format logs in URL, processing...")
-
-      // Show loading state
-      document.getElementById("loading").style.display = "block"
-      document.getElementById("loading").innerHTML =
-        '<div class="spinner"></div><p>Loading shared visualization...</p>'
-
-      // Decompress the line-by-line content
-      console.log("Compressed line data size:", encodedData.length, "bytes")
-      const decompressedContent =
-        LZString.decompressFromEncodedURIComponent(encodedData)
-
-      if (!decompressedContent) {
-        throw new Error("Failed to decompress line data")
-      }
-
-      console.log(
-        "Decompressed line data size:",
-        decompressedContent.length,
-        "bytes"
-      )
-
-      // Process using the new format parser
-      const processed = processNewFormatLogs(decompressedContent)
-      console.log("Successfully processed line format data")
-
-      // Store original content for potential re-sharing
-      processed.rawContent = decompressedContent
-
-      // Process the transformed data
-      resetVisualization()
-      currentScenario = processed
-      logData = processed.logs
-      graphStateData = processed.graph_state
-
-      // Set step if provided
-      currentStep = step ? parseInt(step) : 1
-      if (
-        isNaN(currentStep) ||
-        currentStep < 1 ||
-        currentStep > logData.length
-      ) {
-        currentStep = 1
-      }
-      console.log("Setting to step:", currentStep)
-
-      // Show share button
-      const shareBtn = document.getElementById("share-btn")
-      if (shareBtn) {
-        shareBtn.style.display = "flex"
-      }
-
-      // Initialize visualization
-      setTimeout(() => {
-        initVisualization()
-
-        // Hide loading message and show visualization elements
-        showVisualizationElements()
-
-        // Initialize timeline
-        initTimeline()
-
-        // Update visualization with the specified step
-        updateVisualization()
-
-        console.log("Shared line format visualization loaded successfully")
-        
-        // Keep autoplay for shared URLs
-        autoStartAnimation()
-      }, 100)
-
-      return // Exit early since we've handled this format
-    } catch (error) {
-      console.error("Error loading line format logs:", error)
-      document.getElementById("loading").innerHTML = `
-                <div class="error-message">
-                    <i class="fas fa-exclamation-triangle"></i> 
-                    Error loading shared visualization: ${error.message}
-                </div>`
-      return // Exit early to prevent further processing
-    }
-  }
-
+  // Handle encoded logs parameter
   if (encodedLogs) {
-    // This is the new compressed msgpack format
     try {
-      console.log("Found compressed logs in URL, processing...")
+      console.log("Found logs parameter in URL, processing...")
 
       // Show loading state
       document.getElementById("loading").style.display = "block"
       document.getElementById("loading").innerHTML =
         '<div class="spinner"></div><p>Loading shared visualization...</p>'
 
-      // Use the utility function to process the encoded logs
-      console.log("Compressed logs size:", encodedLogs.length, "characters")
-      const transformed = processEncodedLog(encodedLogs)
-      console.log("Successfully processed log data")
-
-      // Store the raw data for potential re-sharing
-      const decodedData = decodeLogs(encodedLogs)
-      transformed.rawData = decodedData
+      // Decode the encoded logs
+      console.log("Decoding logs from URL parameter...")
+      let decodedData;
+      
+      try {
+        // Try to parse as JSON first
+        decodedData = JSON.parse(encodedLogs);
+        console.log("Successfully parsed logs as JSON");
+      } catch (e) {
+        // If not valid JSON, try to decode from Base64
+        try {
+          console.log("Not a valid JSON, trying to decode from Base64...");
+          decodedData = decodeLogs(encodedLogs);
+          console.log("Successfully decoded logs from Base64");
+        } catch (decodeError) {
+          throw new Error("Failed to decode logs: " + decodeError.message);
+        }
+      }
+      
+      // Process the logs using the updated processor
+      const processed = processEncodedLog(decodedData);
+      
+      // Store original content for potential re-sharing
+      processed.rawContent = decodedData;
 
       // Process the transformed data
-      resetVisualization()
-      currentScenario = transformed
-      logData = transformed.logs
-      graphStateData = transformed.graph_state
+      resetVisualization();
+      currentScenario = processed;
+      logData = processed.logs;
+      graphStateData = processed.graph_state;
 
       // Set step if provided
-      currentStep = step ? parseInt(step) : 1
+      currentStep = step ? parseInt(step) : 1;
       if (
         isNaN(currentStep) ||
         currentStep < 1 ||
         currentStep > logData.length
       ) {
-        currentStep = 1
+        currentStep = 1;
       }
-      console.log("Setting to step:", currentStep)
+      console.log("Setting to step:", currentStep);
 
       // Show share button
-      const shareBtn = document.getElementById("share-btn")
+      const shareBtn = document.getElementById("share-btn");
       if (shareBtn) {
-        shareBtn.style.display = "flex"
+        shareBtn.style.display = "flex";
       }
 
-      // Initialize visualization
+      // Initialize visualization after a short delay to ensure DOM is ready
       setTimeout(() => {
-        initVisualization()
+        initVisualization();
 
         // Hide loading message and show visualization elements
-        showVisualizationElements()
+        showVisualizationElements();
 
         // Initialize timeline
-        initTimeline()
+        initTimeline();
 
         // Update visualization with the specified step
-        updateVisualization()
+        updateVisualization();
 
-        console.log("Shared visualization loaded successfully")
-      }, 100)
-
-      return // Exit early since we've handled this format
+        console.log("Shared visualization loaded successfully");
+      }, 100);
     } catch (error) {
-      console.error("Error loading compressed logs:", error)
+      console.error("Error loading encoded logs:", error);
       document.getElementById("loading").innerHTML = `
                 <div class="error-message">
                     <i class="fas fa-exclamation-triangle"></i> 
-                    Error loading shared visualization: ${error.message}
-                </div>`
-      return // Exit early to prevent further processing
+                    Error loading visualization from logs parameter: ${error.message}
+                </div>`;
     }
   }
 
@@ -1049,20 +976,34 @@ function initVisualization() {
     .attr("width", width)
     .attr("height", height)
 
-  // Add arrow markers for the links
-  svg
-    .append("defs")
-    .append("marker")
+  // Create defs section for markers
+  const defs = svg.append("defs");
+  
+  // Add arrow markers for normal links
+  defs.append("marker")
     .attr("id", "arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 35)
+    .attr("refX", 25) // Position relative to the node
     .attr("refY", 0)
     .attr("markerWidth", 6)
     .attr("markerHeight", 6)
     .attr("orient", "auto")
     .append("path")
     .attr("d", "M0,-5L10,0L0,5")
-    .attr("fill", "var(--neutral-color)")
+    .attr("fill", "var(--neutral-color)");
+
+  // Add larger, more visible deadlock arrow marker
+  defs.append("marker")
+    .attr("id", "deadlock-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 20) // Position closer to the end of the line for thicker links
+    .attr("refY", 0)
+    .attr("markerWidth", 4) // Smaller size for more modern look
+    .attr("markerHeight", 4) // Smaller size for more modern look
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#f44336");
 
   // Create group elements for the links and nodes
   linkGroup = svg.append("g").attr("class", "links")
@@ -1143,140 +1084,286 @@ function updateVisualization() {
 
   // Get current graph state
   const currentState = graphStateData[currentStep - 1]
+  
+  // Get current log entry
+  const logEntry = logData[currentStep - 1]
+  console.log(`Updating visualization for step ${currentStep}:`, logEntry.type);
+  
+  // Check if this is a deadlock event
+  if (logEntry && logEntry.type === "deadlock") {
+    console.log("DEADLOCK EVENT - Showing deadlock visualization");
+    
+    // If there's a next state specifically for the deadlock, use that instead
+    if (currentStep < graphStateData.length) {
+      const nextState = graphStateData[currentStep];
+      // Check if the next state has deadlock links
+      const hasDeadlockLinks = nextState.links.some(link => link.type === "deadlock");
+      if (hasDeadlockLinks) {
+        console.log("Found dedicated deadlock state - using it");
+        // Use the next state which should have the deadlock links
+        nodes = JSON.parse(JSON.stringify(nextState.nodes));
+        links = [];
+        
+        // Process each link to ensure it has proper references to node objects
+        JSON.parse(JSON.stringify(nextState.links)).forEach(link => {
+          const sourceNode = typeof link.source === 'object' ? 
+            nodes.find(n => n.id === link.source.id) : 
+            nodes.find(n => n.id === link.source);
+          
+          const targetNode = typeof link.target === 'object' ? 
+            nodes.find(n => n.id === link.target.id) : 
+            nodes.find(n => n.id === link.target);
+          
+          if (sourceNode && targetNode) {
+            links.push({
+              source: sourceNode,
+              target: targetNode,
+              type: link.type,
+              isDeadlockEdge: link.isDeadlockEdge || false
+            });
+          }
+        });
+        
+        console.log("Deadlock links count:", links.filter(l => l.type === "deadlock").length);
+        
+        // Update visualization based on current state
+        updateNodeElements();
+        updateLinkElements();
+        
+        // Update simulation with the processed nodes and links
+        simulation.nodes(nodes);
+        simulation.force("link").links(links);
+        
+        // Restart with a low alpha to avoid extreme movements
+        simulation.alpha(0.3).restart();
+        
+        // Update step information
+        updateStepInfo();
+        
+        // Update timeline marker
+        updateTimelineMarker();
+        
+        return;
+      }
+    }
+  }
 
-  // Update nodes and links with deep clones to avoid reference issues
-  nodes = JSON.parse(JSON.stringify(currentState.nodes))
-  links = JSON.parse(JSON.stringify(currentState.links))
+  // Update nodes with deep clones to avoid reference issues
+  nodes = JSON.parse(JSON.stringify(currentState.nodes));
+  
+  // If this is a deadlock state, mark threads in the deadlock cycle
+  if (logEntry && logEntry.type === "deadlock" && logEntry.deadlock_details) {
+    const deadlockThreads = logEntry.deadlock_details.thread_cycle || [];
+    console.log("Marking deadlock threads:", deadlockThreads);
+    
+    // Mark each thread in the deadlock cycle
+    nodes.forEach(node => {
+      // Check if this node is a thread in the deadlock cycle
+      if (node.type === "thread") {
+        const threadId = node.id.substring(1); // Remove the 'T' prefix
+        if (deadlockThreads.includes(parseInt(threadId)) || deadlockThreads.includes(threadId)) {
+          node.isInCycle = true;
+          console.log(`Marked thread ${threadId} as in deadlock cycle`);
+        }
+      }
+    });
+  }
 
+  // First update simulation with just the nodes
+  simulation.nodes(nodes);
+  
+  // Then prepare the links
+  links = [];
+  const currentLinks = JSON.parse(JSON.stringify(currentState.links));
+  
+  // Process each link to ensure it has proper references to node objects
+  currentLinks.forEach(link => {
+    const sourceNode = typeof link.source === 'object' ? 
+      nodes.find(n => n.id === link.source.id) : 
+      nodes.find(n => n.id === link.source);
+    
+    const targetNode = typeof link.target === 'object' ? 
+      nodes.find(n => n.id === link.target.id) : 
+      nodes.find(n => n.id === link.target);
+    
+    if (sourceNode && targetNode) {
+      links.push({
+        source: sourceNode,
+        target: targetNode,
+        type: link.type,
+        isDeadlockEdge: link.isDeadlockEdge || false
+      });
+    }
+  });
+  
+  // Add manual deadlock links if needed for the current step
+  if (logEntry && logEntry.type === "deadlock" && logEntry.deadlock_details) {
+    const deadlockThreads = logEntry.deadlock_details.thread_cycle || [];
+    
+    if (deadlockThreads.length >= 2 && links.filter(l => l.type === "deadlock").length === 0) {
+      console.log("Adding manual deadlock links");
+      
+      // Create deadlock links directly between threads in the cycle
+      for (let i = 0; i < deadlockThreads.length; i++) {
+        const currentThread = deadlockThreads[i];
+        const nextThread = deadlockThreads[(i + 1) % deadlockThreads.length];
+        
+        const sourceNode = nodes.find(n => n.id === `T${currentThread}`);
+        const targetNode = nodes.find(n => n.id === `T${nextThread}`);
+        
+        if (sourceNode && targetNode) {
+          console.log(`Adding deadlock link from T${currentThread} to T${nextThread}`);
+          links.push({
+            source: sourceNode,
+            target: targetNode,
+            type: "deadlock",
+            isDeadlockEdge: true
+          });
+        }
+      }
+    }
+  }
+  
+  console.log("Final links count:", links.length, "deadlock links:", links.filter(l => l.type === "deadlock").length);
+  
   // Update visualization based on current state
-  updateNodeElements()
-  updateLinkElements()
+  updateNodeElements();
+  updateLinkElements();
 
-  // Update simulation with new data
-  simulation.nodes(nodes)
-  simulation.force("link").links(links)
+  // Update simulation with links after nodes are set
+  simulation.force("link").links(links);
 
   // Restart with a low alpha to avoid extreme movements
-  simulation.alpha(0.3).restart()
+  simulation.alpha(0.3).restart();
 
   // Update step information
-  updateStepInfo()
+  updateStepInfo();
 
   // Update timeline marker
-  updateTimelineMarker()
+  updateTimelineMarker();
 }
 
 // Helper function to update node elements
 function updateNodeElements() {
-  // Join nodes with elements
-  const nodeElements = nodeGroup.selectAll(".node").data(nodes, (d) => d.id)
-
-  // Remove old nodes with fade out animation
-  nodeElements.exit()
-    .transition()
-    .duration(150)
-    .style("opacity", 0)
-    .remove();
-
-  // Create new node groups
-  const nodeEnter = nodeElements
+  // Clear existing nodes
+  nodeGroup.selectAll("*").remove();
+  
+  // Create all nodes from scratch
+  const nodeElements = nodeGroup
+    .selectAll(".node")
+    .data(nodes)
     .enter()
     .append("g")
-    .attr("class", (d) => `node ${d.type}`)
-    .style("opacity", 0) // Start with opacity 0 for fade-in effect
-    .call(
-      d3
-        .drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended)
-    )
-
-  // Add circles to new nodes
-  nodeEnter.append("circle")
-    .attr("r", 0) // Start with radius 0 for growing animation
-    .transition()
-    .duration(250)
-    .attr("r", 25); // Grow to final size
-
-  // Add text labels to new nodes
-  nodeEnter
-    .append("text")
-    .attr("dy", 5)
-    .text((d) => d.id)
-    .attr("fill", "white")
-    .style("opacity", 0) // Start with opacity 0
-    .transition()
-    .duration(250)
-    .style("opacity", 1); // Fade in
+    .attr("class", d => `node ${d.type}`)
+    .attr("data-in-cycle", d => d.isInCycle === true ? "true" : "false")
+    .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`)
+    .style("opacity", 0) // Start invisible for fade-in
+    .call(d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended));
   
-  // Animate the node's appearance
-  nodeEnter
-    .transition()
-    .duration(250)
-    .style("opacity", 1); // Fade in
-  
-  // Special animation for deadlock nodes
-  nodeElements.filter(d => d.isInCycle)
-    .select("circle")
-    .transition()
-    .duration(250)
-    .attr("r", 28) // Slightly larger
-    .transition()
-    .duration(250)
-    .attr("r", 25) // Back to normal size
-    .on("end", function() {
-      // Repeat the pulse animation for nodes in deadlock
-      if (d3.select(this.parentNode).datum().isInCycle) {
-        d3.select(this)
-          .transition()
-          .duration(500)
-          .attr("r", 28)
-          .transition()
-          .duration(500)
-          .attr("r", 25);
+  // Add circles to nodes with scale animation
+  nodeElements
+    .append("circle")
+    .attr("r", 0) // Start with radius 0
+    .attr("fill", d => d.type === "thread" ? "var(--danger-color)" : "var(--primary-color)")
+    .attr("stroke", d => {
+      if (d.type === "thread" && d.isInCycle) {
+        return "#f44336"; // Modern red for deadlock threads
+      }
+      return d.type === "thread" ? "var(--danger-dark)" : "var(--primary-dark)";
+    })
+    .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
+    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none")
+    .each(function(d) {
+      if (d.isInCycle) {
+        // Add a subtle glow effect for threads in deadlock
+        d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
       }
     });
-
-  // Handle tooltips
-  nodeEnter
-    .on("mouseover", function (event, d) {
+  
+  // Add text labels
+  nodeElements
+    .append("text")
+    .attr("dy", 5)
+    .text(d => d.id)
+    .attr("fill", "white")
+    .style("opacity", 0); // Start with transparent text
+  
+  // Animate nodes appearing
+  nodeElements
+    .transition()
+    .duration(400)
+    .style("opacity", 1) // Fade in the node
+    .select("circle")
+    .attr("r", 25); // Grow to full size
+    
+  // Animate text appearing
+  nodeElements
+    .select("text")
+    .transition()
+    .delay(200) // Slight delay after the circle starts growing
+    .duration(200)
+    .style("opacity", 1);
+  
+  // Add tooltips
+  nodeElements
+    .on("mouseover", function(event, d) {
       d3.select(".tooltip")
-        .style("opacity", 0)
+        .style("opacity", 0.9)
         .html(d.name)
-        .style("left", event.pageX + 10 + "px")
-        .style("top", event.pageY - 28 + "px")
-        .transition()
-        .duration(200)
-        .style("opacity", 0.9);
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 28) + "px");
     })
-    .on("mouseout", function () {
+    .on("mouseout", function() {
       d3.select(".tooltip")
-        .transition()
-        .duration(200)
         .style("opacity", 0);
     });
 }
 
 // Helper function to update link elements
 function updateLinkElements() {
-  // Join links with elements
+  // Clear existing links first
+  linkGroup.selectAll("*").remove();
+  
+  console.log("Updating links, count:", links.length); // Debug
+  
+  // Create all links from scratch
+  links.forEach(link => {
+    console.log("Link:", link.source.id, "->", link.target.id, "type:", link.type); // Debug
+  });
+  
+  // Add all links as SVG lines
   const linkElements = linkGroup
     .selectAll(".link")
-    .data(links, (d) => `${d.source}-${d.target}`)
-
-  // Remove old links
-  linkElements.exit().remove()
-
-  // Create new links
-  linkElements
+    .data(links)
     .enter()
     .append("line")
-    .attr("class", (d) => `link ${d.type}`)
-    .attr("marker-end", "url(#arrowhead)")
-
-  // Update all links
-  linkGroup.selectAll(".link").attr("class", (d) => `link ${d.type}`)
+    .attr("class", d => `link ${d.type}`)
+    .attr("stroke", d => d.type === "deadlock" ? "#f44336" : null)
+    .attr("stroke-width", d => d.type === "deadlock" ? "4" : null)
+    .attr("x1", d => d.source.x || 0)
+    .attr("y1", d => d.source.y || 0)
+    .attr("x2", d => d.target.x || 0)
+    .attr("y2", d => d.target.y || 0)
+    .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)")
+    .style("opacity", 0) // Start invisible for fade-in
+    .each(function(d) {
+      // Directly apply the SVG filter for deadlock links
+      if (d.type === "deadlock") {
+        d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
+        // Add a subtle dash pattern to make it more modern
+        d3.select(this).style("stroke-dashoffset", "0");
+      }
+    });
+    
+  // Animate links appearing with slight delay after nodes start appearing
+  linkElements
+    .transition()
+    .delay(200)
+    .duration(300)
+    .style("opacity", 1);
 }
 
 /**
@@ -1397,18 +1484,12 @@ function updateStepInfo() {
 
       // Format the cycle with better visualization
       const cycle = logEntry.deadlock_details.thread_cycle || []
-      const graphThreadMapping = {}
-      
-      // Create a mapping for thread IDs
-      cycle.sort().forEach((id, index) => {
-        graphThreadMapping[id] = index + 1
-      })
       
       if (cycle.length > 0) {
         // Create a nicer cycle visualization
         waitGraphContent += `<div class="cycle-visualization animate__animated animate__pulse">`
         cycle.forEach((threadId, index) => {
-          waitGraphContent += `<span class="thread-id">Thread ${graphThreadMapping[threadId]}(${threadId})</span>`
+          waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
           if (index < cycle.length - 1) {
             waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `
           }
@@ -1416,7 +1497,7 @@ function updateStepInfo() {
 
         // Add arrow back to first thread to show the cycle clearly
         if (cycle.length > 1) {
-          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${graphThreadMapping[cycle[0]]}(${cycle[0]})</span>`
+          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
         }
 
         // Add non-breaking spaces for visible spacing at the end (using &nbsp;)
@@ -1435,15 +1516,8 @@ function updateStepInfo() {
       // Show simple wait-for edge with improved description
       const { from, to } = logEntry.wait_for_edge
       
-      // Create a mapping for thread IDs
-      const threadIds = [from, to];
-      const graphThreadMapping = {}
-      threadIds.sort().forEach((id, index) => {
-        graphThreadMapping[id] = index + 1
-      })
-
       let waitGraphContent = `<h3 class="animate__animated animate__fadeIn">Resource Waiting</h3><div id="wait-graph-content" class="animate__animated animate__fadeIn">`
-      waitGraphContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${graphThreadMapping[from]}(${from})</span> is waiting for a resource held by <span class="thread-id">Thread ${graphThreadMapping[to]}(${to})</span>.</p>`
+      waitGraphContent += `<p class="animate__animated animate__fadeIn"><span class="thread-id">Thread ${from}</span> is waiting for a resource held by <span class="thread-id">Thread ${to}</span>.</p>`
       waitGraphContent += `</div>`
 
       waitGraphElement.innerHTML = waitGraphContent
@@ -1515,18 +1589,18 @@ function ticked() {
     if (d.y > maxY) d.y = maxY
   })
 
-  // Update node elements
+  // Update node positions
   nodeGroup
     .selectAll(".node")
-    .attr("transform", (d) => `translate(${d.x}, ${d.y})`)
+    .attr("transform", d => `translate(${d.x}, ${d.y})`);
 
-  // Update link elements
+  // Update link positions
   linkGroup
     .selectAll(".link")
-    .attr("x1", (d) => d.source.x)
-    .attr("y1", (d) => d.source.y)
-    .attr("x2", (d) => d.target.x)
-    .attr("y2", (d) => d.target.y)
+    .attr("x1", d => d.source.x)
+    .attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x)
+    .attr("y2", d => d.target.y);
 }
 
 /**

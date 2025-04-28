@@ -185,14 +185,18 @@
 /* Thread and resource IDs styling */
 .thread-id {
     font-family: 'Roboto Mono', monospace;
-    color: var(--danger-color);
+    color: #e74c3c;
     font-weight: 500;
+    position: relative;
+    font-size: 0.95em;
 }
 
 .resource-id {
     font-family: 'Roboto Mono', monospace;
-    color: var(--primary-color);
+    color: #3498db;
     font-weight: 500;
+    position: relative;
+    font-size: 0.95em;
 }
 
 /* Modern card styling */
@@ -362,10 +366,29 @@ header {
 }
 
 .cycle-visualization .thread-id {
-    padding: 4px 8px;
-    background-color: rgba(231, 76, 60, 0.15);
+    padding: 3px 6px;
+    background-color: rgba(244, 67, 54, 0.1);
     border-radius: 4px;
-    border: 1px solid rgba(231, 76, 60, 0.3);
+    border: 1px solid rgba(244, 67, 54, 0.2);
+    font-size: 0.9em;
+    display: inline-block;
+}
+
+.cycle-visualization i {
+    color: #f44336;
+    opacity: 0.8;
+    font-size: 0.9em;
+    margin: 0 3px;
+}
+
+.deadlock-explanation {
+    font-size: 0.9em;
+    color: #757575;
+    margin-top: 8px;
+    padding: 8px;
+    background-color: rgba(244, 67, 54, 0.05);
+    border-radius: 4px;
+    border-left: 3px solid #f44336;
 }
 
 #theme-toggle i, .header-btn i {
@@ -650,6 +673,14 @@ main {
     background-color: var(--neutral-color);
 }
 
+.timeline-event.spawn {
+    background-color: #9b59b6; /* Purple color for spawn events */
+}
+
+.timeline-event.exit {
+    background-color: #34495e; /* Dark blue color for exit events */
+}
+
 .timeline-event.deadlock {
     background-color: var(--danger-color);
     width: 18px; /* Reduced from 20px */
@@ -740,6 +771,17 @@ main {
     background-color: var(--success-color);
 }
 
+.legend-line.spawn {
+    background-color: #9b59b6;
+}
+
+.legend-line.exit {
+    background-color: #34495e;
+    background-image: linear-gradient(to right, #34495e 50%, transparent 50%);
+    background-size: 8px 100%;
+    background-repeat: repeat-x;
+}
+
 .legend-line.deadlock {
     background-color: var(--danger-color);
     height: 5px; /* Reduced from 6px */
@@ -785,6 +827,26 @@ main {
     stroke-width: 2px; /* Reduced from 3px */
 }
 
+/* Special highlighting for nodes in a deadlock cycle */
+.node.thread[data-in-cycle="true"] circle {
+    fill: var(--danger-color);
+    stroke: #ff0000;
+    stroke-width: 3px;
+    stroke-dasharray: 3;
+    animation: pulse 1.5s infinite alternate;
+}
+
+@keyframes pulse {
+    from {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+        stroke-width: 3px;
+    }
+    to {
+        box-shadow: 0 0 0 5px rgba(255, 0, 0, 0);
+        stroke-width: 4px;
+    }
+}
+
 .link {
     stroke: var(--neutral-color);
     stroke-width: 2px; /* Reduced from 3px */
@@ -799,12 +861,27 @@ main {
 
 .link.acquired {
     stroke: var(--success-color);
-    stroke-width: 2px; /* Reduced from 3px */
+    stroke-width: 3px; /* Reduced from 4px */
+}
+
+.link.spawn {
+    stroke: #9b59b6; /* Purple color for spawn links */
+    stroke-width: 2.5px;
+}
+
+.link.exit {
+    stroke: #34495e; /* Dark blue color for exit links */
+    stroke-width: 2.5px;
+    stroke-dasharray: 2;
 }
 
 .link.deadlock {
-    stroke: var(--danger-color);
-    stroke-width: 3px; /* Reduced from 4px */
+    stroke: #f44336;
+    stroke-width: 4px; 
+    animation: pulse-link 3s infinite;
+    stroke-opacity: 0.9;
+    filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7));
+    z-index: 1000;
 }
 
 .node text {
@@ -1181,4 +1258,20 @@ button.primary-action {
 
 .settings-menu {
     transition: all 0.1s;
+}
+
+/* Animation for deadlock links */
+@keyframes pulse-link {
+    0% {
+        stroke-opacity: 0.9;
+        stroke-width: 4px;
+    }
+    50% {
+        stroke-opacity: 0.7;
+        stroke-width: 5px;
+    }
+    100% {
+        stroke-opacity: 0.9;
+        stroke-width: 4px;
+    }
 }

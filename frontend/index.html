@@ -222,6 +222,14 @@
                         <span>Acquired</span>
                     </div>
                     <div class="legend-item">
+                        <div class="legend-line spawn"></div>
+                        <span>Spawn</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line exit"></div>
+                        <span>Exit</span>
+                    </div>
+                    <div class="legend-item">
                         <div class="legend-line deadlock"></div>
                         <span>Deadlock</span>
                     </div>
@@ -269,10 +277,12 @@
                 <h3>Visualization Legend</h3>
                 <p>The visualization shows threads and resources as nodes, with different types of relationships between them:</p>
                 <ul>
-                    <li><strong>Thread Nodes:</strong> Represented as blue circles</li>
-                    <li><strong>Resource Nodes:</strong> Represented as green circles</li>
+                    <li><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</li>
+                    <li><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</li>
                     <li><strong>Attempt:</strong> A thread is attempting to acquire a resource</li>
                     <li><strong>Acquired:</strong> A thread has successfully acquired a resource</li>
+                    <li><strong>Spawn:</strong> A thread is created or a resource is generated</li>
+                    <li><strong>Exit:</strong> A thread exits or a resource is dropped</li>
                     <li><strong>Deadlock:</strong> A circular wait condition has been detected</li>
                 </ul>
                 
