@@ -1,4 +1,4 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
 use rand::Rng;
 use std::{
     sync::{Arc, Barrier, Mutex, mpsc},
@@ -46,7 +46,7 @@ fn test_random_ring_deadlock() {
         let second = locks[(i + 1) % n].clone();
         let bar = barrier.clone();
 
-        handles.push(thread::spawn(move || {
+        handles.push(TrackedThread::spawn(move || {
             let mut rng = rand::rng();
 
             // Rendezvous

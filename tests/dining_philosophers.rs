@@ -1,4 +1,4 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex};
+use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -50,7 +50,7 @@ fn test_dining_philosophers_deadlock() {
         let right_fork = Arc::clone(&forks[(i + 1) % num_philosophers]);
 
         // Philosopher thread
-        let handle = thread::spawn(move || {
+        let handle = TrackedThread::spawn(move || {
             // Try to take the left fork first
             println!("Philosopher {} is trying to take left fork", i);
             let _left = left_fork.lock().unwrap();
