@@ -6,6 +6,13 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
+#[cfg(feature = "stress-test")]
+use crate::core::stress::{on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release};
+#[cfg(feature = "stress-test")]
+use crate::core::StressMode;
+#[cfg(feature = "stress-test")]
+use crate::core::StressConfig;
+
 /// Main deadlock detector that maintains thread-lock relationships
 ///
 /// The Detector is the heart of Deloxide. It tracks which threads own which locks,
@@ -30,6 +37,12 @@ pub struct Detector {
     on_deadlock: Option<Box<dyn Fn(DeadlockInfo) + Send>>,
     /// Tracks, for each thread, which locks it currently holds
     thread_holds: HashMap<ThreadId, HashSet<LockId>>,
+    #[cfg(feature = "stress-test")]
+    /// Stress testing mode
+    stress_mode: StressMode,
+    #[cfg(feature = "stress-test")]
+    /// Stress testing configuration
+    stress_config: Option<StressConfig>,
 }
 
 impl Default for Detector {
@@ -47,6 +60,25 @@ impl Detector {
             thread_waits_for: HashMap::new(),
             on_deadlock: None,
             thread_holds: HashMap::new(),
+            #[cfg(feature = "stress-test")]
+            stress_mode: StressMode::None,
+            #[cfg(feature = "stress-test")]
+            stress_config: None,
+        }
+    }
+
+    #[cfg(feature = "stress-test")]
+    #[allow(dead_code)]
+    /// Create a new deadlock detector with stress testing config
+    pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
+        Detector {
+            wait_for_graph: WaitForGraph::new(),
+            lock_owners: HashMap::new(),
+            thread_waits_for: HashMap::new(),
+            on_deadlock: None,
+            thread_holds: HashMap::new(),
+            stress_mode: mode,
+            stress_config: config,
         }
     }
 
@@ -151,6 +183,28 @@ impl Detector {
             logger::log_interaction_event(thread_id, lock_id, Events::Attempt);
         }
 
+        // Apply stress testing if enabled
+        #[cfg(feature = "stress-test")]
+        {
+            if self.stress_mode != StressMode::None {
+                if let Some(config) = &self.stress_config {
+                    // Get the currently held locks by this thread
+                    let held_locks = self.thread_holds.get(&thread_id)
+                        .map(|set| set.iter().copied().collect::<Vec<_>>())
+                        .unwrap_or_default();
+
+                    // Apply stress strategy
+                    stress_on_lock_attempt(
+                        self.stress_mode,
+                        thread_id,
+                        lock_id,
+                        &held_locks,
+                        config
+                    );
+                }
+            }
+        }
+
         if let Some(&owner) = self.lock_owners.get(&lock_id) {
             // record wait-for
             self.thread_waits_for.insert(thread_id, lock_id);
@@ -237,6 +291,21 @@ impl Detector {
                 self.thread_holds.remove(&thread_id);
             }
         }
+
+        // Apply post-release stress testing if enabled
+        #[cfg(feature = "stress-test")]
+        {
+            if self.stress_mode != StressMode::None {
+                if let Some(config) = &self.stress_config {
+                    stress_on_lock_release(
+                        self.stress_mode,
+                        thread_id,
+                        lock_id,
+                        config
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -252,12 +321,30 @@ lazy_static::lazy_static! {
 ///
 /// # Arguments
 /// * `callback` - Function to call when a deadlock is detected
+#[allow(dead_code)]
 pub fn init_detector<F>(callback: F)
 where
     F: Fn(DeadlockInfo) + Send + 'static,
 {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.set_deadlock_callback(callback);
+    }
+}
+
+#[cfg(feature = "stress-test")]
+/// Initialize the global detector with stress testing configuration
+pub fn init_detector_with_stress<F>(
+    callback: F,
+    stress_mode: StressMode,
+    stress_config: Option<StressConfig>,
+)
+where
+    F: Fn(DeadlockInfo) + Send + 'static,
+{
+    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
+        detector.set_deadlock_callback(callback);
+        detector.stress_mode = stress_mode;
+        detector.stress_config = stress_config;
     }
 }
 

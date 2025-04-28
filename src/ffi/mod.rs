@@ -10,13 +10,27 @@ use crate::core::logger;
 use crate::core::tracked_mutex::TrackedGuard;
 use crate::core::utils::get_current_thread_id;
 use crate::core::{
-    ThreadId, TrackedMutex, init_detector, on_lock_create, on_thread_exit, on_thread_spawn,
+    ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn,
 };
 use serde_json;
 use std::cell::RefCell;
-use std::ffi::{CStr, CString, c_void};
+use std::ffi::{CStr, CString, c_void, c_double};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(not(feature = "stress-test"))]
+use crate::core::init_detector;
+
+#[cfg(feature = "stress-test")]
+use crate::core::detector;
+#[cfg(feature = "stress-test")]
+use crate::core::{StressMode, StressConfig};
+#[cfg(feature = "stress-test")]
+use std::sync::atomic::AtomicU8;
+#[cfg(feature = "stress-test")]
+static STRESS_MODE: AtomicU8 = AtomicU8::new(0); // 0=None, 1=Random, 2=Component
+#[cfg(feature = "stress-test")]
+static mut STRESS_CONFIG: Option<StressConfig> = None;
 
 // We'll keep each Rust guard alive here until the C code calls unlock.
 thread_local! {
@@ -74,28 +88,76 @@ pub unsafe extern "C" fn deloxide_init(
         // Store callback for later use
         DEADLOCK_CALLBACK = callback;
 
-        // Initialize with a callback that sets a flag and calls the C callback
-        match logger::init_logger(log_path_option) {
-            Ok(_) => {
-                init_detector(|deadlock_info| {
-                    #[allow(static_mut_refs)]
-                    DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
+        #[cfg(feature = "stress-test")]
+        {
+            // Get stress settings if feature is enabled
+            let stress_mode = match STRESS_MODE.load(Ordering::SeqCst) {
+                1 => StressMode::RandomPreemption,
+                2 => StressMode::ComponentBased,
+                _ => StressMode::None,
+            };
 
-                    // Call C callback if provided
-                    if let Some(cb) = DEADLOCK_CALLBACK {
-                        // Format deadlock info as JSON
-                        if let Ok(json) = serde_json::to_string(&deadlock_info) {
-                            // Convert JSON to CString, then pass ptr to callback
-                            if let Ok(c_str) = CString::new(json) {
-                                cb(c_str.as_ptr());
+            #[allow(static_mut_refs)]
+            let stress_config = STRESS_CONFIG.take();
+
+            // Initialize with a callback that sets a flag and calls the C callback
+            match logger::init_logger(log_path_option) {
+                Ok(_) => {
+                    // Initialize detector with stress settings
+                    detector::init_detector_with_stress(
+                        |deadlock_info| {
+                            #[allow(static_mut_refs)]
+                            DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
+
+                            // Call C callback if provided
+                            if let Some(cb) = DEADLOCK_CALLBACK {
+                                // Format deadlock info as JSON
+                                if let Ok(json) = serde_json::to_string(&deadlock_info) {
+                                    // Convert JSON to CString, then pass ptr to callback
+                                    if let Ok(c_str) = CString::new(json) {
+                                        cb(c_str.as_ptr());
+                                    }
+                                }
+                            }
+                        },
+                        stress_mode,
+                        stress_config,
+                    );
+
+                    INITIALIZED.store(true, Ordering::SeqCst);
+                    0 // Success
+                }
+                Err(_) => -2, // Failed to initialize logger
+            }
+        }
+
+        #[cfg(not(feature = "stress-test"))]
+        {
+            // Standard initialization without stress testing
+            match logger::init_logger(log_path_option) {
+                Ok(_) => {
+                    // Initialize with a callback that sets a flag and calls the C callback
+                    init_detector(|deadlock_info| {
+                        #[allow(static_mut_refs)]
+                        DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
+
+                        // Call C callback if provided
+                        if let Some(cb) = DEADLOCK_CALLBACK {
+                            // Format deadlock info as JSON
+                            if let Ok(json) = serde_json::to_string(&deadlock_info) {
+                                // Convert JSON to CString, then pass ptr to callback
+                                if let Ok(c_str) = CString::new(json) {
+                                    cb(c_str.as_ptr());
+                                }
                             }
                         }
-                    }
-                });
-                INITIALIZED.store(true, Ordering::SeqCst);
-                0 // Success
+                    });
+
+                    INITIALIZED.store(true, Ordering::SeqCst);
+                    0 // Success
+                }
+                Err(_) => -2, // Failed to initialize logger
             }
-            Err(_) => -2, // Failed to initialize logger
         }
     }
 }
@@ -432,5 +494,140 @@ pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
                 -2 // Showcase failed
             }
         }
+    }
+}
+
+/// Enable random preemption stress testing (only with "stress-test" feature)
+///
+/// This function enables stress testing with random preemptions before lock
+/// acquisitions to increase deadlock probability.
+///
+/// # Arguments
+/// * `probability` - Probability of preemption (0.0-1.0)
+/// * `min_delay_ms` - Minimum delay duration in milliseconds
+/// * `max_delay_ms` - Maximum delay duration in milliseconds
+///
+/// # Returns
+/// * `0` on success
+/// * `1` if already initialized
+/// * `-1` if stress-test feature is not enabled
+///
+/// # Safety
+/// This function writes to mutable static variables and should be called before initialization.
+#[unsafe(no_mangle)]
+#[allow(unused_variables)]
+pub unsafe extern "C" fn deloxide_enable_random_stress(
+    probability: c_double,
+    min_delay_ms: c_ulong,
+    max_delay_ms: c_ulong
+) -> c_int {
+    #[cfg(feature = "stress-test")]
+    {
+        if INITIALIZED.load(Ordering::SeqCst) {
+            return 1; // Already initialized
+        }
+
+        STRESS_MODE.store(1, Ordering::SeqCst);
+
+        unsafe {
+            STRESS_CONFIG = Some(StressConfig {
+                preemption_probability: probability,
+                min_delay_ms,
+                max_delay_ms,
+                preempt_after_release: true,
+            });
+        }
+
+        return 0;
+    }
+
+    #[cfg(not(feature = "stress-test"))]
+    {
+        // Return error if stress-test feature is not enabled
+        return -1;
+    }
+}
+
+/// Enable component-based stress testing (only with "stress-test" feature)
+///
+/// This function enables stress testing with targeted delays based on lock
+/// acquisition patterns to increase deadlock probability.
+///
+/// # Arguments
+/// * `min_delay_ms` - Minimum delay duration in milliseconds
+/// * `max_delay_ms` - Maximum delay duration in milliseconds
+///
+/// # Returns
+/// * `0` on success
+/// * `1` if already initialized
+/// * `-1` if stress-test feature is not enabled
+///
+/// # Safety
+/// This function writes to mutable static variables and should be called before initialization.
+#[unsafe(no_mangle)]
+#[allow(unused_variables)]
+pub unsafe extern "C" fn deloxide_enable_component_stress(
+    min_delay_ms: c_ulong,
+    max_delay_ms: c_ulong
+) -> c_int {
+    #[cfg(feature = "stress-test")]
+    {
+        if INITIALIZED.load(Ordering::SeqCst) {
+            return 1; // Already initialized
+        }
+
+        STRESS_MODE.store(2, Ordering::SeqCst);
+
+        unsafe {
+            STRESS_CONFIG = Some(StressConfig {
+                preemption_probability: 0.8, // High probability for component-based mode
+                min_delay_ms,
+                max_delay_ms,
+                preempt_after_release: true,
+            });
+        }
+
+        return 0;
+    }
+
+    #[cfg(not(feature = "stress-test"))]
+    {
+        // Return error if stress-test feature is not enabled
+        return -1;
+    }
+}
+
+/// Disable stress testing (only with "stress-test" feature)
+///
+/// This function disables any previously enabled stress testing mode.
+///
+/// # Returns
+/// * `0` on success
+/// * `1` if already initialized
+/// * `-1` if stress-test feature is not enabled
+///
+/// # Safety
+/// This function writes to mutable static variables and should be called before initialization.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_disable_stress() -> c_int {
+    #[cfg(feature = "stress-test")]
+    {
+        if INITIALIZED.load(Ordering::SeqCst) {
+            return 1; // Already initialized
+        }
+
+        STRESS_MODE.store(0, Ordering::SeqCst);
+
+        unsafe {
+            STRESS_CONFIG = None;
+        }
+
+        return 0;
+    }
+
+    #[cfg(not(feature = "stress-test"))]
+    {
+        // Return error if stress-test feature is not enabled
+        return -1;
     }
 }

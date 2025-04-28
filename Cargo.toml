@@ -19,6 +19,10 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 name = "deloxide"
 path = "src/main.rs"
 
+[features]
+default = []
+stress-test = [] # for stress testing functionality
+
 [dependencies]
 parking_lot = "0.12.1"  # Alternative to std mutex with better performance
 chrono = "0.4"  # For timestamps in logging
@@ -41,4 +45,4 @@ clap = { version = "4.4", features = ["derive"] }
 tempfile = "3.15.0"
 
 # For testing
-rand = "0.9.0-beta.3"
+rand =  "0.9.0-beta.3"

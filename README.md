@@ -13,6 +13,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 - **Visualization** - Web-based visualization of thread-lock relationships
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C/C++
+- **Stress testing** - Optional feature to increase deadlock manifestation during testing
 
 ## Project Architecture
 
@@ -53,6 +54,11 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
    - Rust API with `TrackedMutex` and `TrackedThread` types
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
+
+5. **Stress Testing** (Optional with stress-testing feature)
+   - Strategically delays threads to increase deadlock probability
+   - Multiple strategies for different testing scenarios
+   - Available as an opt-in feature for testing environments
 
 ## Quick Start
 
@@ -168,6 +174,70 @@ int main() {
 }
 ```
 
+## Stress Testing
+
+Deloxide includes an optional stress testing feature to increase the probability of deadlock manifestation during testing. This feature helps expose potential deadlocks by strategically delaying threads at critical points.
+
+### Enabling Stress Testing
+
+#### In Rust:
+
+Enable the feature in your `Cargo.toml`:
+
+```toml
+[dependencies]
+deloxide = { version = "0.1.0", features = ["stress-test"] }
+```
+
+Then use the stress testing API:
+
+```rust
+// With random preemption strategy
+Deloxide::new()
+    .with_log("deadlock.log")
+    .with_random_stress()
+    .callback(|info| {
+        eprintln!("Deadlock detected! Cycle: {:?}", info.thread_cycle);
+    })
+    .start()
+    .expect("Failed to initialize detector");
+
+// Or with component-based strategy and custom configuration
+use deloxide::StressConfig;
+
+Deloxide::new()
+    .with_log("deadlock.log")
+    .with_component_stress()
+    .with_stress_config(StressConfig {
+        preemption_probability: 0.8,
+        min_delay_ms: 5,
+        max_delay_ms: 20,
+        preempt_after_release: true,
+    })
+    .start()
+    .expect("Failed to initialize detector");
+```
+
+#### In C:
+
+Build Deloxide with the stress-test feature enabled, then:
+
+```c
+// Enable random preemption stress testing (70% probability, 1-10ms delays)
+deloxide_enable_random_stress(0.7, 1, 10);
+
+// Or enable component-based stress testing
+deloxide_enable_component_stress(5, 15);
+
+// Initialize detector
+deloxide_init("deadlock.log", deadlock_callback);
+```
+
+### Stress Testing Modes
+
+- **Random Preemption**: Randomly delays threads before lock acquisitions with configurable probability
+- **Component-Based**: Analyzes lock acquisition patterns and intelligently targets delays to increase deadlock probability
+
 ## Building and Installation
 
 ### Rust
@@ -177,6 +247,13 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 ```toml
 [dependencies]
 deloxide = "0.1.0"
+```
+
+With stress testing:
+
+```toml
+[dependencies]
+deloxide = { version = "0.1.0", features = ["stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:
@@ -189,7 +266,11 @@ deloxide my_deadlock.log  # Opens visualization in browser
 For development builds:
 
 ```bash
+# Standard build
 cargo build --release
+
+# With stress testing feature
+cargo build --release --features stress-test
 ```
 
 ### C
@@ -199,6 +280,9 @@ For C programs, you'll need to compile the Rust library and link against it:
 ```bash
 # Build the Rust library
 cargo build --release
+
+# With stress testing feature
+cargo build --release --features stress-test
 
 # Compile your C program with Deloxide
 gcc -Iinclude your_program.c -Ltarget/release -ldeloxide -lpthread -o your_program
@@ -248,7 +332,7 @@ Example programs are provided in both Rust and C to demonstrate various deadlock
 - **Dining Philosophers**: Classic deadlock scenario
 - **Random Ring**: Deadlock in a ring of threads
 
-See examples in /tests or /c_tests 
+See examples in /tests or /c_tests
 
 ## License
 

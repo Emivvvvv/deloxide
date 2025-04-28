@@ -31,6 +31,11 @@ pub use tracked_mutex::TrackedMutex;
 pub mod tracked_thread;
 pub use tracked_thread::TrackedThread;
 
+#[cfg(feature = "stress-test")]
+pub mod stress;
+#[cfg(feature = "stress-test")]
+pub use stress::{StressMode, StressConfig};
+
 pub mod utils;
 
 use anyhow::{Context, Result};
@@ -64,6 +69,14 @@ pub struct Deloxide {
 
     /// Callback function to invoke when a deadlock is detected
     callback: Box<dyn Fn(DeadlockInfo) + Send + 'static>,
+
+    /// Stress testing mode (only available with "stress-test" feature)
+    #[cfg(feature = "stress-test")]
+    stress_mode: StressMode,
+
+    /// Stress testing configuration (only available with "stress-test" feature)
+    #[cfg(feature = "stress-test")]
+    stress_config: Option<StressConfig>,
 }
 
 impl Default for Deloxide {
@@ -87,6 +100,10 @@ impl Deloxide {
                     serde_json::to_string_pretty(&info).unwrap_or_else(|_| format!("{:?}", info))
                 );
             }),
+            #[cfg(feature = "stress-test")]
+            stress_mode: StressMode::None,
+            #[cfg(feature = "stress-test")]
+            stress_config: None,
         }
     }
 
@@ -174,12 +191,79 @@ impl Deloxide {
             init_logger(Some(log_path)).context("Failed to initialize logger")?;
         }
 
-        // Initialize the detector with the callback
-        init_detector(self.callback);
+        // Initialize the detector
+        #[cfg(not(feature = "stress-test"))]
+        {
+            init_detector(self.callback);
+        }
+
+        #[cfg(feature = "stress-test")]
+        {
+            // Initialize detector with stress settings
+            detector::init_detector_with_stress(
+                self.callback,
+                self.stress_mode,
+                self.stress_config,
+            );
+        }
 
         // Print header
         println!("{}", crate::BANNER);
 
         Ok(())
+    }
+
+    /// Enable random preemption stress testing
+    ///
+    /// This method enables stress testing with random thread preemptions
+    /// before lock acquisitions to increase deadlock probability.
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Note
+    /// This method is only available when the "stress-test" feature is enabled.
+    #[cfg(feature = "stress-test")]
+    pub fn with_random_stress(mut self) -> Self {
+        self.stress_mode = StressMode::RandomPreemption;
+        if self.stress_config.is_none() {
+            self.stress_config = Some(StressConfig::default());
+        }
+        self
+    }
+
+    /// Enable component-based stress testing
+    ///
+    /// This method enables stress testing with strategic delays based on
+    /// lock acquisition patterns to increase deadlock probability.
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Note
+    /// This method is only available when the "stress-test" feature is enabled.
+    #[cfg(feature = "stress-test")]
+    pub fn with_component_stress(mut self) -> Self {
+        self.stress_mode = StressMode::ComponentBased;
+        if self.stress_config.is_none() {
+            self.stress_config = Some(StressConfig::default());
+        }
+        self
+    }
+
+    /// Configure stress testing parameters
+    ///
+    /// # Arguments
+    /// * `config` - Configuration for stress testing
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Note
+    /// This method is only available when the "stress-test" feature is enabled.
+    #[cfg(feature = "stress-test")]
+    pub fn with_stress_config(mut self, config: StressConfig) -> Self {
+        self.stress_config = Some(config);
+        self
     }
 }

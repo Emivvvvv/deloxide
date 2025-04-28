@@ -377,4 +377,57 @@ int deloxide_showcase(const char* log_path);
  */
 int deloxide_showcase_current();
 
+/*
+ * --- Stress Testing API ---
+ *
+ * These functions provide stress testing capabilities to increase the
+ * probability of deadlock manifestation during testing. They are only
+ * available when Deloxide is compiled with the "stress-test" feature.
+ */
+
+/**
+ * @brief Enable stress testing with random preemptions.
+ *
+ * This function enables stress testing with random preemptions before lock
+ * acquisitions to increase deadlock probability. It should be called before
+ * deloxide_init().
+ *
+ * @param probability Probability of preemption (0.0-1.0)
+ * @param min_delay_ms Minimum delay duration in milliseconds
+ * @param max_delay_ms Maximum delay duration in milliseconds
+ *
+ * @return 0 on success, 1 if already initialized, -1 if stress-test feature not enabled
+ *
+ * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
+ */
+int deloxide_enable_random_stress(double probability, unsigned long min_delay_ms, unsigned long max_delay_ms);
+
+/**
+ * @brief Enable stress testing with component-based delays.
+ *
+ * This function enables stress testing with targeted delays based on lock
+ * graph analysis to increase deadlock probability. It should be called before
+ * deloxide_init().
+ *
+ * @param min_delay_ms Minimum delay duration in milliseconds
+ * @param max_delay_ms Maximum delay duration in milliseconds
+ *
+ * @return 0 on success, 1 if already initialized, -1 if stress-test feature not enabled
+ *
+ * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
+ */
+int deloxide_enable_component_stress(unsigned long min_delay_ms, unsigned long max_delay_ms);
+
+/**
+ * @brief Disable stress testing.
+ *
+ * This function disables any previously enabled stress testing mode.
+ * It should be called before deloxide_init().
+ *
+ * @return 0 on success, 1 if already initialized, -1 if stress-test feature not enabled
+ *
+ * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
+ */
+int deloxide_disable_stress();
+
 #endif /* DELOXIDE_H */
