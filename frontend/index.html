@@ -157,17 +157,25 @@
             </div>
 
             <div id="controls" class="animate__animated animate__fadeIn">
+                <button id="play-btn" class="control-btn" data-playing="false">
+                    <i class="fas fa-play"></i>
+                    <span>Play</span>
+                </button>
                 <button id="prev-btn" class="control-btn" disabled>
                     <i class="fas fa-chevron-left"></i>
                     <span>Previous</span>
                 </button>
-                <button id="play-btn" class="control-btn" data-playing="false">
-                    <i class="fas fa-play"></i>
-                    <span>Play Animation</span>
-                </button>
                 <button id="next-btn" class="control-btn">
                     <i class="fas fa-chevron-right"></i>
                     <span>Next</span>
+                </button>
+                <button id="speed-up-btn" class="control-btn" title="Increase speed">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Faster</span>
+                </button>
+                <button id="speed-down-btn" class="control-btn" title="Decrease speed">
+                    <i class="fas fa-arrow-down"></i>
+                    <span>Slower</span>
                 </button>
                 <button id="reset-btn" class="control-btn">
                     <i class="fas fa-redo"></i>
@@ -267,6 +275,7 @@
                 <ul>
                     <li><strong>Previous/Next:</strong> Navigate between steps</li>
                     <li><strong>Play/Stop:</strong> Automatically advance through steps</li>
+                    <li><strong>Speed Up/Slow Down:</strong> Adjust animation playback speed</li>
                     <li><strong>Reset:</strong> Return to the first step</li>
                 </ul>
                 
@@ -274,6 +283,8 @@
                 <ul>
                     <li><strong>Left Arrow:</strong> Previous step</li>
                     <li><strong>Right Arrow:</strong> Next step</li>
+                    <li><strong>Up Arrow:</strong> Increase animation speed</li>
+                    <li><strong>Down Arrow:</strong> Decrease animation speed</li>
                     <li><strong>Space:</strong> Play/Stop animation</li>
                     <li><strong>R:</strong> Reset to first step</li>
                 </ul>

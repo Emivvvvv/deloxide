@@ -17,6 +17,7 @@ let currentScenario = null
 let animationInterval = null
 let isPlaying = false
 let isFileUploaded = false // Add flag to track if data was uploaded
+let animationSpeed = 1.0 // Default animation speed (1.0 = normal speed)
 
 // Theme management
 const themeToggle = document.getElementById("theme-toggle")
@@ -2102,6 +2103,10 @@ function togglePlay() {
     
     updateVisualization()
 
+    // Calculate timing based on animation speed
+    const animationDuration = Math.round(400 / animationSpeed); // Base duration adjusted by speed
+    const intervalDuration = Math.round(1200 / animationSpeed); // Base interval adjusted by speed
+
     // Enable buttons after animation completes
     setTimeout(() => {
       isAnimating = false;
@@ -2125,9 +2130,9 @@ function togglePlay() {
           isAnimating = false;
           enableNavigationButtons();
           step++;
-        }, 400); // Reduced from 600ms for faster animations
-      }, 1200) // Reduced from 1500ms for faster transitions between steps
-    }, 400); // Reduced from 600ms for faster initial animation
+        }, animationDuration); // Duration adjusted by animation speed
+      }, intervalDuration) // Interval adjusted by animation speed
+    }, animationDuration); // Initial duration adjusted by animation speed
   }
 }
 
@@ -2168,11 +2173,12 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+      }, animationDuration);
     }
   })
 
@@ -2191,11 +2197,12 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+      }, animationDuration);
     }
   })
 
@@ -2204,6 +2211,15 @@ function setupEventListeners() {
   document.getElementById("reset-btn").addEventListener("click", () => {
     resetGraph();
   })
+  
+  // Add event listeners for speed control buttons
+  document.getElementById("speed-up-btn").addEventListener("click", () => {
+    increaseAnimationSpeed();
+  });
+  
+  document.getElementById("speed-down-btn").addEventListener("click", () => {
+    decreaseAnimationSpeed();
+  });
 
   // Add keyboard navigation
   document.addEventListener("keydown", (event) => {
@@ -2223,10 +2239,12 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+      }, animationDuration);
     }
     
     // Right arrow key for next step
@@ -2242,10 +2260,24 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+      }, animationDuration);
+    }
+    
+    // Up arrow key to increase animation speed
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      increaseAnimationSpeed();
+    }
+    
+    // Down arrow key to decrease animation speed
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      decreaseAnimationSpeed();
     }
     
     // Spacebar for play/pause
@@ -2308,9 +2340,12 @@ function initApp() {
 
   // Initialize the upload feature
   initUploadFeature()
-
+    
   // Initialize the share feature
   initShareFeature()
+  
+  // Set initial animation speed
+  updateAnimationSpeedDisplay()
 
   if (hasSharedData) {
     // Process shared data
@@ -2485,6 +2520,10 @@ function resetGraph() {
 
   // Reset to first step
   currentStep = 1
+  
+  // Reset animation speed to default
+  animationSpeed = 1.0
+  updateAnimationSpeedDisplay()
 
   // Reset and redraw the visualization
   resetVisualization()
@@ -2494,4 +2533,54 @@ function resetGraph() {
   
   // Show a toast notification
   showToast("Visualization reset to initial state", "info", 2000);
+}
+
+/**
+ * Increase animation speed by 0.25 (faster animation)
+ */
+function increaseAnimationSpeed() {
+  // Cap the maximum speed at 3.0
+  if (animationSpeed < 3.0) {
+    animationSpeed += 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+    
+    // If animation is already playing, restart it with the new speed
+    if (isPlaying) {
+      stopAnimation();
+      togglePlay();
+    }
+  }
+}
+
+/**
+ * Decrease animation speed by 0.25 (slower animation)
+ */
+function decreaseAnimationSpeed() {
+  // Minimum speed of 0.25
+  if (animationSpeed > 0.25) {
+    animationSpeed -= 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+    
+    // If animation is already playing, restart it with the new speed
+    if (isPlaying) {
+      stopAnimation();
+      togglePlay();
+    }
+  }
+}
+
+/**
+ * Update the animation speed display in the button text
+ */
+function updateAnimationSpeedDisplay() {
+  const speedUpBtn = document.getElementById("speed-up-btn");
+  const speedDownBtn = document.getElementById("speed-down-btn");
+  
+  if (speedUpBtn && speedDownBtn) {
+    // Update tooltips or other indicators if needed
+    speedUpBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+    speedDownBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+  }
 }
