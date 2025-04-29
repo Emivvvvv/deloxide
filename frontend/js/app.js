@@ -17,6 +17,8 @@ let currentScenario = null
 let animationInterval = null
 let isPlaying = false
 let isFileUploaded = false // Add flag to track if data was uploaded
+let animationSpeed = 1.0 // Default animation speed (1.0 = normal speed)
+let buttonCooldown = false // Add variable to track button cooldown status
 
 // Theme management
 const themeToggle = document.getElementById("theme-toggle")
@@ -214,8 +216,9 @@ const initUploadFeature = () => {
           console.warn(
             "The uploaded file does not appear to be a valid deadlock log"
           )
-          alert(
-            "Warning: The file does not appear to be a valid deadlock log file. It may not display correctly."
+          showToast(
+            "Warning: The file does not appear to be a valid deadlock log file. It may not display correctly.",
+            "warning"
           )
         }
       } catch (error) {
@@ -275,9 +278,9 @@ const initUploadFeature = () => {
             document.getElementById("loading").innerHTML =
               '<div class="spinner"></div><p>Loading visualization...</p>'
 
-            // Hide share button for uploads
+            // Show share button for uploads
             if (shareBtn) {
-              shareBtn.style.display = "none"
+              shareBtn.style.display = "flex"
             }
 
             // Initialize visualization after a brief delay
@@ -297,7 +300,7 @@ const initUploadFeature = () => {
             }, 100)
           } catch (lineFormatError) {
             console.error("Error processing line-by-line JSON:", lineFormatError)
-            alert("Error processing log file: " + lineFormatError.message)
+            showToast("Error processing log file: " + lineFormatError.message, "error")
           }
         } else {
           // Handle standard JSON formats
@@ -329,9 +332,9 @@ const initUploadFeature = () => {
               document.getElementById("loading").innerHTML =
                 '<div class="spinner"></div><p>Loading visualization...</p>'
 
-              // Hide share button for uploads
+              // Show share button for uploads
               if (shareBtn) {
-                shareBtn.style.display = "none"
+                shareBtn.style.display = "flex"
               }
 
               // Initialize visualization after a brief delay
@@ -391,23 +394,21 @@ const initUploadFeature = () => {
                   // Auto-start removed - user needs to click play manually
                 }, 100)
               } else {
-                alert(
-                  "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
-                )
+                showToast("Error: The file is not a valid deadlock log file. Please upload a properly formatted file.", "error")
               }
             }
           } catch (jsonError) {
             console.error("Error parsing JSON:", jsonError)
-            alert("Error loading file: " + jsonError.message)
+            showToast("Error loading file: " + jsonError.message, "error")
           }
         }
       } catch (error) {
-        alert("Error loading file: " + error.message)
+        showToast("Error loading file: " + error.message, "error")
       }
     }
 
     reader.onerror = function () {
-      alert("Error reading file.")
+      showToast("Error reading file.", "error")
     }
 
     reader.readAsText(file)
@@ -487,15 +488,11 @@ function initShareFeature() {
         showCopySuccess()
       } else {
         console.error("Fallback: Unable to copy")
-        alert(
-          "Unable to copy to clipboard. Please select the text and copy manually."
-        )
+        showToast("Unable to copy to clipboard. Please select the text and copy manually.", "error")
       }
     } catch (err) {
       console.error("Fallback: Unable to copy", err)
-      alert(
-        "Unable to copy to clipboard. Please select the text and copy manually."
-      )
+      showToast("Unable to copy to clipboard. Please select the text and copy manually.", "error")
     }
   }
 
@@ -519,12 +516,30 @@ function openShareModal() {
   const shareLinkInput = document.getElementById("share-link")
 
   if (!currentScenario) {
-    alert("No scenario is currently loaded. Please upload a scenario first.")
+    showToast("No scenario is currently loaded. Please upload a scenario first.", "warning");
     return
   }
 
   try {
     console.log("Preparing to share scenario")
+
+    // Get the current URL and its base part (without query parameters)
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.split("?")[0];
+
+    // Check if we loaded this scenario from an encoded URL
+    if (currentUrl.includes('?logs=') || currentUrl.includes('?format=') || currentUrl.includes('?data=')) {
+      // We're already viewing an encoded URL, just use the current URL without step parameter
+      const shareUrl = currentUrl.split('&step=')[0]; // Remove step parameter if present
+      console.log("Using current encoded URL for sharing");
+      
+      // Set the input value
+      shareLinkInput.value = shareUrl;
+      
+      // Show the modal
+      showModalWithAnimation(shareModal);
+      return;
+    }
 
     // Check if data can be shared as raw content (new line-by-line format)
     if (currentScenario.rawContent) {
@@ -543,13 +558,12 @@ function openShareModal() {
         console.log("Line-by-line JSON format encoded, size:", encodedContent.length);
         
         // Generate URL with format parameter to indicate line-by-line
-        const currentUrl = window.location.href.split("?")[0];
-        const shareUrl = `${currentUrl}?format=line-by-line&logs=${encodedContent}&step=${currentStep}`;
+        const shareUrl = `${baseUrl}?format=line-by-line&logs=${encodedContent}`;
         
         // Set the input value - if it's too long, warn the user
         if (shareUrl.length > 8000) {
           console.warn("Warning: Generated URL is very long and may not work in all browsers");
-          alert("Warning: The generated URL is very long and may not work in all browsers. Consider using a file upload instead.");
+          showToast("Warning: The generated URL is very long and may not work in all browsers. Consider using a file upload instead.", "warning");
         }
         
         shareLinkInput.value = shareUrl;
@@ -570,8 +584,7 @@ function openShareModal() {
       )
 
       // Generate URL with the format parameter to indicate line-by-line
-      const currentUrl = window.location.href.split("?")[0]
-      const shareUrl = `${currentUrl}?format=line&data=${compressedData}&step=${currentStep}`
+      const shareUrl = `${baseUrl}?format=line&logs=${compressedData}`
 
       console.log("Share URL generated, length:", shareUrl.length)
 
@@ -604,8 +617,7 @@ function openShareModal() {
       console.log("Compressed logs size:", b64encoded.length, "characters")
 
       // Generate URL with the logs parameter
-      const currentUrl = window.location.href.split("?")[0]
-      const shareUrl = `${currentUrl}?logs=${b64encoded}&step=${currentStep}`
+      const shareUrl = `${baseUrl}?logs=${b64encoded}`
 
       console.log("Share URL generated, length:", shareUrl.length)
 
@@ -617,21 +629,19 @@ function openShareModal() {
       return
     }
 
-    // Fallback to using the processed scenario object
+    // Fallback to using the processed scenario object (for uploaded files without raw content or data)
     console.log("Using processed scenario data for sharing")
 
     // Create a compressed version of the current scenario
     const scenarioString = JSON.stringify(currentScenario)
     console.log("Original data size:", scenarioString.length, "bytes")
 
-    // Compress the data
-    const compressedData =
-      LZString.compressToEncodedURIComponent(scenarioString)
+    // Compress the data using LZString
+    const compressedData = LZString.compressToEncodedURIComponent(scenarioString)
     console.log("Compressed data size:", compressedData.length, "bytes")
 
-    // Generate the full URL with the compressed data
-    const currentUrl = window.location.href.split("?")[0] // Remove any existing query parameters
-    const shareUrl = `${currentUrl}?data=${compressedData}&step=${currentStep}`
+    // Generate the full URL with the compressed data using the logs parameter
+    const shareUrl = `${baseUrl}?logs=${compressedData}`
 
     console.log("Share URL generated, length:", shareUrl.length)
 
@@ -642,7 +652,7 @@ function openShareModal() {
     showModalWithAnimation(shareModal)
   } catch (error) {
     console.error("Error generating share link:", error)
-    alert("Error generating share link: " + error.message)
+    showToast("Error generating share link: " + error.message, "error")
   }
 }
 
@@ -668,7 +678,7 @@ function checkForSharedScenario() {
       console.log("Decoding logs from URL parameter...")
       let decodedData;
       
-      // Check if it's the line-by-line JSON format
+      // Check if it's the line-by-line JSON format (already encoded in the URL)
       if (encodedLogs.trim().startsWith("{") && encodedLogs.includes('{"event":')) {
         console.log("Detected line-by-line JSON format");
         decodedData = encodedLogs;
@@ -678,11 +688,33 @@ function checkForSharedScenario() {
           decodedData = JSON.parse(encodedLogs);
           console.log("Successfully parsed logs as JSON");
         } catch (e) {
-          // If not valid JSON, try to decode from Base64
+          // If not valid JSON, try to decode from URL encoding or Base64
           try {
-            console.log("Not a valid JSON, trying to decode from Base64...");
-            decodedData = decodeLogs(encodedLogs);
-            console.log("Successfully decoded logs from Base64");
+            // First try LZString decompression (for data shared from the app)
+            try {
+              console.log("Attempting to decompress with LZString...");
+              const decompressedData = LZString.decompressFromEncodedURIComponent(encodedLogs);
+              
+              if (decompressedData) {
+                try {
+                  // Try to parse the decompressed data as JSON
+                  decodedData = JSON.parse(decompressedData);
+                  console.log("Successfully decompressed and parsed logs with LZString");
+                } catch (parseError) {
+                  // If not valid JSON after decompression, it might be raw content
+                  decodedData = decompressedData;
+                  console.log("Decompressed data is not JSON, using as raw content");
+                }
+              } else {
+                // If LZString decompression failed, try Base64 decoding
+                throw new Error("LZString decompression failed");
+              }
+            } catch (lzError) {
+              // Try Base64 decoding as fallback
+              console.log("LZString failed, trying Base64 decoding...");
+              decodedData = decodeLogs(encodedLogs);
+              console.log("Successfully decoded logs from Base64");
+            }
           } catch (decodeError) {
             throw new Error("Failed to decode logs: " + decodeError.message);
           }
@@ -745,7 +777,8 @@ function checkForSharedScenario() {
     }
   }
 
-  if (encodedData) {
+  // Handle data parameter for backward compatibility
+  else if (encodedData) {
     // Handle the existing LZString format
     try {
       console.log("Found shared data in URL, processing...")
@@ -866,15 +899,15 @@ function checkForSharedScenario() {
           console.log("Shared visualization loaded successfully")
         }, 100)
       } else {
-        console.error("Invalid deadlock log format in shared data")
+        console.error("Invalid log format in shared URL")
         document.getElementById("loading").innerHTML = `
-                    <div class="error-message">
-                        <i class="fas fa-exclamation-triangle"></i> 
-                        The shared visualization data is invalid or corrupted.
-                    </div>`
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error: Invalid log format in shared URL
+                </div>`
       }
     } catch (error) {
-      console.error("Error loading shared scenario:", error)
+      console.error("Error loading shared visualization:", error)
       document.getElementById("loading").innerHTML = `
                 <div class="error-message">
                     <i class="fas fa-exclamation-triangle"></i> 
@@ -2071,6 +2104,10 @@ function togglePlay() {
     
     updateVisualization()
 
+    // Calculate timing based on animation speed
+    const animationDuration = Math.round(400 / animationSpeed); // Base duration adjusted by speed
+    const intervalDuration = Math.round(1200 / animationSpeed); // Base interval adjusted by speed
+
     // Enable buttons after animation completes
     setTimeout(() => {
       isAnimating = false;
@@ -2094,9 +2131,9 @@ function togglePlay() {
           isAnimating = false;
           enableNavigationButtons();
           step++;
-        }, 400); // Reduced from 600ms for faster animations
-      }, 1200) // Reduced from 1500ms for faster transitions between steps
-    }, 400); // Reduced from 600ms for faster initial animation
+        }, animationDuration); // Duration adjusted by animation speed
+      }, intervalDuration) // Interval adjusted by animation speed
+    }, animationDuration); // Initial duration adjusted by animation speed
   }
 }
 
@@ -2123,8 +2160,14 @@ function enableNavigationButtons() {
  */
 function setupEventListeners() {
   document.getElementById("prev-btn").addEventListener("click", () => {
-    // Don't allow navigation while animating
-    if (isAnimating) return;
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("prev-btn"));
+      }
+      return;
+    }
     
     // Stop any ongoing animation first
     if (isPlaying) {
@@ -2132,22 +2175,43 @@ function setupEventListeners() {
     }
  
     if (currentStep > 1) {
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep--;
       isAnimating = true;
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, animationDuration);
     }
   })
 
   document.getElementById("next-btn").addEventListener("click", () => {
-    // Don't allow navigation while animating
-    if (isAnimating) return;
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("next-btn"));
+      }
+      return;
+    }
     
     // Stop any ongoing animation first
     if (isPlaying) {
@@ -2155,44 +2219,62 @@ function setupEventListeners() {
     }
     
     if (currentStep < logData.length) {
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep++;
       isAnimating = true;
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, animationDuration);
     }
   })
 
   document.getElementById("play-btn").addEventListener("click", togglePlay)
 
   document.getElementById("reset-btn").addEventListener("click", () => {
-    // Don't allow reset while animating
-    if (isAnimating) return;
-    
-    // Stop animation if it's playing
-    if (isPlaying) {
-      stopAnimation();
-    }
-
-    // Reset to first step
-    currentStep = 1
-
-    // Reset and redraw the visualization
-    resetVisualization()
-    initVisualization()
-    initTimeline()
-    updateVisualization()
+    resetGraph();
   })
+  
+  // Add event listeners for speed control buttons
+  document.getElementById("speed-up-btn").addEventListener("click", () => {
+    increaseAnimationSpeed();
+  });
+  
+  document.getElementById("speed-down-btn").addEventListener("click", () => {
+    decreaseAnimationSpeed();
+  });
 
   // Add keyboard navigation
   document.addEventListener("keydown", (event) => {
-    // Don't respond to keyboard during animation
-    if (isAnimating) return;
+    // Don't respond to keyboard during animation or cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to use arrow keys during cooldown
+      if (buttonCooldown && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        const button = event.key === "ArrowLeft" ? 
+          document.getElementById("prev-btn") : 
+          document.getElementById("next-btn");
+        showButtonCooldownFeedback(button);
+      }
+      return;
+    }
     
     // Left arrow key for previous step
     if (event.key === "ArrowLeft" && currentStep > 1) {
@@ -2202,15 +2284,31 @@ function setupEventListeners() {
         stopAnimation();
       }
       
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep--;
       isAnimating = true;
       disableNavigationButtons();
       updateVisualization();
       
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, animationDuration);
     }
     
     // Right arrow key for next step
@@ -2221,21 +2319,55 @@ function setupEventListeners() {
         stopAnimation();
       }
       
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep++;
       isAnimating = true;
       disableNavigationButtons();
       updateVisualization();
       
+      // Enable buttons after animation completes with speed adjustment
+      const animationDuration = Math.round(400 / animationSpeed);
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 400); // Reduced from 600ms for faster response
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, animationDuration);
+    }
+    
+    // Up arrow key to increase animation speed
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      increaseAnimationSpeed();
+    }
+    
+    // Down arrow key to decrease animation speed
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      decreaseAnimationSpeed();
     }
     
     // Spacebar for play/pause
     if (event.key === " " || event.key === "Spacebar") {
       event.preventDefault()
       togglePlay()
+    }
+    
+    // 'r' key for reset
+    if (event.key === "r" || event.key === "R") {
+      event.preventDefault()
+      resetGraph();
     }
   })
 
@@ -2286,9 +2418,12 @@ function initApp() {
 
   // Initialize the upload feature
   initUploadFeature()
-
+    
   // Initialize the share feature
   initShareFeature()
+  
+  // Set initial animation speed
+  updateAnimationSpeedDisplay()
 
   if (hasSharedData) {
     // Process shared data
@@ -2391,4 +2526,217 @@ function stopAnimation() {
   const playBtnIcon = playBtn.querySelector("i");
   playBtnText.textContent = "Play Animation";
   playBtnIcon.className = "fas fa-play";
+}
+
+// Toast notification system
+function showToast(message, type = 'info', duration = 5000) {
+  // Create toast container if it doesn't exist
+  let toastContainer = document.querySelector('.toast-container');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+
+  // Create toast element
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  
+  // Get the appropriate icon based on type
+  let icon = 'fa-info-circle';
+  if (type === 'success') icon = 'fa-check-circle';
+  if (type === 'error') icon = 'fa-exclamation-circle';
+  if (type === 'warning') icon = 'fa-exclamation-triangle';
+  
+  // Set toast content
+  toast.innerHTML = `
+    <i class="fas ${icon} toast-icon"></i>
+    <div class="toast-content">${message}</div>
+    <button class="toast-close">&times;</button>
+  `;
+  
+  // Add to container
+  toastContainer.appendChild(toast);
+  
+  // Setup close button functionality
+  const closeBtn = toast.querySelector('.toast-close');
+  closeBtn.addEventListener('click', () => {
+    toast.style.animation = 'toast-out 0.3s forwards';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  });
+  
+  // Auto-dismiss after duration
+  if (duration > 0) {
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.animation = 'toast-out 0.3s forwards';
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+          }
+        }, 300);
+      }
+    }, duration);
+  }
+  
+  return toast;
+}
+
+// Add a function to reset the graph
+function resetGraph() {
+  // Don't allow reset while animating
+  if (isAnimating) return;
+  
+  // Stop animation if it's playing
+  if (isPlaying) {
+    stopAnimation();
+  }
+
+  // Reset to first step
+  currentStep = 1
+  
+  // Reset animation speed to default
+  animationSpeed = 1.0
+  updateAnimationSpeedDisplay()
+
+  // Reset and redraw the visualization
+  resetVisualization()
+  initVisualization()
+  initTimeline()
+  updateVisualization()
+  
+  // Show a toast notification
+  showToast("Visualization reset to initial state", "info", 2000);
+}
+
+/**
+ * Increase animation speed by 0.25 (faster animation)
+ */
+function increaseAnimationSpeed() {
+  // Cap the maximum speed at 3.0
+  if (animationSpeed < 3.0) {
+    animationSpeed += 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+    
+    // If animation is already playing, restart it with the new speed
+    if (isPlaying) {
+      stopAnimation();
+      togglePlay();
+    }
+  }
+}
+
+/**
+ * Decrease animation speed by 0.25 (slower animation)
+ */
+function decreaseAnimationSpeed() {
+  // Minimum speed of 0.25
+  if (animationSpeed > 0.25) {
+    animationSpeed -= 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+    
+    // If animation is already playing, restart it with the new speed
+    if (isPlaying) {
+      stopAnimation();
+      togglePlay();
+    }
+  }
+}
+
+/**
+ * Update the animation speed display in the button text
+ */
+function updateAnimationSpeedDisplay() {
+  const speedUpBtn = document.getElementById("speed-up-btn");
+  const speedDownBtn = document.getElementById("speed-down-btn");
+  
+  if (speedUpBtn && speedDownBtn) {
+    // Update tooltips or other indicators if needed
+    speedUpBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+    speedDownBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+  }
+}
+
+/**
+ * Modal Functionality
+ * Handles opening and closing modals with animations
+ */
+
+// Modal animation utility functions
+function showModalWithAnimation(modal) {
+    modal.style.display = 'flex';
+    // Small delay needed for the transition to work properly
+    setTimeout(() => {
+        modal.classList.add('active');
+        modal.querySelector('.modal-content').classList.add('show');
+    }, 10);
+}
+
+function hideModalWithAnimation(modal) {
+    const modalContent = modal.querySelector('.modal-content');
+    modalContent.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }, 200);
+}
+
+// Initialize modals when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Modal handling
+    const modals = document.querySelectorAll('.modal');
+    const closeButtons = document.querySelectorAll('.modal-close');
+    const helpToggle = document.querySelector('.help-toggle');
+    const uploadBtn = document.getElementById('upload-btn');
+    const shareBtn = document.getElementById('share-btn');
+    
+    // Close modal when clicking outside of it
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModalWithAnimation(modal);
+            }
+        });
+    });
+    
+    // Close modal with close button
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            hideModalWithAnimation(modal);
+        });
+    });
+    
+    // Open help modal
+    if (helpToggle) {
+        helpToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            showModalWithAnimation(document.getElementById('help-modal'));
+        });
+    }
+    
+    // Close modals with ESC key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            modals.forEach(modal => {
+                if (modal.classList.contains('active')) {
+                    hideModalWithAnimation(modal);
+                }
+            });
+        }
+    });
+});
+
+// Function to show visual feedback when buttons are in cooldown
+function showButtonCooldownFeedback(button) {
+  button.classList.add("btn-cooldown-feedback");
+  setTimeout(() => {
+    button.classList.remove("btn-cooldown-feedback");
+  }, 300);
 }

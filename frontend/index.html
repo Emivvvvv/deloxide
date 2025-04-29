@@ -27,112 +27,14 @@
     
     <!-- Animate.css for animations -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    
-    <style>
-        /* Additional styling for the cycle visualization */
-        .cycle-visualization {
-            padding: 12px;
-            background-color: var(--hover-bg);
-            border-radius: 8px;
-            margin: 12px 0;
-            text-align: center;
-            border-left: 4px solid var(--danger-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        
-
-        .cycle-visualization i {
-            color: var(--danger-color);
-        }
-
-        /* Logo styling */
-        .logo img {
-            height: 32px;
-            width: auto;
-            margin-right: 10px;
-            filter: brightness(0) invert(1); /* Makes the logo white */
-        }
-        
-        @media (max-width: 768px) {
-            .logo img {
-                height: 24px; /* Smaller on mobile */
-            }
-        }
-
-        .cycle-visualization i.fa-long-arrow-alt-right {
-            animation: arrowPulse 1s infinite;
-        }
-
-
-        @keyframes arrowPulse {
-            0% { transform: translateX(0); opacity: 0.6; }
-            50% { transform: translateX(3px); opacity: 1; }
-            100% { transform: translateX(0); opacity: 0.6; }
-        }
-
-        
-        .cycle-visualization.animate__pulse {
-            animation-iteration-count: infinite;
-            animation-duration: 2s;
-        }
-        
-        .resource-list {
-            margin-left: 15px;
-            padding-left: 10px;
-            border-left: 3px solid var(--primary-color);
-        }
-        
-        .resource-list li {
-            margin-bottom: 5px;
-        }
-        
-        /* Thread and resource IDs styling */
-        .thread-id {
-            font-family: 'Roboto Mono', monospace;
-            color: var(--danger-color);
-            font-weight: 500;
-        }
-        
-        .resource-id {
-            font-family: 'Roboto Mono', monospace;
-            color: var(--primary-color);
-            font-weight: 500;
-        }
-        
-        /* Step info enhancements */
-        #step-info p {
-            line-height: 1.5;
-            margin: 8px 0;
-        }
-
-        /* Deadlock message highlighting */
-        strong {
-            color: var(--highlight-color, #e74c3c);
-        }
-        
-        /* Timestamp styling */
-        .timestamp {
-            font-size: 0.85rem;
-            color: var(--text-secondary-color, #777);
-            margin-top: 15px;
-            border-top: 1px dotted var(--border-color, #ddd);
-            padding-top: 8px;
-        }
-
-        .timestamp i {
-            margin-right: 5px;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
         <header>
             <div class="logo">
-                <img src="img/logo.png" alt="Deloxide Logo">
+                <a href="index.html">
+                    <img src="img/logo.png" alt="Deloxide Logo">
+                </a>
             </div>
             <div class="header-buttons">
                 <button id="upload-btn" class="header-btn" aria-label="Upload log files">
@@ -157,17 +59,25 @@
             </div>
 
             <div id="controls" class="animate__animated animate__fadeIn">
+                <button id="play-btn" class="control-btn" data-playing="false">
+                    <i class="fas fa-play"></i>
+                    <span>Play</span>
+                </button>
                 <button id="prev-btn" class="control-btn" disabled>
                     <i class="fas fa-chevron-left"></i>
                     <span>Previous</span>
                 </button>
-                <button id="play-btn" class="control-btn" data-playing="false">
-                    <i class="fas fa-play"></i>
-                    <span>Play Animation</span>
-                </button>
                 <button id="next-btn" class="control-btn">
                     <i class="fas fa-chevron-right"></i>
                     <span>Next</span>
+                </button>
+                <button id="speed-up-btn" class="control-btn" title="Increase speed">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Faster</span>
+                </button>
+                <button id="speed-down-btn" class="control-btn" title="Decrease speed">
+                    <i class="fas fa-arrow-down"></i>
+                    <span>Slower</span>
                 </button>
                 <button id="reset-btn" class="control-btn">
                     <i class="fas fa-redo"></i>
@@ -257,7 +167,7 @@
     </div>
 
     <div id="help-modal" class="modal">
-        <div class="modal-content animate__animated animate__fadeIn animate__faster animate__faster">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>How to Use This Visualization</h2>
                 <button class="modal-close">&times;</button>
@@ -267,6 +177,7 @@
                 <ul>
                     <li><strong>Previous/Next:</strong> Navigate between steps</li>
                     <li><strong>Play/Stop:</strong> Automatically advance through steps</li>
+                    <li><strong>Speed Up/Slow Down:</strong> Adjust animation playback speed</li>
                     <li><strong>Reset:</strong> Return to the first step</li>
                 </ul>
                 
@@ -274,22 +185,48 @@
                 <ul>
                     <li><strong>Left Arrow:</strong> Previous step</li>
                     <li><strong>Right Arrow:</strong> Next step</li>
+                    <li><strong>Up Arrow:</strong> Increase animation speed</li>
+                    <li><strong>Down Arrow:</strong> Decrease animation speed</li>
                     <li><strong>Space:</strong> Play/Stop animation</li>
                     <li><strong>R:</strong> Reset to first step</li>
                 </ul>
                 
                 <h3>Visualization Legend</h3>
                 <p>The visualization shows threads and resources as nodes, with different types of relationships between them:</p>
-                <ul>
-                    <li><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</li>
-                    <li><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</li>
-                    <li><strong>Attempt:</strong> A thread is attempting to acquire a resource</li>
-                    <li><strong>Acquired:</strong> A thread has successfully acquired a resource</li>
-                    <li><strong>Released:</strong> A resource has been released</li>
-                    <li><strong>Spawn:</strong> A thread is created or a resource is generated</li>
-                    <li><strong>Exit:</strong> A thread exits or a resource is dropped</li>
-                    <li><strong>Deadlock:</strong> A circular wait condition has been detected</li>
-                </ul>
+                <div class="legend-container">
+                    <div class="legend-item-help">
+                        <div class="legend-color thread"></div>
+                        <span><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-color resource"></div>
+                        <span><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line attempt"></div>
+                        <span><strong>Attempt:</strong> A thread is attempting to acquire a resource</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line acquired"></div>
+                        <span><strong>Acquired:</strong> A thread has successfully acquired a resource</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line released"></div>
+                        <span><strong>Released:</strong> A resource has been released</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line spawn"></div>
+                        <span><strong>Spawn:</strong> A thread is created or a resource is generated</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line exit"></div>
+                        <span><strong>Exit:</strong> A thread exits or a resource is dropped</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line deadlock"></div>
+                        <span><strong>Deadlock:</strong> A circular wait condition has been detected</span>
+                    </div>
+                </div>
                 
                 <h3>Wait-for Graph</h3>
                 <p>The wait-for graph shows which threads are waiting for resources held by other threads.
@@ -352,35 +289,5 @@
     <!-- Custom JavaScript -->
     <script src="js/utils.js"></script>
     <script src="js/app.js"></script>
-    
-    <!-- Help modal functionality -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const modal = document.getElementById('help-modal');
-            const helpToggle = document.querySelector('.help-toggle');
-            const closeBtn = document.querySelector('.modal-close');
-            
-            helpToggle.addEventListener('click', function(e) {
-                e.preventDefault();
-                showModalWithAnimation(modal);
-            });
-            
-            closeBtn.addEventListener('click', function() {
-                hideModalWithAnimation(modal);
-            });
-            
-            window.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    hideModalWithAnimation(modal);
-                }
-            });
-            
-            // Check for logs parameter in URL for direct loading
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('logs') || urlParams.has('log')) {
-                console.log('Found logs parameter in URL, processing...');
-            }
-        });
-    </script>
 </body>
 </html>     
