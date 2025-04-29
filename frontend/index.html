@@ -126,13 +126,159 @@
         .timestamp i {
             margin-right: 5px;
         }
+
+        /* Legend styling for help modal */
+        .legend-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 15px 0;
+        }
+        
+        .legend-item-help {
+            display: flex;
+            align-items: center;
+            background-color: var(--hover-bg);
+            padding: 8px 12px;
+            border-radius: 6px;
+            flex: 1 1 300px;
+            transition: all 0.2s ease;
+        }
+        
+        .legend-item-help:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item-help .legend-color,
+        .legend-item-help .legend-line {
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        
+        .legend-item-help span {
+            font-size: 0.95rem;
+        }
+        
+        .legend-item-help span strong {
+            color: var(--primary-color);
+        }
+        
+        @media (max-width: 768px) {
+            .legend-item-help {
+                flex: 1 1 100%;
+                padding: 6px 10px;
+            }
+            
+            .legend-container {
+                gap: 8px;
+            }
+        }
+
+        /* Modal animations */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        
+        .modal.active {
+            opacity: 1;
+            display: flex;
+        }
+        
+        .modal-content {
+            background-color: var(--bg-color);
+            margin: 10px;
+            padding: 0;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transform: translateY(-20px);
+            opacity: 0;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        
+        .modal-content.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary-color);
+            transition: all 0.2s ease;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        
+        .modal-close:hover {
+            color: var(--danger-color);
+            background-color: var(--hover-bg);
+            transform: scale(1.1);
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .modal-content {
+                width: 95%;
+                margin: 5px;
+                max-height: 95vh;
+            }
+            
+            .modal-header {
+                padding: 12px 15px;
+            }
+            
+            .modal-body {
+                padding: 15px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <div class="logo">
-                <img src="img/logo.png" alt="Deloxide Logo">
+                <a href="index.html">
+                    <img src="img/logo.png" alt="Deloxide Logo">
+                </a>
             </div>
             <div class="header-buttons">
                 <button id="upload-btn" class="header-btn" aria-label="Upload log files">
@@ -265,7 +411,7 @@
     </div>
 
     <div id="help-modal" class="modal">
-        <div class="modal-content animate__animated animate__fadeIn animate__faster animate__faster">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>How to Use This Visualization</h2>
                 <button class="modal-close">&times;</button>
@@ -291,16 +437,40 @@
                 
                 <h3>Visualization Legend</h3>
                 <p>The visualization shows threads and resources as nodes, with different types of relationships between them:</p>
-                <ul>
-                    <li><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</li>
-                    <li><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</li>
-                    <li><strong>Attempt:</strong> A thread is attempting to acquire a resource</li>
-                    <li><strong>Acquired:</strong> A thread has successfully acquired a resource</li>
-                    <li><strong>Released:</strong> A resource has been released</li>
-                    <li><strong>Spawn:</strong> A thread is created or a resource is generated</li>
-                    <li><strong>Exit:</strong> A thread exits or a resource is dropped</li>
-                    <li><strong>Deadlock:</strong> A circular wait condition has been detected</li>
-                </ul>
+                <div class="legend-container">
+                    <div class="legend-item-help">
+                        <div class="legend-color thread"></div>
+                        <span><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-color resource"></div>
+                        <span><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line attempt"></div>
+                        <span><strong>Attempt:</strong> A thread is attempting to acquire a resource</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line acquired"></div>
+                        <span><strong>Acquired:</strong> A thread has successfully acquired a resource</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line released"></div>
+                        <span><strong>Released:</strong> A resource has been released</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line spawn"></div>
+                        <span><strong>Spawn:</strong> A thread is created or a resource is generated</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line exit"></div>
+                        <span><strong>Exit:</strong> A thread exits or a resource is dropped</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line deadlock"></div>
+                        <span><strong>Deadlock:</strong> A circular wait condition has been detected</span>
+                    </div>
+                </div>
                 
                 <h3>Wait-for Graph</h3>
                 <p>The wait-for graph shows which threads are waiting for resources held by other threads.
@@ -367,22 +537,75 @@
     <!-- Help modal functionality -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const modal = document.getElementById('help-modal');
+            // Modal handling
+            const modals = document.querySelectorAll('.modal');
+            const closeButtons = document.querySelectorAll('.modal-close');
             const helpToggle = document.querySelector('.help-toggle');
-            const closeBtn = document.querySelector('.modal-close');
+            const uploadBtn = document.getElementById('upload-btn');
+            const shareBtn = document.getElementById('share-btn');
             
+            // Global modal functions
+            function showModal(modal) {
+                modal.style.display = 'flex';
+                // Small delay needed for the transition to work properly
+                setTimeout(() => {
+                    modal.classList.add('active');
+                    modal.querySelector('.modal-content').classList.add('show');
+                }, 10);
+            }
+            
+            function hideModal(modal) {
+                const modalContent = modal.querySelector('.modal-content');
+                modalContent.classList.remove('show');
+                setTimeout(() => {
+                    modal.classList.remove('active');
+                    modal.style.display = 'none';
+                }, 200);
+            }
+            
+            // Close modal when clicking outside of it
+            modals.forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        hideModal(modal);
+                    }
+                });
+            });
+            
+            // Close modal with close button
+            closeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    hideModal(modal);
+                });
+            });
+            
+            // Open help modal
             helpToggle.addEventListener('click', function(e) {
                 e.preventDefault();
-                showModalWithAnimation(modal);
+                showModal(document.getElementById('help-modal'));
             });
             
-            closeBtn.addEventListener('click', function() {
-                hideModalWithAnimation(modal);
+            // Open upload modal
+            uploadBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showModal(document.getElementById('upload-modal'));
             });
             
-            window.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    hideModalWithAnimation(modal);
+            // Open share modal
+            shareBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showModal(document.getElementById('share-modal'));
+            });
+            
+            // Close modals with ESC key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    modals.forEach(modal => {
+                        if (modal.classList.contains('active')) {
+                            hideModal(modal);
+                        }
+                    });
                 }
             });
             
@@ -391,6 +614,52 @@
             if (urlParams.has('logs') || urlParams.has('log')) {
                 console.log('Found logs parameter in URL, processing...');
             }
+            
+            // Export modal functions to global scope for use by app.js
+            window.showModalWithAnimation = showModal;
+            window.hideModalWithAnimation = hideModal;
+        });
+    </script>
+    
+    <!-- Override any existing modal open/close functions from app.js -->
+    <script>
+        // This script runs after app.js to ensure our modal handlers take precedence
+        window.addEventListener('load', function() {
+            // Override any existing click handlers with our own
+            const uploadBtn = document.getElementById('upload-btn');
+            const shareBtn = document.getElementById('share-btn');
+            const closeButtons = document.querySelectorAll('.modal-close');
+            
+            function clearEventListeners(element) {
+                const newElement = element.cloneNode(true);
+                element.parentNode.replaceChild(newElement, element);
+                return newElement;
+            }
+            
+            // Clean and reassign upload button
+            const newUploadBtn = clearEventListeners(uploadBtn);
+            newUploadBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.showModalWithAnimation(document.getElementById('upload-modal'));
+            });
+            
+            // Clean and reassign share button
+            if (shareBtn) {
+                const newShareBtn = clearEventListeners(shareBtn);
+                newShareBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    window.showModalWithAnimation(document.getElementById('share-modal'));
+                });
+            }
+            
+            // Clean and reassign close buttons
+            closeButtons.forEach(button => {
+                const newButton = clearEventListeners(button);
+                newButton.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    window.hideModalWithAnimation(modal);
+                });
+            });
         });
     </script>
 </body>
