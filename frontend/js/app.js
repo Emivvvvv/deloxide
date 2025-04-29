@@ -2065,6 +2065,11 @@ function initTimeline() {
       }
 
       eventElement.addEventListener("click", () => {
+        // Stop any ongoing animation first
+        if (isPlaying) {
+          stopAnimation();
+        }
+        
         currentStep = event.step
         updateVisualization()
       })
@@ -2617,17 +2622,16 @@ function resetGraph() {
  * Increase animation speed by 0.25 (faster animation)
  */
 function increaseAnimationSpeed() {
-  // Cap the maximum speed at 3.0
-  if (animationSpeed < 3.0) {
+  // Cap the maximum speed at 2.0
+  if (animationSpeed < 2.0) {
+    // Stop any ongoing animation first
+    if (isPlaying) {
+      stopAnimation();
+    }
+    
     animationSpeed += 0.25;
     updateAnimationSpeedDisplay();
     showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
-    
-    // If animation is already playing, restart it with the new speed
-    if (isPlaying) {
-      stopAnimation();
-      togglePlay();
-    }
   }
 }
 
@@ -2637,15 +2641,14 @@ function increaseAnimationSpeed() {
 function decreaseAnimationSpeed() {
   // Minimum speed of 0.25
   if (animationSpeed > 0.25) {
+    // Stop any ongoing animation first
+    if (isPlaying) {
+      stopAnimation();
+    }
+    
     animationSpeed -= 0.25;
     updateAnimationSpeedDisplay();
     showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
-    
-    // If animation is already playing, restart it with the new speed
-    if (isPlaying) {
-      stopAnimation();
-      togglePlay();
-    }
   }
 }
 
