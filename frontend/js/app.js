@@ -2192,8 +2192,8 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes with speed adjustment
-      const animationDuration = Math.round(400 / animationSpeed);
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
@@ -2204,7 +2204,7 @@ function setupEventListeners() {
           document.getElementById("prev-btn").classList.remove("btn-cooldown");
           document.getElementById("next-btn").classList.remove("btn-cooldown");
         }, 250); // Cooldown period after animation completes
-      }, animationDuration);
+      }, fixedAnimationDuration);
     }
   })
 
@@ -2236,8 +2236,8 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes with speed adjustment
-      const animationDuration = Math.round(400 / animationSpeed);
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
@@ -2248,7 +2248,7 @@ function setupEventListeners() {
           document.getElementById("prev-btn").classList.remove("btn-cooldown");
           document.getElementById("next-btn").classList.remove("btn-cooldown");
         }, 250); // Cooldown period after animation completes
-      }, animationDuration);
+      }, fixedAnimationDuration);
     }
   })
 
@@ -2301,8 +2301,8 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes with speed adjustment
-      const animationDuration = Math.round(400 / animationSpeed);
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
@@ -2313,7 +2313,7 @@ function setupEventListeners() {
           document.getElementById("prev-btn").classList.remove("btn-cooldown");
           document.getElementById("next-btn").classList.remove("btn-cooldown");
         }, 250); // Cooldown period after animation completes
-      }, animationDuration);
+      }, fixedAnimationDuration);
     }
     
     // Right arrow key for next step
@@ -2336,8 +2336,8 @@ function setupEventListeners() {
       disableNavigationButtons();
       updateVisualization();
       
-      // Enable buttons after animation completes with speed adjustment
-      const animationDuration = Math.round(400 / animationSpeed);
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
@@ -2348,7 +2348,7 @@ function setupEventListeners() {
           document.getElementById("prev-btn").classList.remove("btn-cooldown");
           document.getElementById("next-btn").classList.remove("btn-cooldown");
         }, 250); // Cooldown period after animation completes
-      }, animationDuration);
+      }, fixedAnimationDuration);
     }
     
     // Up arrow key to increase animation speed
