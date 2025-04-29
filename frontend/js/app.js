@@ -2351,17 +2351,17 @@ function showVisualizationElements() {
  * Utility functions for modal animations
  */
 function showModalWithAnimation(modal) {
-  // First set display to flex so the modal is visible
-  modal.style.display = 'flex';
-  
   // Get the modal content element
   const modalContent = modal.querySelector('.modal-content');
   
   // Reset any existing animations
-  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  modalContent.classList.remove('modal-fade-in', 'modal-fade-out');
   
-  // Add the animation
-  modalContent.classList.add('animate__animated', 'animate__fadeIn', 'animate__faster', 'animate__faster');
+  // Show the modal first
+  modal.style.display = 'flex';
+  
+  // Add the new animation class
+  modalContent.classList.add('modal-fade-in');
 }
 
 function hideModalWithAnimation(modal) {
@@ -2369,15 +2369,15 @@ function hideModalWithAnimation(modal) {
   const modalContent = modal.querySelector('.modal-content');
   
   // Reset any existing animations
-  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  modalContent.classList.remove('modal-fade-in', 'modal-fade-out');
   
-  // Add the fadeOut animation
-  modalContent.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster', 'animate__faster');
+  // Add the fade out animation
+  modalContent.classList.add('modal-fade-out');
   
-  // Wait for animation to complete before hiding the modal
+  // Hide the modal after animation completes
   setTimeout(() => {
     modal.style.display = 'none';
-  }, 100); // 100ms animation duration (reduced from 200ms)
+  }, 80); // 80ms animation duration - daha hızlı
 }
 
 /**
