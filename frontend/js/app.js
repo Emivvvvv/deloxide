@@ -18,6 +18,7 @@ let animationInterval = null
 let isPlaying = false
 let isFileUploaded = false // Add flag to track if data was uploaded
 let animationSpeed = 1.0 // Default animation speed (1.0 = normal speed)
+let buttonCooldown = false // Add variable to track button cooldown status
 
 // Theme management
 const themeToggle = document.getElementById("theme-toggle")
@@ -2159,8 +2160,14 @@ function enableNavigationButtons() {
  */
 function setupEventListeners() {
   document.getElementById("prev-btn").addEventListener("click", () => {
-    // Don't allow navigation while animating
-    if (isAnimating) return;
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("prev-btn"));
+      }
+      return;
+    }
     
     // Stop any ongoing animation first
     if (isPlaying) {
@@ -2168,6 +2175,13 @@ function setupEventListeners() {
     }
  
     if (currentStep > 1) {
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep--;
       isAnimating = true;
       disableNavigationButtons();
@@ -2178,13 +2192,26 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
       }, animationDuration);
     }
   })
 
   document.getElementById("next-btn").addEventListener("click", () => {
-    // Don't allow navigation while animating
-    if (isAnimating) return;
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("next-btn"));
+      }
+      return;
+    }
     
     // Stop any ongoing animation first
     if (isPlaying) {
@@ -2192,6 +2219,13 @@ function setupEventListeners() {
     }
     
     if (currentStep < logData.length) {
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep++;
       isAnimating = true;
       disableNavigationButtons();
@@ -2202,6 +2236,13 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
       }, animationDuration);
     }
   })
@@ -2223,8 +2264,17 @@ function setupEventListeners() {
 
   // Add keyboard navigation
   document.addEventListener("keydown", (event) => {
-    // Don't respond to keyboard during animation
-    if (isAnimating) return;
+    // Don't respond to keyboard during animation or cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to use arrow keys during cooldown
+      if (buttonCooldown && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        const button = event.key === "ArrowLeft" ? 
+          document.getElementById("prev-btn") : 
+          document.getElementById("next-btn");
+        showButtonCooldownFeedback(button);
+      }
+      return;
+    }
     
     // Left arrow key for previous step
     if (event.key === "ArrowLeft" && currentStep > 1) {
@@ -2233,6 +2283,13 @@ function setupEventListeners() {
       if (isPlaying) {
         stopAnimation();
       }
+      
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
       
       currentStep--;
       isAnimating = true;
@@ -2244,6 +2301,13 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
       }, animationDuration);
     }
     
@@ -2255,6 +2319,13 @@ function setupEventListeners() {
         stopAnimation();
       }
       
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
       currentStep++;
       isAnimating = true;
       disableNavigationButtons();
@@ -2265,6 +2336,13 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
       }, animationDuration);
     }
     
@@ -2654,3 +2732,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Function to show visual feedback when buttons are in cooldown
+function showButtonCooldownFeedback(button) {
+  button.classList.add("btn-cooldown-feedback");
+  setTimeout(() => {
+    button.classList.remove("btn-cooldown-feedback");
+  }, 300);
+}
