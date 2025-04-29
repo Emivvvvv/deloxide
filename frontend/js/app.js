@@ -1023,39 +1023,68 @@ function initVisualization() {
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("preserveAspectRatio", "xMidYMid meet")
 
-  // Add arrow markers for link directionality
-  svg
-    .append("defs")
-    .append("marker")
+  // Create defs section for markers
+  const defs = svg.append("defs");
+
+  // Add standard arrow marker for links
+  defs.append("marker")
     .attr("id", "arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 26) // Push the arrowhead back to be behind the node circle
-    .attr("refY", 0)
-    .attr("orient", "auto")
-    .attr("markerWidth", 6)
-    .attr("markerHeight", 6)
-    .attr("xoverflow", "visible")
-    .append("path")
-    .attr("d", "M 0,-5 L 10,0 L 0,5")
-    .attr("fill", "var(--primary-color)")
-    .style("stroke", "none")
-
-  // Add special marker for deadlock arrows
-  svg
-    .append("defs")
-    .append("marker")
-    .attr("id", "deadlock-arrowhead")
-    .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 26) // Push the arrowhead back to be behind the node circle
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
     .attr("refY", 0)
     .attr("orient", "auto")
     .attr("markerWidth", 8)
     .attr("markerHeight", 8)
     .attr("xoverflow", "visible")
     .append("path")
-    .attr("d", "M 0,-5 L 10,0 L 0,5")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--primary-color)")
+    .style("stroke", "none");
+
+  // Add attempt arrow marker with dashed style
+  defs.append("marker")
+    .attr("id", "attempt-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--warning-color)")
+    .style("stroke", "none");
+
+  // Add acquired arrow marker with a thicker line
+  defs.append("marker")
+    .attr("id", "acquired-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 9)
+    .attr("markerHeight", 9)
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--success-color)")
+    .style("stroke", "none");
+
+  // Add special marker for deadlock arrows with a distinctive shape
+  defs.append("marker")
+    .attr("id", "deadlock-arrowhead")
+    .attr("viewBox", "0 -6 12 12")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 8) // Reduced from 10
+    .attr("markerHeight", 8) // Reduced from 10
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Smaller arrow shape
     .attr("fill", "#f44336")
-    .style("stroke", "none")
+    .style("stroke", "none");
 
   // Create tooltip
   tooltip = d3
@@ -1399,7 +1428,7 @@ function updateNodeElements() {
   // Exit - remove nodes that no longer exist with animation
   nodeSelection.exit()
     .transition()
-    .duration(300)
+    .duration(200) // Reduced from 300 for faster removal
     .style("opacity", 0)
     .remove();
   
@@ -1450,17 +1479,17 @@ function updateNodeElements() {
   nodeEnter.selectAll("circle").each(function(d) {
     if (d.isInCycle) {
       // Add a subtle glow effect for threads in deadlock
-      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
     } else if (d.is_main_thread) {
       // Add a subtle glow effect for main thread
-      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
+      d3.select(this).style("filter", "drop-shadow(0 0 4px rgba(155, 89, 182, 0.7))");
     }
   });
   
   // Animate new nodes appearing
   nodeEnter
     .transition()
-    .duration(400)
+    .duration(250) // Reduced from 400 for faster appearance
     .style("opacity", 1) // Fade in the node
     .select("circle")
     .attr("r", 25); // Grow to full size
@@ -1469,14 +1498,14 @@ function updateNodeElements() {
   nodeEnter
     .select("text")
     .transition()
-    .delay(200) // Slight delay after the circle starts growing
-    .duration(200)
+    .delay(100) // Reduced from 200 for faster text appearance
+    .duration(150) // Reduced from 200 for faster text appearance
     .style("opacity", 1);
     
   // Update - handle existing nodes
   const nodeUpdate = nodeSelection
     .transition()
-    .duration(500)
+    .duration(300) // Reduced from 500 for faster updates
     .attr("data-in-cycle", d => d.isInCycle === true ? "true" : "false")
     .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`);
     
@@ -1503,6 +1532,7 @@ function updateNodeElements() {
   // Merge enter and update for event handlers
   nodeSelection.merge(nodeEnter)
     .on("mouseover", function(event, d) {
+      // Don't apply any transforms that might move the node away from cursor
       let tooltipContent;
       
       // If this is the main thread, display it as such
@@ -1536,9 +1566,9 @@ function updateNodeElements() {
   // Update filter effects for existing nodes
   nodeSelection.select("circle").each(function(d) {
     if (d.isInCycle) {
-      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
     } else if (d.is_main_thread) {
-      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
+      d3.select(this).style("filter", "drop-shadow(0 0 4px rgba(155, 89, 182, 0.7))");
     } else {
       d3.select(this).style("filter", "none");
     }
@@ -1555,7 +1585,7 @@ function updateLinkElements() {
   // Exit - remove links that no longer exist with animation
   linkSelection.exit()
     .transition()
-    .duration(300)
+    .duration(200) // Reduced from 300 for faster removal
     .style("opacity", 0)
     .remove();
   
@@ -1564,51 +1594,89 @@ function updateLinkElements() {
     .enter()
     .append("line")
     .attr("class", d => `link ${d.type}`)
-    .attr("stroke", d => d.type === "deadlock" ? "#f44336" : null)
-    .attr("stroke-width", d => d.type === "deadlock" ? "4" : null)
     .attr("x1", d => d.source.x || 0)
     .attr("y1", d => d.source.y || 0)
     .attr("x2", d => d.target.x || 0)
     .attr("y2", d => d.target.y || 0)
-    .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)")
     .style("opacity", 0); // Start invisible for fade-in
   
-  // Apply special effects for new links
+  // Apply style based on link type
   linkEnter.each(function(d) {
-    // Directly apply the SVG filter for deadlock links
     if (d.type === "deadlock") {
-      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
-      // Add a subtle dash pattern to make it more modern
-      d3.select(this).style("stroke-dashoffset", "0");
+      d3.select(this)
+        .attr("stroke", "#f44336") 
+        .attr("stroke-width", "3") // Reduced from 4
+        .attr("marker-end", "url(#deadlock-arrowhead)")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
+        .style("stroke-dashoffset", "0");
+    } else if (d.type === "attempt") {
+      d3.select(this)
+        .attr("stroke", "var(--warning-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#attempt-arrowhead)")
+        .style("stroke-dasharray", "5,3");
+    } else if (d.type === "acquired") {
+      d3.select(this)
+        .attr("stroke", "var(--success-color)")
+        .attr("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
+    } else {
+      d3.select(this)
+        .attr("stroke", "var(--primary-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)");
     }
   });
   
   // Animate new links appearing with slight delay
   linkEnter
     .transition()
-    .delay(200)
-    .duration(300)
+    .delay(100) // Reduced from 200 for faster appearance
+    .duration(200) // Reduced from 300 for faster appearance
     .style("opacity", 1);
   
   // Update - handle existing links
-  linkSelection
+  const linkUpdate = linkSelection
     .transition()
-    .duration(500)
+    .duration(300); // Reduced from 500 for faster updates
+    
+  // Update position attributes
+  linkUpdate
     .attr("x1", d => d.source.x || 0)
     .attr("y1", d => d.source.y || 0)
     .attr("x2", d => d.target.x || 0)
-    .attr("y2", d => d.target.y || 0)
-    .attr("stroke", d => d.type === "deadlock" ? "#f44336" : null)
-    .attr("stroke-width", d => d.type === "deadlock" ? "4" : null)
-    .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)");
-    
-  // Update filter effects for existing links
+    .attr("y2", d => d.target.y || 0);
+  
+  // Update all link styles
   linkSelection.each(function(d) {
     if (d.type === "deadlock") {
-      d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
-      d3.select(this).style("stroke-dashoffset", "0");
+      d3.select(this)
+        .attr("stroke", "#f44336") 
+        .attr("stroke-width", "3") // Reduced from 4
+        .attr("marker-end", "url(#deadlock-arrowhead)")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
+        .style("stroke-dashoffset", "0");
+    } else if (d.type === "attempt") {
+      d3.select(this)
+        .attr("stroke", "var(--warning-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#attempt-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", "none");
+    } else if (d.type === "acquired") {
+      d3.select(this)
+        .attr("stroke", "var(--success-color)")
+        .attr("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
     } else {
-      d3.select(this).style("filter", "none");
+      d3.select(this)
+        .attr("stroke", "var(--primary-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("filter", "none")
+        .style("stroke-dasharray", "none");
     }
   });
 }
@@ -1880,12 +1948,13 @@ function dragstarted(event, d) {
   d.fx = d.x
   d.fy = d.y
   
-  // Increase the node size slightly to give feedback
+  // Apply slight visual change without changing size
   const circle = d3.select(this).select("circle");
   circle
     .transition()
     .duration(100)
-    .attr("r", 30); // Increase from default 25
+    .attr("stroke-width", 4) // Increase stroke width instead of radius
+    .style("filter", "brightness(1.2)");
 }
 
 function dragged(event, d) {
@@ -1915,12 +1984,13 @@ function dragended(event, d) {
     d.fy = null;
   }
   
-  // Reset the node size back to normal
+  // Reset the node appearance
   const circle = d3.select(this).select("circle");
   circle
     .transition()
     .duration(200)
-    .attr("r", 25); // Reset to default size
+    .attr("stroke-width", 2) // Return to default stroke width
+    .style("filter", null);
 }
 
 /**
@@ -2024,9 +2094,9 @@ function togglePlay() {
           isAnimating = false;
           enableNavigationButtons();
           step++;
-        }, 600); // Wait for animations to complete
-      }, 1500) // Increased to 1.5 seconds to allow transitions to complete
-    }, 600); // Wait for initial animations to complete
+        }, 400); // Reduced from 600ms for faster animations
+      }, 1200) // Reduced from 1500ms for faster transitions between steps
+    }, 400); // Reduced from 600ms for faster initial animation
   }
 }
 
@@ -2071,7 +2141,7 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 600); // Wait for animations to complete
+      }, 400); // Reduced from 600ms for faster response
     }
   })
 
@@ -2094,7 +2164,7 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 600); // Wait for animations to complete
+      }, 400); // Reduced from 600ms for faster response
     }
   })
 
@@ -2140,7 +2210,7 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 600);
+      }, 400); // Reduced from 600ms for faster response
     }
     
     // Right arrow key for next step
@@ -2159,7 +2229,7 @@ function setupEventListeners() {
       setTimeout(() => {
         isAnimating = false;
         enableNavigationButtons();
-      }, 600);
+      }, 400); // Reduced from 600ms for faster response
     }
     
     // Spacebar for play/pause

@@ -522,29 +522,39 @@ main {
 /* Node and Edge Styles */
 .node {
     cursor: pointer;
-    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Keep hover state more subtle without movement */
+.node:hover circle {
+    stroke-width: 3px;
+    filter: brightness(1.2);
+    transform: scale(1.1);
+    fill-opacity: 1;
+    /* No transform that would move the node */
 }
 
 .node circle {
-    transition: r 0.4s ease, fill 0.3s ease, stroke 0.3s ease, stroke-width 0.3s ease, stroke-dasharray 0.3s ease, filter 0.4s ease;
+    transition: r 0.3s ease, fill 0.3s ease, stroke 0.3s ease, stroke-width 0.3s ease, 
+                stroke-dasharray 0.3s ease, filter 0.4s ease, fill-opacity 0.3s ease, transform 0.3s ease;
     fill-opacity: 0.9;
 }
 
 .node text {
-    font-size: 13px; /* Reduced from 14px */
+    font-size: 13px;
     font-weight: bold;
     fill: white;
     pointer-events: none;
     user-select: none;
     text-anchor: middle;
     dominant-baseline: middle;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease, fill 0.3s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.node:hover circle {
-    stroke-width: 3px; /* Reduced from 4px */
-    filter: brightness(1.1);
-    fill-opacity: 1;
+/* Subtle text effect on hover */
+.node:hover text {
+    fill: #ffffff;
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
 }
 
 .resource circle {
@@ -563,19 +573,19 @@ main {
 .node.thread[data-in-cycle="true"] circle {
     fill: var(--danger-color);
     stroke: #ff0000;
-    stroke-width: 3px;
+    stroke-width: 2px; /* Reduced from 3px */
     stroke-dasharray: 3;
     animation: pulse 1.5s infinite alternate;
 }
 
 @keyframes pulse {
     from {
-        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
-        stroke-width: 3px;
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.6); /* Reduced opacity */
+        stroke-width: 2px; /* Reduced from 3px */
     }
     to {
-        box-shadow: 0 0 0 5px rgba(255, 0, 0, 0);
-        stroke-width: 4px;
+        box-shadow: 0 0 0 4px rgba(255, 0, 0, 0); /* Reduced from 5px */
+        stroke-width: 3px; /* Reduced from 4px */
     }
 }
 
@@ -583,17 +593,27 @@ main {
     stroke: var(--neutral-color);
     stroke-width: 2px; /* Reduced from 3px */
     transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease, filter 0.4s ease;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .link.attempt {
     stroke: var(--warning-color);
-    stroke-dasharray: 4; /* Reduced from 5 */
-    stroke-width: 2px; /* Reduced from 3px */
+    stroke-dasharray: 5,3;
+    stroke-width: 2.5px;
+    animation: dash 20s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -1000;
+    }
 }
 
 .link.acquired {
     stroke: var(--success-color);
-    stroke-width: 3px; /* Reduced from 4px */
+    stroke-width: 3px;
+    filter: drop-shadow(0 0 2px rgba(39, 174, 96, 0.5));
 }
 
 .link.released {
@@ -615,11 +635,22 @@ main {
 
 .link.deadlock {
     stroke: #f44336;
-    stroke-width: 4px; 
-    animation: pulse-link 3s infinite;
+    stroke-width: 3px; /* Reduced from 4px */ 
+    animation: pulse-link 3s infinite alternate;
     stroke-opacity: 0.9;
-    filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7));
+    filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7)); /* Reduced from 4px */
     z-index: 1000;
+}
+
+@keyframes pulse-link {
+    from {
+        stroke-opacity: 0.8;
+        filter: drop-shadow(0 0 2px rgba(244, 67, 54, 0.6)); /* Reduced */
+    }
+    to {
+        stroke-opacity: 1;
+        filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.8)); /* Reduced */
+    }
 }
 
 /* Controls */
@@ -1292,20 +1323,4 @@ button.primary-action {
 
 .settings-menu {
     transition: all 0.1s;
-}
-
-/* Animation for deadlock links */
-@keyframes pulse-link {
-    0% {
-        stroke-opacity: 0.9;
-        stroke-width: 4px;
-    }
-    50% {
-        stroke-opacity: 0.7;
-        stroke-width: 5px;
-    }
-    100% {
-        stroke-opacity: 0.9;
-        stroke-width: 4px;
-    }
 }
