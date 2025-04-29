@@ -2095,7 +2095,7 @@ function togglePlay() {
     stopAnimation();
   } else {
     // Start playback
-    playBtnText.textContent = "Stop Animation"
+    playBtnText.textContent = "Stop"
     playBtnIcon.className = "fas fa-stop"
     isPlaying = true
 
@@ -2529,7 +2529,7 @@ function stopAnimation() {
   const playBtn = document.getElementById("play-btn");
   const playBtnText = playBtn.querySelector("span");
   const playBtnIcon = playBtn.querySelector("i");
-  playBtnText.textContent = "Play Animation";
+  playBtnText.textContent = "Play";
   playBtnIcon.className = "fas fa-play";
 }
 
