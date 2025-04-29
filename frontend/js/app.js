@@ -2584,3 +2584,73 @@ function updateAnimationSpeedDisplay() {
     speedDownBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
   }
 }
+
+/**
+ * Modal Functionality
+ * Handles opening and closing modals with animations
+ */
+
+// Modal animation utility functions
+function showModalWithAnimation(modal) {
+    modal.style.display = 'flex';
+    // Small delay needed for the transition to work properly
+    setTimeout(() => {
+        modal.classList.add('active');
+        modal.querySelector('.modal-content').classList.add('show');
+    }, 10);
+}
+
+function hideModalWithAnimation(modal) {
+    const modalContent = modal.querySelector('.modal-content');
+    modalContent.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }, 200);
+}
+
+// Initialize modals when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Modal handling
+    const modals = document.querySelectorAll('.modal');
+    const closeButtons = document.querySelectorAll('.modal-close');
+    const helpToggle = document.querySelector('.help-toggle');
+    const uploadBtn = document.getElementById('upload-btn');
+    const shareBtn = document.getElementById('share-btn');
+    
+    // Close modal when clicking outside of it
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModalWithAnimation(modal);
+            }
+        });
+    });
+    
+    // Close modal with close button
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            hideModalWithAnimation(modal);
+        });
+    });
+    
+    // Open help modal
+    if (helpToggle) {
+        helpToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            showModalWithAnimation(document.getElementById('help-modal'));
+        });
+    }
+    
+    // Close modals with ESC key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            modals.forEach(modal => {
+                if (modal.classList.contains('active')) {
+                    hideModalWithAnimation(modal);
+                }
+            });
+        }
+    });
+});
