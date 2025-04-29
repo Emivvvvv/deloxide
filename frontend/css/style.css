@@ -1353,16 +1353,19 @@ button.primary-action {
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
+  max-height: 80vh;
+  overflow-y: auto;
+  pointer-events: none;
 }
 
 .toast {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
+  padding: 10px 12px;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  margin-bottom: 10px;
+  margin-bottom: 0;
   transform: translateY(100px);
   opacity: 0;
   animation: toast-in 0.3s ease forwards;
@@ -1370,6 +1373,31 @@ button.primary-action {
   border-left: 4px solid var(--primary-color);
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  max-height: 60px;
+  overflow: hidden;
+  margin-top: -30px; /* Toast'ların üst üste binmesini sağlar */
+}
+
+.toast:first-child {
+  margin-top: 0;
+}
+
+.toast:hover {
+  margin-top: 0;
+  margin-bottom: 5px;
+  z-index: 10000;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.toast.expanded {
+  max-height: 200px;
+  margin-top: 0;
+  margin-bottom: 5px;
+  z-index: 10000;
 }
 
 /* Dark mode override for toast */
@@ -1396,6 +1424,7 @@ button.primary-action {
 .toast-icon {
   margin-right: 12px;
   font-size: 18px;
+  flex-shrink: 0;
 }
 
 .toast-success .toast-icon {
@@ -1418,6 +1447,14 @@ button.primary-action {
   flex: 1;
   color: #333333;
   font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast.expanded .toast-content {
+  white-space: normal;
+  text-overflow: initial;
 }
 
 /* Dark mode override for toast content */
@@ -1435,6 +1472,8 @@ button.primary-action {
   margin-left: 8px;
   opacity: 0.7;
   transition: opacity 0.2s;
+  flex-shrink: 0;
+  z-index: 10001;
 }
 
 /* Dark mode override for toast close button */
@@ -1477,7 +1516,7 @@ button.primary-action {
   }
   
   .toast {
-    padding: 10px 12px;
+    padding: 8px 10px;
   }
 }
 

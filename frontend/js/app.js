@@ -2565,13 +2565,31 @@ function showToast(message, type = 'info', duration = 5000) {
   
   // Setup close button functionality
   const closeBtn = toast.querySelector('.toast-close');
-  closeBtn.addEventListener('click', () => {
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent click from bubbling to toast
     toast.style.animation = 'toast-out 0.3s forwards';
     setTimeout(() => {
       if (toast.parentNode) {
         toast.parentNode.removeChild(toast);
       }
     }, 300);
+  });
+  
+  // Toggle expanded state when toast is clicked
+  toast.addEventListener('click', (e) => {
+    if (e.target !== closeBtn) {
+      toast.classList.toggle('expanded');
+      
+      // Adjust other toasts when one is expanded
+      if (toast.classList.contains('expanded')) {
+        const allToasts = document.querySelectorAll('.toast');
+        allToasts.forEach(t => {
+          if (t !== toast && t.classList.contains('expanded')) {
+            t.classList.remove('expanded');
+          }
+        });
+      }
+    }
   });
   
   // Auto-dismiss after duration
