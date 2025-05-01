@@ -66,7 +66,7 @@ pub struct Deloxide {
     log_path: Option<String>,
 
     /// Callback function to invoke when a deadlock is detected
-    callback: Box<dyn Fn(DeadlockInfo) + Send + 'static>,
+    callback: Box<dyn Fn(DeadlockInfo) + Send + Sync + 'static>,
 
     /// Stress testing mode (only available with "stress-test" feature)
     #[cfg(feature = "stress-test")]
@@ -152,7 +152,7 @@ impl Deloxide {
     /// ```
     pub fn callback<F>(mut self, callback: F) -> Self
     where
-        F: Fn(DeadlockInfo) + Send + 'static,
+        F: Fn(DeadlockInfo) + Send + Sync + 'static,
     {
         self.callback = Box::new(callback);
         self

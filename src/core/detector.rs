@@ -1,18 +1,69 @@
-use crate::core::graph::WaitForGraph;
-use crate::core::logger;
-use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
-use chrono::Utc;
-use fxhash::{FxHashMap, FxHashSet};
-use std::sync::Mutex;
-
 #[cfg(feature = "stress-test")]
 use crate::core::StressConfig;
 #[cfg(feature = "stress-test")]
 use crate::core::StressMode;
+use crate::core::graph::WaitForGraph;
+use crate::core::logger;
 #[cfg(feature = "stress-test")]
 use crate::core::stress::{
     on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release,
 };
+use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
+use chrono::Utc;
+use crossbeam_channel::{Sender, unbounded};
+use fxhash::{FxHashMap, FxHashSet};
+use std::sync::{Arc, Mutex, OnceLock};
+
+// Global dispatcher for asynchronous deadlock callback execution
+// Ensures callbacks can execute even when the detecting thread is deadlocked.
+lazy_static::lazy_static! {
+    static ref DISPATCHER: Dispatcher = {
+        Dispatcher::new()
+    };
+}
+
+/// Global storage for the deadlock callback function
+/// Stores the user-provided callback as `Arc<dyn Fn>` for thread-safe access.
+static CALLBACK: OnceLock<Arc<dyn Fn(DeadlockInfo) + Send + Sync>> = OnceLock::new();
+
+/// Background dispatcher for asynchronous callback execution
+///
+/// Runs a dedicated thread that receives deadlock events through a channel
+/// and executes the registered callback. This prevents deadlocks from
+/// blocking callback execution.
+struct Dispatcher {
+    /// Channel sender for transmitting deadlock events
+    sender: Sender<DeadlockInfo>,
+    /// Background thread handle
+    _thread_handle: std::thread::JoinHandle<()>,
+}
+
+impl Dispatcher {
+    /// Create a new dispatcher with a background thread and channel
+    fn new() -> Self {
+        let (tx, rx) = unbounded::<DeadlockInfo>();
+
+        // Background thread listens for events and executes callbacks
+        let thread_handle = std::thread::spawn(move || {
+            while let Ok(info) = rx.recv() {
+                if let Some(cb) = CALLBACK.get() {
+                    cb(info);
+                }
+            }
+        });
+
+        Dispatcher {
+            sender: tx,
+            _thread_handle: thread_handle,
+        }
+    }
+
+    /// Send deadlock info to background thread for callback execution
+    fn send(&self, info: DeadlockInfo) {
+        // Non-blocking send; events dropped if channel is full/closed
+        let _ = self.sender.send(info);
+    }
+}
 
 /// Main deadlock detector that maintains thread-lock relationships
 ///
@@ -34,8 +85,6 @@ pub struct Detector {
     lock_owners: FxHashMap<LockId, ThreadId>,
     /// Maps threads to the locks they're attempting to acquire
     thread_waits_for: FxHashMap<ThreadId, LockId>,
-    /// Callback to invoke when a deadlock is detected
-    on_deadlock: Option<Box<dyn Fn(DeadlockInfo) + Send>>,
     /// Tracks, for each thread, which locks it currently holds
     thread_holds: FxHashMap<ThreadId, FxHashSet<LockId>>,
     #[cfg(feature = "stress-test")]
@@ -59,7 +108,6 @@ impl Detector {
             wait_for_graph: WaitForGraph::new(),
             lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
-            on_deadlock: None,
             thread_holds: FxHashMap::default(),
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
@@ -76,7 +124,6 @@ impl Detector {
             wait_for_graph: WaitForGraph::new(),
             lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
-            on_deadlock: None,
             thread_holds: FxHashMap::default(),
             stress_mode: mode,
             stress_config: config,
@@ -89,9 +136,10 @@ impl Detector {
     /// * `callback` - Function to call when a deadlock is detected
     pub fn set_deadlock_callback<F>(&mut self, callback: F)
     where
-        F: Fn(DeadlockInfo) + Send + 'static,
+        F: Fn(DeadlockInfo) + Send + Sync + 'static,
     {
-        self.on_deadlock = Some(Box::new(callback));
+        let cb: Arc<dyn Fn(DeadlockInfo) + Send + Sync> = Arc::new(callback);
+        CALLBACK.set(cb).ok();
     }
 
     /// Register a thread spawn
@@ -184,7 +232,6 @@ impl Detector {
             logger::log_interaction_event(thread_id, lock_id, Events::Attempt);
         }
 
-        // Apply stress testing if enabled
         #[cfg(feature = "stress-test")]
         {
             if self.stress_mode != StressMode::None {
@@ -207,10 +254,8 @@ impl Detector {
         }
 
         if let Some(&owner) = self.lock_owners.get(&lock_id) {
-            // Record wait-for
             self.thread_waits_for.insert(thread_id, lock_id);
 
-            // Use incremental cycle detection
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
                 // Apply filter for common locks
                 let mut iter = cycle.iter();
@@ -237,9 +282,9 @@ impl Detector {
                             .collect(),
                         timestamp: Utc::now().to_rfc3339(),
                     };
-                    if let Some(cb) = &self.on_deadlock {
-                        cb(info);
-                    }
+
+                    // Send to dispatcher instead of calling directly
+                    DISPATCHER.send(info);
                 }
             }
         }
@@ -322,7 +367,7 @@ lazy_static::lazy_static! {
 #[allow(dead_code)]
 pub fn init_detector<F>(callback: F)
 where
-    F: Fn(DeadlockInfo) + Send + 'static,
+    F: Fn(DeadlockInfo) + Send + Sync + 'static,
 {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.set_deadlock_callback(callback);
@@ -336,7 +381,7 @@ pub fn init_detector_with_stress<F>(
     stress_mode: StressMode,
     stress_config: Option<StressConfig>,
 ) where
-    F: Fn(DeadlockInfo) + Send + 'static,
+    F: Fn(DeadlockInfo) + Send + Sync + 'static,
 {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
         detector.set_deadlock_callback(callback);
