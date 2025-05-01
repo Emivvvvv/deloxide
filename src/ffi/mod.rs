@@ -8,7 +8,7 @@
 /// including initialization, mutex tracking, thread tracking, and deadlock detection.
 use crate::core::logger;
 use crate::core::tracked_mutex::TrackedGuard;
-use crate::core::utils::get_current_thread_id;
+use crate::core::types::get_current_thread_id;
 use crate::core::{
     ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn,
 };

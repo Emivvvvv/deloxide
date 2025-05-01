@@ -1,6 +1,5 @@
 use crate::core::detector;
-use crate::core::types::{LockId, ThreadId};
-use crate::core::utils::get_current_thread_id;
+use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 use parking_lot::{Mutex, MutexGuard};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};

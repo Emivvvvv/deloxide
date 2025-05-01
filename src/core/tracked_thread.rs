@@ -1,5 +1,5 @@
 use crate::core::detector;
-use crate::core::utils::get_current_thread_id;
+use crate::core::types::get_current_thread_id;
 use std::thread::{self, JoinHandle};
 
 /// A wrapper around std::thread::JoinHandle that logs spawn and exit events

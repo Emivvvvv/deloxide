@@ -1,11 +1,27 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 
 /// Thread identifier type
 ///
-/// Uniquely identifies a thread in the application. This is typically
-/// derived from the platform-specific thread ID but wrapped in our own type
-/// for portability and potential future expansion.
+/// Uniquely identifies a thread in the application.
 pub type ThreadId = usize;
+
+// Global counter for assigning unique thread IDs
+static THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+
+// Thread-local storage for each thread's assigned ID
+thread_local! {
+    static THREAD_ID: ThreadId = {
+        // Each thread gets a unique ID once, when this is first accessed
+        THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+    };
+}
+
+/// Get a unique identifier of the current thread
+/// This will always return the same ID for the lifetime of the thread
+pub fn get_current_thread_id() -> ThreadId {
+    THREAD_ID.with(|&id| id)
+}
 
 /// Lock identifier type
 ///
@@ -56,4 +72,66 @@ pub struct DeadlockInfo {
     ///
     /// ISO-8601 formatted timestamp indicating when the deadlock was detected.
     pub timestamp: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::sync::mpsc;
+
+    #[test]
+    fn test_thread_id_consistency() {
+        let (tx, rx) = mpsc::channel();
+
+        // Create a thread
+        let handle = thread::spawn(move || {
+            let id1 = get_current_thread_id();
+            let id2 = get_current_thread_id();
+            let id3 = get_current_thread_id();
+
+            // All calls should return the same ID
+            assert_eq!(id1, id2);
+            assert_eq!(id2, id3);
+
+            tx.send(id1).unwrap();
+        });
+
+        let thread_id = rx.recv().unwrap();
+        handle.join().unwrap();
+
+        // Verify the thread kept the same ID throughout its lifetime
+        println!("Thread ID: {}", thread_id);
+    }
+
+    #[test]
+    fn test_thread_id_uniqueness() {
+        let (tx, rx) = mpsc::channel();
+
+        // Create multiple threads
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let tx = tx.clone();
+            handles.push(thread::spawn(move || {
+                let id = get_current_thread_id();
+                tx.send(id).unwrap();
+            }));
+        }
+
+        // Collect all thread IDs
+        let mut ids = vec![];
+        for _ in 0..10 {
+            ids.push(rx.recv().unwrap());
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify all IDs are unique
+        let mut unique_ids = ids.clone();
+        unique_ids.sort();
+        unique_ids.dedup();
+        assert_eq!(ids.len(), unique_ids.len());
+    }
 }

@@ -1,7 +1,6 @@
 use crate::core::graph::WaitForGraph;
 use crate::core::logger;
-use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId};
-use crate::core::utils::get_current_thread_id;
+use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;

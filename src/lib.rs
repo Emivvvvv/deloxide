@@ -1,4 +1,3 @@
-#![feature(thread_id_value)]
 //! # Deloxide
 //!
 //! A cross-language deadlock detector with visualization support.
