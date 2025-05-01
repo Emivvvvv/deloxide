@@ -1,7 +1,8 @@
 pub mod encoder;
 pub use encoder::process_log_for_url;
 
-use crate::core::logger;
+use crate::core::detector::flush_global_detector_logs;
+use crate::core::logger::{self};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -56,9 +57,13 @@ pub fn showcase<P: AsRef<Path>>(log_path: P) -> Result<()> {
 /// # Returns
 /// A Result that is Ok if the showcase succeeded, or an error if it failed.
 ///
+/// **IMPORTANT**: This function ensures all pending log entries are flushed to disk
+/// before showcasing to guarantee the log file is complete.
+///
 /// # Errors
 /// Returns an error if:
 /// - No active log file exists
+/// - Failed to flush pending log entries
 /// - Failed to process the log file
 /// - Failed to open the browser
 ///
@@ -77,6 +82,9 @@ pub fn showcase<P: AsRef<Path>>(log_path: P) -> Result<()> {
 /// showcase_this().expect("Failed to showcase current log");
 /// ```
 pub fn showcase_this() -> Result<()> {
+    // First, flush all pending log entries to ensure completeness
+    flush_global_detector_logs().context("Failed to flush pending log entries")?;
+
     // Get the current log file path
     let log_path = logger::get_current_log_file()
         .ok_or_else(|| anyhow::anyhow!("No active log file found"))?;

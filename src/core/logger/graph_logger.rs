@@ -1,10 +1,9 @@
 use crate::core::types::{Events, LockId, ThreadId};
 use fxhash::{FxHashMap, FxHashSet};
 use serde::Serialize;
-use std::sync::Mutex;
 
 /// Represents a link between a thread and a lock
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct GraphLink {
     /// Thread ID (source)
     pub source: ThreadId,
@@ -16,17 +15,24 @@ pub struct GraphLink {
 }
 
 /// Represents the complete state of the thread-lock graph
-#[derive(Debug, Serialize)]
+///
+/// This structure provides a snapshot of all threads, locks, and their relationships
+/// at a particular point in time. It is used for visualization and analysis.
+#[derive(Debug, Serialize, Clone)]
 pub struct GraphState {
     /// All thread IDs in the system
     pub threads: Vec<ThreadId>,
     /// All lock IDs in the system
     pub locks: Vec<LockId>,
-    /// Links between threads and locks
+    /// Links between threads and locks representing ownership and attempts
     pub links: Vec<GraphLink>,
 }
 
 /// Maintains the current state of threads and locks in the system
+///
+/// The GraphLogger is responsible for tracking the complete state of thread-lock
+/// relationships. Each EventLogger instance maintains its own GraphLogger to provide
+/// independent tracking of different execution contexts.
 pub struct GraphLogger {
     /// Maps locks to the threads that currently own them (runtime ownership)
     lock_owners: FxHashMap<LockId, ThreadId>,
@@ -54,7 +60,10 @@ impl Default for GraphLogger {
 }
 
 impl GraphLogger {
-    /// Create a new graph logger
+    /// Create a new graph logger instance
+    ///
+    /// # Returns
+    /// A new GraphLogger with empty tracking structures
     pub fn new() -> Self {
         GraphLogger {
             lock_owners: FxHashMap::default(),
@@ -67,7 +76,13 @@ impl GraphLogger {
     }
 
     /// Handle thread spawn event by adding it to the threads set
-    /// If parent_thread_id is provided, record the parent-child relationship
+    ///
+    /// If parent_thread_id is provided, record the parent-child relationship.
+    /// This is used for tracking thread hierarchies and resource ownership.
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the newly spawned thread
+    /// * `parent_thread_id` - Optional ID of the parent thread that created this thread
     pub fn update_thread_spawn(&mut self, thread_id: ThreadId, parent_thread_id: Option<ThreadId>) {
         self.threads.insert(thread_id);
 
@@ -78,6 +93,15 @@ impl GraphLogger {
     }
 
     /// Handle thread exit event by removing it and handling resources it owned
+    ///
+    /// This method performs cleanup for all resources associated with the exiting thread:
+    /// - Removes the thread from tracking
+    /// - Destroys locks created by the thread
+    /// - Releases locks owned by the thread
+    /// - Updates thread hierarchy for orphaned children
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the exiting thread
     pub fn update_thread_exit(&mut self, thread_id: ThreadId) {
         // Remove thread from threads set
         self.threads.remove(&thread_id);
@@ -136,13 +160,23 @@ impl GraphLogger {
     }
 
     /// Handle lock creation event by adding it to the locks set
-    /// Also record which thread created the lock
+    ///
+    /// Also records which thread created the lock for proper resource tracking.
+    ///
+    /// # Arguments
+    /// * `lock_id` - The ID of the newly created lock
+    /// * `creator_thread_id` - The ID of the thread that created this lock
     pub fn update_lock_create(&mut self, lock_id: LockId, creator_thread_id: ThreadId) {
         self.locks.insert(lock_id);
         self.lock_creators.insert(lock_id, creator_thread_id);
     }
 
     /// Handle lock destruction event by removing it from tracking
+    ///
+    /// This method cleans up all references to the destroyed lock from all tracking structures.
+    ///
+    /// # Arguments
+    /// * `lock_id` - The ID of the lock being destroyed
     pub fn update_lock_destroy(&mut self, lock_id: LockId) {
         // Remove the lock from all tracking structures
         self.locks.remove(&lock_id);
@@ -157,10 +191,14 @@ impl GraphLogger {
 
     /// Update the graph state based on a lock event
     ///
+    /// This method processes lock-related events (Attempt, Acquired, Released) and
+    /// updates the internal state accordingly. It also ensures threads and locks
+    /// are tracked even if they weren't explicitly created through spawn events.
+    ///
     /// # Arguments
-    /// * `thread_id` - ID of the thread involved
-    /// * `lock_id` - ID of the lock involved
-    /// * `event` - Type of event that occurred
+    /// * `thread_id` - ID of the thread involved in the event
+    /// * `lock_id` - ID of the lock involved in the event
+    /// * `event` - The type of lock event that occurred
     pub fn update_lock_event(&mut self, thread_id: ThreadId, lock_id: LockId, event: Events) {
         // Always track the thread involved in the current event
         self.threads.insert(thread_id);
@@ -202,19 +240,13 @@ impl GraphLogger {
         }
     }
 
-    /// Check if a lock was created by a specific thread
-    #[allow(dead_code)]
-    pub fn was_lock_created_by(&self, lock_id: LockId, thread_id: ThreadId) -> bool {
-        self.lock_creators.get(&lock_id) == Some(&thread_id)
-    }
-
-    /// Get the parent of a thread, if any
-    #[allow(dead_code)]
-    pub fn get_thread_parent(&self, thread_id: ThreadId) -> Option<ThreadId> {
-        self.thread_parents.get(&thread_id).copied()
-    }
-
     /// Generate the current graph state
+    ///
+    /// This method creates a snapshot of the current thread-lock relationships for
+    /// visualization or analysis purposes.
+    ///
+    /// # Returns
+    /// A GraphState structure containing all current threads, locks, and their relationships
     pub fn get_current_state(&self) -> GraphState {
         let mut links = Vec::new();
 
@@ -244,85 +276,30 @@ impl GraphLogger {
             links,
         }
     }
-}
 
-// Global graph logger instance
-lazy_static::lazy_static! {
-    static ref GLOBAL_GRAPH_LOGGER: Mutex<GraphLogger> = Mutex::new(GraphLogger::new());
-}
-
-/// Update graph logger with thread event
-///
-/// # Arguments
-/// * `thread_id` - ID of the thread involved
-/// * `parent_thread_id` - Optional ID of the parent thread that created this thread
-/// * `event` - Type of event (Spawn or Exit)
-pub fn update_thread(thread_id: ThreadId, parent_thread_id: Option<ThreadId>, event: Events) {
-    if let Ok(mut logger) = GLOBAL_GRAPH_LOGGER.lock() {
-        match event {
-            Events::Spawn => logger.update_thread_spawn(thread_id, parent_thread_id),
-            Events::Exit => logger.update_thread_exit(thread_id),
-            _ => {} // Other events are handled by update_graph
-        }
+    /// Check if a lock was created by a specific thread
+    ///
+    /// # Arguments
+    /// * `lock_id` - The ID of the lock to check
+    /// * `thread_id` - The ID of the potential creator thread
+    ///
+    /// # Returns
+    /// true if the thread created the lock, false otherwise
+    #[cfg(test)]
+    pub fn was_lock_created_by(&self, lock_id: LockId, thread_id: ThreadId) -> bool {
+        self.lock_creators.get(&lock_id) == Some(&thread_id)
     }
-}
 
-/// Update graph logger with lock creation or destruction event
-///
-/// # Arguments
-/// * `lock_id` - ID of the lock involved
-/// * `creator_thread_id` - ID of the thread creating the lock (for Spawn event)
-/// * `event` - Type of event (Spawn or Exit)
-pub fn update_lock(lock_id: LockId, creator_thread_id: Option<ThreadId>, event: Events) {
-    if let Ok(mut logger) = GLOBAL_GRAPH_LOGGER.lock() {
-        match event {
-            Events::Spawn => {
-                if let Some(thread_id) = creator_thread_id {
-                    logger.update_lock_create(lock_id, thread_id);
-                } else {
-                    // Fallback to thread ID 0 if no creator specified
-                    logger.update_lock_create(lock_id, 0);
-                }
-            }
-            Events::Exit => logger.update_lock_destroy(lock_id),
-            _ => {} // Other events are handled by update_graph
-        }
-    }
-}
-
-/// Update the global graph logger with a lock event
-///
-/// # Arguments
-/// * `thread_id` - ID of the thread involved
-/// * `lock_id` - ID of the lock involved
-/// * `event` - Type of event (Attempt, Acquired, or Released)
-pub fn update_graph(thread_id: ThreadId, lock_id: LockId, event: Events) {
-    if let Ok(mut logger) = GLOBAL_GRAPH_LOGGER.lock() {
-        logger.update_lock_event(thread_id, lock_id, event);
-    }
-}
-
-/// Get the current graph state from the global logger
-pub fn get_current_graph_state() -> GraphState {
-    if let Ok(logger) = GLOBAL_GRAPH_LOGGER.lock() {
-        logger.get_current_state()
-    } else {
-        // Return empty state if can't acquire lock
-        GraphState {
-            threads: Vec::new(),
-            locks: Vec::new(),
-            links: Vec::new(),
-        }
-    }
-}
-
-/// Check if a lock was created by a specific thread
-#[allow(dead_code)]
-pub fn was_lock_created_by(lock_id: LockId, thread_id: ThreadId) -> bool {
-    if let Ok(logger) = GLOBAL_GRAPH_LOGGER.lock() {
-        logger.was_lock_created_by(lock_id, thread_id)
-    } else {
-        false
+    /// Get the parent of a thread, if any
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the thread to check
+    ///
+    /// # Returns
+    /// The parent thread ID if one exists, None otherwise
+    #[cfg(test)]
+    pub fn get_thread_parent(&self, thread_id: ThreadId) -> Option<ThreadId> {
+        self.thread_parents.get(&thread_id).copied()
     }
 }
 
@@ -411,7 +388,7 @@ mod tests {
         logger.update_lock_event(2, 10, Events::Acquired);
 
         // Verify the lock is owned by thread 2 but created by thread 1
-        assert!(logger.lock_owners.get(&10) == Some(&2));
+        assert_eq!(logger.lock_owners.get(&10), Some(&2));
         assert!(logger.was_lock_created_by(10, 1));
 
         // Thread 2 exits - should release the lock but not destroy it
@@ -467,5 +444,65 @@ mod tests {
 
         // All locks should be gone
         assert!(!logger.locks.contains(&20));
+    }
+
+    #[test]
+    fn test_attempt_and_acquisition_tracking() {
+        let mut logger = GraphLogger::new();
+
+        // Create thread and lock
+        logger.update_thread_spawn(1, None);
+        logger.update_lock_create(10, 1);
+
+        // Thread attempts to acquire lock
+        logger.update_lock_event(1, 10, Events::Attempt);
+
+        // Verify attempt is tracked
+        assert!(logger.thread_attempts.get(&1).unwrap().contains(&10));
+
+        // Thread acquires lock
+        logger.update_lock_event(1, 10, Events::Acquired);
+
+        // Verify acquisition is tracked and attempt is removed
+        assert!(logger.lock_owners.get(&10) == Some(&1));
+        assert!(logger.thread_attempts.get(&1).is_none()); // No more attempts
+
+        // Thread releases lock
+        logger.update_lock_event(1, 10, Events::Released);
+
+        // Verify ownership is removed
+        assert!(logger.lock_owners.get(&10).is_none());
+    }
+
+    #[test]
+    fn test_graph_state_generation() {
+        let mut logger = GraphLogger::new();
+
+        // Create complex scenario
+        logger.update_thread_spawn(1, None);
+        logger.update_thread_spawn(2, Some(1));
+        logger.update_lock_create(10, 1);
+        logger.update_lock_create(20, 2);
+
+        // Create various relationships
+        logger.update_lock_event(1, 20, Events::Attempt);
+        logger.update_lock_event(2, 10, Events::Acquired);
+
+        // Get graph state
+        let state = logger.get_current_state();
+
+        // Verify state contains expected elements
+        assert_eq!(state.threads.len(), 2);
+        assert_eq!(state.locks.len(), 2);
+        assert_eq!(state.links.len(), 2);
+
+        // Check links
+        let attempt_link = state.links.iter().find(|l| l.link_type == "Attempt").unwrap();
+        assert_eq!(attempt_link.source, 1);
+        assert_eq!(attempt_link.target, 20);
+
+        let acquired_link = state.links.iter().find(|l| l.link_type == "Acquired").unwrap();
+        assert_eq!(acquired_link.source, 2);
+        assert_eq!(acquired_link.target, 10);
     }
 }

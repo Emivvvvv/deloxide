@@ -352,28 +352,43 @@ unsigned long deloxide_get_thread_id();
 unsigned long deloxide_get_mutex_creator(void* mutex);
 
 /**
+ * @brief Flush all pending log entries to disk.
+ *
+ * This function forces all buffered log entries to be written to disk.
+ * It should be called before processing the log file or showcasing to
+ * ensure that all logged events are visible.
+ *
+ * @return  0 on success,
+ *         -1 if flushing failed.
+ */
+int deloxide_flush_logs();
+
+/**
  * @brief Opens a browser window to showcase the given log data.
  *
- * This function processes the log file and sends it to the Deloxide visualization
- * server, opening a browser window to display the thread-lock relationships.
+ * This function flushes pending log entries, processes the log file, and sends
+ * it to the Deloxide visualization server, opening a browser window to display
+ * the thread-lock relationships.
  *
  * @param log_path Path to the log file as a null-terminated UTF-8 string.
  *
  * @return  0 on success,
  *         -1 if log_path is NULL or contains invalid UTF-8,
- *         -2 if the showcase operation failed.
+ *         -2 if the showcase operation failed,
+ *         -3 if flushing failed.
  */
 int deloxide_showcase(const char* log_path);
 
 /**
  * @brief Opens a browser window to showcase the currently active log data.
  *
- * This function uses the log file that was specified in deloxide_init().
- * It's a convenience wrapper around deloxide_showcase() that uses the current log file.
+ * This function ensures all buffered log entries are flushed to disk before
+ * showcasing the log file that was specified in deloxide_init().
  *
  * @return  0 on success,
  *         -1 if no active log file exists,
- *         -2 if the showcase operation failed.
+ *         -2 if the showcase operation failed,
+ *         -3 if flushing failed.
  */
 int deloxide_showcase_current();
 
