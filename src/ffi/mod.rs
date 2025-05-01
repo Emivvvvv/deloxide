@@ -9,12 +9,10 @@
 use crate::core::logger;
 use crate::core::tracked_mutex::TrackedGuard;
 use crate::core::types::get_current_thread_id;
-use crate::core::{
-    ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn,
-};
+use crate::core::{ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn};
 use serde_json;
 use std::cell::RefCell;
-use std::ffi::{CStr, CString, c_void, c_double};
+use std::ffi::{CStr, CString, c_double, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -24,7 +22,7 @@ use crate::core::init_detector;
 #[cfg(feature = "stress-test")]
 use crate::core::detector;
 #[cfg(feature = "stress-test")]
-use crate::core::{StressMode, StressConfig};
+use crate::core::{StressConfig, StressMode};
 #[cfg(feature = "stress-test")]
 use std::sync::atomic::AtomicU8;
 #[cfg(feature = "stress-test")]
@@ -519,7 +517,7 @@ pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
 pub unsafe extern "C" fn deloxide_enable_random_stress(
     probability: c_double,
     min_delay_ms: c_ulong,
-    max_delay_ms: c_ulong
+    max_delay_ms: c_ulong,
 ) -> c_int {
     #[cfg(feature = "stress-test")]
     {
@@ -538,13 +536,13 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
             });
         }
 
-        return 0;
+        0
     }
 
     #[cfg(not(feature = "stress-test"))]
     {
         // Return error if stress-test feature is not enabled
-        return -1;
+        -1
     }
 }
 
@@ -568,7 +566,7 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
 #[allow(unused_variables)]
 pub unsafe extern "C" fn deloxide_enable_component_stress(
     min_delay_ms: c_ulong,
-    max_delay_ms: c_ulong
+    max_delay_ms: c_ulong,
 ) -> c_int {
     #[cfg(feature = "stress-test")]
     {
@@ -587,13 +585,13 @@ pub unsafe extern "C" fn deloxide_enable_component_stress(
             });
         }
 
-        return 0;
+        0
     }
 
     #[cfg(not(feature = "stress-test"))]
     {
         // Return error if stress-test feature is not enabled
-        return -1;
+        -1
     }
 }
 
@@ -622,12 +620,12 @@ pub unsafe extern "C" fn deloxide_disable_stress() -> c_int {
             STRESS_CONFIG = None;
         }
 
-        return 0;
+        0
     }
 
     #[cfg(not(feature = "stress-test"))]
     {
         // Return error if stress-test feature is not enabled
-        return -1;
+        -1
     }
 }

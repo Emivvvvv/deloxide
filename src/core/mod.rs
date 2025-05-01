@@ -34,7 +34,7 @@ pub use tracked_thread::TrackedThread;
 #[cfg(feature = "stress-test")]
 pub mod stress;
 #[cfg(feature = "stress-test")]
-pub use stress::{StressMode, StressConfig};
+pub use stress::{StressConfig, StressMode};
 
 use anyhow::{Context, Result};
 

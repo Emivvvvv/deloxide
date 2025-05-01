@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Thread identifier type
 ///
@@ -77,8 +77,8 @@ pub struct DeadlockInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::sync::mpsc;
+    use std::thread;
 
     #[test]
     fn test_thread_id_consistency() {

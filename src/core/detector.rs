@@ -6,11 +6,13 @@ use fxhash::{FxHashMap, FxHashSet};
 use std::sync::Mutex;
 
 #[cfg(feature = "stress-test")]
-use crate::core::stress::{on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release};
+use crate::core::StressConfig;
 #[cfg(feature = "stress-test")]
 use crate::core::StressMode;
 #[cfg(feature = "stress-test")]
-use crate::core::StressConfig;
+use crate::core::stress::{
+    on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release,
+};
 
 /// Main deadlock detector that maintains thread-lock relationships
 ///
@@ -187,31 +189,30 @@ impl Detector {
         {
             if self.stress_mode != StressMode::None {
                 if let Some(config) = &self.stress_config {
-                    // Get the currently held locks by this thread
-                    let held_locks = self.thread_holds.get(&thread_id)
+                    let held_locks = self
+                        .thread_holds
+                        .get(&thread_id)
                         .map(|set| set.iter().copied().collect::<Vec<_>>())
                         .unwrap_or_default();
 
-                    // Apply stress strategy
                     stress_on_lock_attempt(
                         self.stress_mode,
                         thread_id,
                         lock_id,
                         &held_locks,
-                        config
+                        config,
                     );
                 }
             }
         }
 
         if let Some(&owner) = self.lock_owners.get(&lock_id) {
-            // record wait-for
+            // Record wait-for
             self.thread_waits_for.insert(thread_id, lock_id);
-            self.wait_for_graph.add_edge(thread_id, owner);
 
-            // check for a cycle involving this thread
-            if let Some(cycle) = self.wait_for_graph.detect_cycle_from(thread_id) {
-                // 1) compute intersection of held-locks across the cycle
+            // Use incremental cycle detection
+            if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
+                // Apply filter for common locks
                 let mut iter = cycle.iter();
                 let first = *iter.next().unwrap();
                 let mut intersection = self.thread_holds.get(&first).cloned().unwrap_or_default();
@@ -225,7 +226,7 @@ impl Detector {
                     }
                 }
 
-                // 2) only report if *no* common lock (i.e., false-alarm filter)
+                // Only report if no common lock (i.e., false-alarm filter)
                 if intersection.is_empty() {
                     let info = DeadlockInfo {
                         thread_cycle: cycle.clone(),
@@ -256,12 +257,15 @@ impl Detector {
         if logger::is_logging_enabled() {
             logger::log_interaction_event(thread_id, lock_id, Events::Acquired);
         }
-        // update ownership
+
+        // Update ownership
         self.lock_owners.insert(lock_id, thread_id);
         self.thread_waits_for.remove(&thread_id);
-        // clear any wait-for edges for this thread
+
+        // Remove thread from wait graph
         self.wait_for_graph.remove_thread(thread_id);
-        // record held lock
+
+        // Record held lock
         self.thread_holds
             .entry(thread_id)
             .or_default()
@@ -296,12 +300,7 @@ impl Detector {
         {
             if self.stress_mode != StressMode::None {
                 if let Some(config) = &self.stress_config {
-                    stress_on_lock_release(
-                        self.stress_mode,
-                        thread_id,
-                        lock_id,
-                        config
-                    );
+                    stress_on_lock_release(self.stress_mode, thread_id, lock_id, config);
                 }
             }
         }
@@ -336,8 +335,7 @@ pub fn init_detector_with_stress<F>(
     callback: F,
     stress_mode: StressMode,
     stress_config: Option<StressConfig>,
-)
-where
+) where
     F: Fn(DeadlockInfo) + Send + 'static,
 {
     if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {

@@ -1,6 +1,6 @@
 use crate::core::types::{Events, LockId, ThreadId};
-use serde::Serialize;
 use fxhash::{FxHashMap, FxHashSet};
+use serde::Serialize;
 use std::sync::Mutex;
 
 /// Represents a link between a thread and a lock

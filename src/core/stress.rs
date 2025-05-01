@@ -82,7 +82,11 @@ impl ComponentTracker {
     }
 
     fn should_delay(&self, from_lock: LockId, to_lock: LockId) -> bool {
-        let from_comp = self.components.get(&from_lock).copied().unwrap_or(usize::MAX);
+        let from_comp = self
+            .components
+            .get(&from_lock)
+            .copied()
+            .unwrap_or(usize::MAX);
         let to_comp = self.components.get(&to_lock).copied().unwrap_or(usize::MAX);
 
         // If both locks are in the same component (potential cycle)
@@ -91,7 +95,9 @@ impl ComponentTracker {
         }
 
         // If there's a reverse acquisition pattern
-        self.acquisitions.iter().any(|&(f, t)| f == to_lock && t == from_lock)
+        self.acquisitions
+            .iter()
+            .any(|&(f, t)| f == to_lock && t == from_lock)
     }
 }
 
@@ -233,25 +239,21 @@ pub fn on_lock_attempt(
     match mode {
         StressMode::None => false,
 
-        StressMode::RandomPreemption => {
-            try_random_preemption(
-                thread_id,
-                lock_id,
-                config.preemption_probability,
-                config.min_delay_ms,
-                config.max_delay_ms,
-            )
-        },
+        StressMode::RandomPreemption => try_random_preemption(
+            thread_id,
+            lock_id,
+            config.preemption_probability,
+            config.min_delay_ms,
+            config.max_delay_ms,
+        ),
 
-        StressMode::ComponentBased => {
-            apply_component_delay(
-                thread_id,
-                lock_id,
-                held_locks,
-                config.min_delay_ms,
-                config.max_delay_ms,
-            )
-        },
+        StressMode::ComponentBased => apply_component_delay(
+            thread_id,
+            lock_id,
+            held_locks,
+            config.min_delay_ms,
+            config.max_delay_ms,
+        ),
     }
 }
 
@@ -260,7 +262,7 @@ pub fn on_lock_release(
     mode: StressMode,
     _thread_id: ThreadId,
     _lock_id: LockId,
-    config: &StressConfig
+    config: &StressConfig,
 ) {
     if mode != StressMode::None && config.preempt_after_release {
         thread::yield_now();
