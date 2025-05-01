@@ -17,6 +17,8 @@ let currentScenario = null
 let animationInterval = null
 let isPlaying = false
 let isFileUploaded = false // Add flag to track if data was uploaded
+let animationSpeed = 1.0 // Default animation speed (1.0 = normal speed)
+let buttonCooldown = false // Add variable to track button cooldown status
 
 // Theme management
 const themeToggle = document.getElementById("theme-toggle")
@@ -214,8 +216,9 @@ const initUploadFeature = () => {
           console.warn(
             "The uploaded file does not appear to be a valid deadlock log"
           )
-          alert(
-            "Warning: The file does not appear to be a valid deadlock log file. It may not display correctly."
+          showToast(
+            "Warning: The file does not appear to be a valid deadlock log file. It may not display correctly.",
+            "warning"
           )
         }
       } catch (error) {
@@ -256,59 +259,12 @@ const initUploadFeature = () => {
 
         // Check if this is the new format (one JSON object per line)
         if (content.trim().startsWith("{") && content.includes('{"event":')) {
-          // Process the new format logs
-          scenario = processNewFormatLogs(content)
+          try {
+            // Process the new format logs - one JSON per line
+            scenario = processNewFormatLogs(content)
 
-          // Store the original content for sharing
-          scenario.rawContent = content
-
-          // Process the transformed data
-          uploadModal.style.display = "none"
-          resetVisualization()
-          currentScenario = scenario
-          logData = scenario.logs
-          graphStateData = scenario.graph_state
-
-          // Show loading state
-          document.getElementById("loading").style.display = "block"
-          document.getElementById("loading").innerHTML =
-            '<div class="spinner"></div><p>Loading visualization...</p>'
-
-          // Hide share button for uploads
-          if (shareBtn) {
-            shareBtn.style.display = "none"
-          }
-
-          // Initialize visualization after a brief delay
-          setTimeout(() => {
-            initVisualization()
-
-            // Hide loading message and show visualization elements
-            showVisualizationElements()
-
-            // Initialize timeline
-            initTimeline()
-
-            // Update visualization for the first step
-            updateVisualization()
-
-            // Auto-start removed - user needs to click play manually
-          }, 100)
-        } else {
-          // Parse the uploaded file as standard JSON
-          const jsonData = JSON.parse(content)
-
-          // Check if this is the new format (raw data array)
-          if (
-            Array.isArray(jsonData) &&
-            jsonData.length >= 1 &&
-            Array.isArray(jsonData[0])
-          ) {
-            // This is the new raw format, transform it using the utility function
-            scenario = transformRawObject(jsonData)
-
-            // Store the original raw data for sharing
-            scenario.rawData = jsonData
+            // Store the original content for sharing
+            scenario.rawContent = content
 
             // Process the transformed data
             uploadModal.style.display = "none"
@@ -322,9 +278,9 @@ const initUploadFeature = () => {
             document.getElementById("loading").innerHTML =
               '<div class="spinner"></div><p>Loading visualization...</p>'
 
-            // Hide share button for uploads
+            // Show share button for uploads
             if (shareBtn) {
-              shareBtn.style.display = "none"
+              shareBtn.style.display = "flex"
             }
 
             // Initialize visualization after a brief delay
@@ -342,33 +298,46 @@ const initUploadFeature = () => {
 
               // Auto-start removed - user needs to click play manually
             }, 100)
-          } else {
-            // Check if it's a standard format
-            if (validateDeadlockLog(jsonData)) {
-              // Process the scenario data (old format)
+          } catch (lineFormatError) {
+            console.error("Error processing line-by-line JSON:", lineFormatError)
+            showToast("Error processing log file: " + lineFormatError.message, "error")
+          }
+        } else {
+          // Handle standard JSON formats
+          try {
+            // Parse the uploaded file as standard JSON
+            const jsonData = JSON.parse(content)
+
+            // Check if this is the new format (raw data array)
+            if (
+              Array.isArray(jsonData) &&
+              jsonData.length >= 1 &&
+              Array.isArray(jsonData[0])
+            ) {
+              // This is the new raw format, transform it using the utility function
+              scenario = transformRawObject(jsonData)
+
+              // Store the original raw data for sharing
+              scenario.rawData = jsonData
+
+              // Process the transformed data
               uploadModal.style.display = "none"
               resetVisualization()
-              currentScenario = jsonData
-              logData = jsonData.logs
-              graphStateData = jsonData.graph_state
+              currentScenario = scenario
+              logData = scenario.logs
+              graphStateData = scenario.graph_state
 
-              // Update scenario information
-              updateScenarioInfo(jsonData)
-
-              // Initialize visualization
-              currentStep = 1
-
-              // Show loading state while we initialize
+              // Show loading state
               document.getElementById("loading").style.display = "block"
               document.getElementById("loading").innerHTML =
                 '<div class="spinner"></div><p>Loading visualization...</p>'
 
-              // Show share button since we have data loaded
+              // Show share button for uploads
               if (shareBtn) {
                 shareBtn.style.display = "flex"
               }
 
-              // Initialize after a brief delay to allow the UI to update
+              // Initialize visualization after a brief delay
               setTimeout(() => {
                 initVisualization()
 
@@ -384,19 +353,62 @@ const initUploadFeature = () => {
                 // Auto-start removed - user needs to click play manually
               }, 100)
             } else {
-              alert(
-                "Error: The file is not a valid deadlock log file. Please upload a properly formatted file."
-              )
+              // Check if it's a standard format
+              if (validateDeadlockLog(jsonData)) {
+                // Process the scenario data (old format)
+                uploadModal.style.display = "none"
+                resetVisualization()
+                currentScenario = jsonData
+                logData = jsonData.logs
+                graphStateData = jsonData.graph_state
+
+                // Update scenario information
+                updateScenarioInfo(jsonData)
+
+                // Initialize visualization
+                currentStep = 1
+
+                // Show loading state while we initialize
+                document.getElementById("loading").style.display = "block"
+                document.getElementById("loading").innerHTML =
+                  '<div class="spinner"></div><p>Loading visualization...</p>'
+
+                // Show share button since we have data loaded
+                if (shareBtn) {
+                  shareBtn.style.display = "flex"
+                }
+
+                // Initialize after a brief delay to allow the UI to update
+                setTimeout(() => {
+                  initVisualization()
+
+                  // Hide loading message and show visualization elements
+                  showVisualizationElements()
+
+                  // Initialize timeline
+                  initTimeline()
+
+                  // Update visualization for the first step
+                  updateVisualization()
+
+                  // Auto-start removed - user needs to click play manually
+                }, 100)
+              } else {
+                showToast("Error: The file is not a valid deadlock log file. Please upload a properly formatted file.", "error")
+              }
             }
+          } catch (jsonError) {
+            console.error("Error parsing JSON:", jsonError)
+            showToast("Error loading file: " + jsonError.message, "error")
           }
         }
       } catch (error) {
-        alert("Error loading file: " + error.message)
+        showToast("Error loading file: " + error.message, "error")
       }
     }
 
     reader.onerror = function () {
-      alert("Error reading file.")
+      showToast("Error reading file.", "error")
     }
 
     reader.readAsText(file)
@@ -476,15 +488,11 @@ function initShareFeature() {
         showCopySuccess()
       } else {
         console.error("Fallback: Unable to copy")
-        alert(
-          "Unable to copy to clipboard. Please select the text and copy manually."
-        )
+        showToast("Unable to copy to clipboard. Please select the text and copy manually.", "error")
       }
     } catch (err) {
       console.error("Fallback: Unable to copy", err)
-      alert(
-        "Unable to copy to clipboard. Please select the text and copy manually."
-      )
+      showToast("Unable to copy to clipboard. Please select the text and copy manually.", "error")
     }
   }
 
@@ -508,19 +516,64 @@ function openShareModal() {
   const shareLinkInput = document.getElementById("share-link")
 
   if (!currentScenario) {
-    alert("No scenario is currently loaded. Please upload a scenario first.")
+    showToast("No scenario is currently loaded. Please upload a scenario first.", "warning");
     return
   }
 
   try {
     console.log("Preparing to share scenario")
 
+    // Get the current URL and its base part (without query parameters)
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.split("?")[0];
+
+    // Check if we loaded this scenario from an encoded URL
+    if (currentUrl.includes('?logs=') || currentUrl.includes('?format=') || currentUrl.includes('?data=')) {
+      // We're already viewing an encoded URL, just use the current URL without step parameter
+      const shareUrl = currentUrl.split('&step=')[0]; // Remove step parameter if present
+      console.log("Using current encoded URL for sharing");
+      
+      // Set the input value
+      shareLinkInput.value = shareUrl;
+      
+      // Show the modal
+      showModalWithAnimation(shareModal);
+      return;
+    }
+
     // Check if data can be shared as raw content (new line-by-line format)
     if (currentScenario.rawContent) {
       // We have the original raw text content available
       console.log("Using raw line-by-line format for sharing")
 
-      // Compress the raw text content
+      // Line-by-line JSON may need special handling
+      const isLineByLine = 
+        typeof currentScenario.rawContent === 'string' && 
+        currentScenario.rawContent.trim().startsWith("{") && 
+        currentScenario.rawContent.includes('{"event":');
+        
+      if (isLineByLine) {
+        // Direct line-by-line format - URL encode it for sharing
+        const encodedContent = encodeURIComponent(currentScenario.rawContent);
+        console.log("Line-by-line JSON format encoded, size:", encodedContent.length);
+        
+        // Generate URL with format parameter to indicate line-by-line
+        const shareUrl = `${baseUrl}?format=line-by-line&logs=${encodedContent}`;
+        
+        // Set the input value - if it's too long, warn the user
+        if (shareUrl.length > 8000) {
+          console.warn("Warning: Generated URL is very long and may not work in all browsers");
+          showToast("Warning: The generated URL is very long and may not work in all browsers. Consider using a file upload instead.", "warning");
+        }
+        
+        shareLinkInput.value = shareUrl;
+        
+        // Show the modal
+        showModalWithAnimation(shareModal);
+        return;
+      }
+      
+      // Handle standard JSON compression for non-line-by-line format
       const compressedData = LZString.compressToEncodedURIComponent(
         currentScenario.rawContent
       )
@@ -531,8 +584,7 @@ function openShareModal() {
       )
 
       // Generate URL with the format parameter to indicate line-by-line
-      const currentUrl = window.location.href.split("?")[0]
-      const shareUrl = `${currentUrl}?format=line&data=${compressedData}&step=${currentStep}`
+      const shareUrl = `${baseUrl}?format=line&logs=${compressedData}`
 
       console.log("Share URL generated, length:", shareUrl.length)
 
@@ -565,8 +617,7 @@ function openShareModal() {
       console.log("Compressed logs size:", b64encoded.length, "characters")
 
       // Generate URL with the logs parameter
-      const currentUrl = window.location.href.split("?")[0]
-      const shareUrl = `${currentUrl}?logs=${b64encoded}&step=${currentStep}`
+      const shareUrl = `${baseUrl}?logs=${b64encoded}`
 
       console.log("Share URL generated, length:", shareUrl.length)
 
@@ -578,21 +629,19 @@ function openShareModal() {
       return
     }
 
-    // Fallback to using the processed scenario object
+    // Fallback to using the processed scenario object (for uploaded files without raw content or data)
     console.log("Using processed scenario data for sharing")
 
     // Create a compressed version of the current scenario
     const scenarioString = JSON.stringify(currentScenario)
     console.log("Original data size:", scenarioString.length, "bytes")
 
-    // Compress the data
-    const compressedData =
-      LZString.compressToEncodedURIComponent(scenarioString)
+    // Compress the data using LZString
+    const compressedData = LZString.compressToEncodedURIComponent(scenarioString)
     console.log("Compressed data size:", compressedData.length, "bytes")
 
-    // Generate the full URL with the compressed data
-    const currentUrl = window.location.href.split("?")[0] // Remove any existing query parameters
-    const shareUrl = `${currentUrl}?data=${compressedData}&step=${currentStep}`
+    // Generate the full URL with the compressed data using the logs parameter
+    const shareUrl = `${baseUrl}?logs=${compressedData}`
 
     console.log("Share URL generated, length:", shareUrl.length)
 
@@ -603,7 +652,7 @@ function openShareModal() {
     showModalWithAnimation(shareModal)
   } catch (error) {
     console.error("Error generating share link:", error)
-    alert("Error generating share link: " + error.message)
+    showToast("Error generating share link: " + error.message, "error")
   }
 }
 
@@ -629,27 +678,57 @@ function checkForSharedScenario() {
       console.log("Decoding logs from URL parameter...")
       let decodedData;
       
-      try {
-        // Try to parse as JSON first
-        decodedData = JSON.parse(encodedLogs);
-        console.log("Successfully parsed logs as JSON");
-      } catch (e) {
-        // If not valid JSON, try to decode from Base64
+      // Check if it's the line-by-line JSON format (already encoded in the URL)
+      if (encodedLogs.trim().startsWith("{") && encodedLogs.includes('{"event":')) {
+        console.log("Detected line-by-line JSON format");
+        decodedData = encodedLogs;
+      } else {
         try {
-          console.log("Not a valid JSON, trying to decode from Base64...");
-          decodedData = decodeLogs(encodedLogs);
-          console.log("Successfully decoded logs from Base64");
-        } catch (decodeError) {
-          throw new Error("Failed to decode logs: " + decodeError.message);
+          // Try to parse as JSON first
+          decodedData = JSON.parse(encodedLogs);
+          console.log("Successfully parsed logs as JSON");
+        } catch (e) {
+          // If not valid JSON, try to decode from URL encoding or Base64
+          try {
+            // First try LZString decompression (for data shared from the app)
+            try {
+              console.log("Attempting to decompress with LZString...");
+              const decompressedData = LZString.decompressFromEncodedURIComponent(encodedLogs);
+              
+              if (decompressedData) {
+                try {
+                  // Try to parse the decompressed data as JSON
+                  decodedData = JSON.parse(decompressedData);
+                  console.log("Successfully decompressed and parsed logs with LZString");
+                } catch (parseError) {
+                  // If not valid JSON after decompression, it might be raw content
+                  decodedData = decompressedData;
+                  console.log("Decompressed data is not JSON, using as raw content");
+                }
+              } else {
+                // If LZString decompression failed, try Base64 decoding
+                throw new Error("LZString decompression failed");
+              }
+            } catch (lzError) {
+              // Try Base64 decoding as fallback
+              console.log("LZString failed, trying Base64 decoding...");
+              decodedData = decodeLogs(encodedLogs);
+              console.log("Successfully decoded logs from Base64");
+            }
+          } catch (decodeError) {
+            throw new Error("Failed to decode logs: " + decodeError.message);
+          }
         }
       }
       
-      // Process the logs using the updated processor
-      const processed = processEncodedLog(decodedData);
+      // Process the logs using the proper processor based on format
+      let processed;
+      if (format === "line-by-line" || (typeof decodedData === 'string' && decodedData.trim().startsWith("{") && decodedData.includes('{"event":'))) {
+        processed = processNewFormatLogs(decodedData);
+      } else {
+        processed = processEncodedLog(decodedData);
+      }
       
-      // Store original content for potential re-sharing
-      processed.rawContent = decodedData;
-
       // Process the transformed data
       resetVisualization();
       currentScenario = processed;
@@ -698,7 +777,8 @@ function checkForSharedScenario() {
     }
   }
 
-  if (encodedData) {
+  // Handle data parameter for backward compatibility
+  else if (encodedData) {
     // Handle the existing LZString format
     try {
       console.log("Found shared data in URL, processing...")
@@ -819,15 +899,15 @@ function checkForSharedScenario() {
           console.log("Shared visualization loaded successfully")
         }, 100)
       } else {
-        console.error("Invalid deadlock log format in shared data")
+        console.error("Invalid log format in shared URL")
         document.getElementById("loading").innerHTML = `
-                    <div class="error-message">
-                        <i class="fas fa-exclamation-triangle"></i> 
-                        The shared visualization data is invalid or corrupted.
-                    </div>`
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error: Invalid log format in shared URL
+                </div>`
       }
     } catch (error) {
-      console.error("Error loading shared scenario:", error)
+      console.error("Error loading shared visualization:", error)
       document.getElementById("loading").innerHTML = `
                 <div class="error-message">
                     <i class="fas fa-exclamation-triangle"></i> 
@@ -954,67 +1034,101 @@ function resetVisualization() {
 function initVisualization() {
   // Disable the previous button initially
   document.getElementById("prev-btn").disabled = true
-  document.getElementById("next-btn").disabled = false
 
-  // Get the container dimensions
-  const graphElement = document.getElementById("graph")
-  const width = graphElement.clientWidth
-  const height = graphElement.clientHeight
+  // Get the graph container
+  const graphContainer = document.getElementById("graph")
 
-  // Center coordinates
+  // Clear any previous SVG
+  graphContainer.innerHTML = ""
+
+  // Get dimensions of the graph container
+  const width = graphContainer.clientWidth
+  const height = graphContainer.clientHeight
   const centerX = width / 2
   const centerY = height / 2
 
-  // Remove any existing SVG content
-  d3.select("#graph svg").remove()
-
-  // Create new SVG element
+  // Create svg element to hold the visualization
   svg = d3
     .select("#graph")
     .append("svg")
-    .attr("viewBox", [0, 0, width, height])
-    .attr("width", width)
-    .attr("height", height)
+    .attr("width", "100%")
+    .attr("height", "100%")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
 
   // Create defs section for markers
   const defs = svg.append("defs");
-  
-  // Add arrow markers for normal links
+
+  // Add standard arrow marker for links
   defs.append("marker")
     .attr("id", "arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 25) // Position relative to the node
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
     .attr("refY", 0)
-    .attr("markerWidth", 6)
-    .attr("markerHeight", 6)
     .attr("orient", "auto")
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("xoverflow", "visible")
     .append("path")
-    .attr("d", "M0,-5L10,0L0,5")
-    .attr("fill", "var(--neutral-color)");
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--primary-color)")
+    .style("stroke", "none");
 
-  // Add larger, more visible deadlock arrow marker
+  // Add attempt arrow marker with dashed style
+  defs.append("marker")
+    .attr("id", "attempt-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--warning-color)")
+    .style("stroke", "none");
+
+  // Add acquired arrow marker with a thicker line
+  defs.append("marker")
+    .attr("id", "acquired-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 9)
+    .attr("markerHeight", 9)
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
+    .attr("fill", "var(--success-color)")
+    .style("stroke", "none");
+
+  // Add special marker for deadlock arrows with a distinctive shape
   defs.append("marker")
     .attr("id", "deadlock-arrowhead")
-    .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 20) // Position closer to the end of the line for thicker links
+    .attr("viewBox", "0 -6 12 12")
+    .attr("refX", 28) // Push the arrowhead back to be behind the node circle
     .attr("refY", 0)
-    .attr("markerWidth", 4) // Smaller size for more modern look
-    .attr("markerHeight", 4) // Smaller size for more modern look
     .attr("orient", "auto")
+    .attr("markerWidth", 8) // Reduced from 10
+    .attr("markerHeight", 8) // Reduced from 10
+    .attr("xoverflow", "visible")
     .append("path")
-    .attr("d", "M0,-5L10,0L0,5")
-    .attr("fill", "#f44336");
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Smaller arrow shape
+    .attr("fill", "#f44336")
+    .style("stroke", "none");
 
-  // Create group elements for the links and nodes
-  linkGroup = svg.append("g").attr("class", "links")
-  nodeGroup = svg.append("g").attr("class", "nodes")
-
-  // Initialize tooltip
+  // Create tooltip
   tooltip = d3
     .select("body")
     .append("div")
     .attr("class", "tooltip")
     .style("opacity", 0)
+
+  // Define groups for links and nodes
+  linkGroup = svg.append("g").attr("class", "links")
+  nodeGroup = svg.append("g").attr("class", "nodes")
 
   // Create the force simulation
   simulation = d3
@@ -1024,11 +1138,13 @@ function initVisualization() {
       d3
         .forceLink()
         .id((d) => d.id)
-        .distance(120)
+        .distance(150) // Increased from 120 for more spacing between nodes
     )
-    .force("charge", d3.forceManyBody().strength(-600))
+    .force("charge", d3.forceManyBody().strength(-800)) // Increased from -600 for stronger repulsion
     .force("center", d3.forceCenter(centerX, centerY))
-    .force("collide", d3.forceCollide().radius(60))
+    .force("collide", d3.forceCollide().radius(80)) // Increased from 60 to avoid overlapping
+    .force("x", d3.forceX(centerX).strength(0.1)) // Add force to pull nodes toward center X
+    .force("y", d3.forceY(centerY).strength(0.1)) // Add force to pull nodes toward center Y
     .on("tick", ticked)
 
   // Fixed initial positions for better visual consistency during reset
@@ -1100,11 +1216,32 @@ function updateVisualization() {
       const hasDeadlockLinks = nextState.links.some(link => link.type === "deadlock");
       if (hasDeadlockLinks) {
         console.log("Found dedicated deadlock state - using it");
-        // Use the next state which should have the deadlock links
-        nodes = JSON.parse(JSON.stringify(nextState.nodes));
-        links = [];
         
-        // Process each link to ensure it has proper references to node objects
+        // Instead of recreating the array and losing reference, update existing nodes
+        // First, create a map of existing nodes by ID for quick lookup
+        const nodeMap = {};
+        nodes.forEach(node => {
+          nodeMap[node.id] = node;
+        });
+        
+        // Update existing nodes with new data, preserving positions
+        const newNodes = JSON.parse(JSON.stringify(nextState.nodes));
+        const updatedNodes = newNodes.map(newNode => {
+          const existingNode = nodeMap[newNode.id];
+          if (existingNode) {
+            // Keep the existing position to avoid jumping
+            newNode.x = existingNode.x;
+            newNode.y = existingNode.y;
+            return {...existingNode, ...newNode};
+          }
+          return newNode;
+        });
+        
+        // Update nodes reference with the updated data
+        nodes = updatedNodes;
+        
+        // Handle links - create a new array but with proper node references
+        links = [];
         JSON.parse(JSON.stringify(nextState.links)).forEach(link => {
           const sourceNode = typeof link.source === 'object' ? 
             nodes.find(n => n.id === link.source.id) : 
@@ -1148,45 +1285,17 @@ function updateVisualization() {
     }
   }
 
-  // Find main thread ID once - using a more direct approach
-  let mainThreadId = null;
+  // Create a map of existing nodes by ID for quick lookup
+  const nodeMap = {};
+  nodes.forEach(node => {
+    nodeMap[node.id] = node;
+  });
   
-  // Step 1: Find any thread explicitly marked as main
-  for (const log of logData) {
-    if (log.is_main_thread) {
-      mainThreadId = log.thread_id;
-      console.log("Found explicitly marked main thread:", mainThreadId);
-      break;
-    }
-  }
-  
-  // Step 2: If not found, check for the first spawn event's parent
-  if (mainThreadId === null) {
-    const firstSpawnLog = logData.find(log => log.type === "spawn");
-    if (firstSpawnLog && firstSpawnLog.parent_id) {
-      mainThreadId = firstSpawnLog.parent_id;
-      console.log("Found main thread from first spawn parent:", mainThreadId);
-    }
-  }
-  
-  // Step 3: If still not found, use the first thread in the logs
-  if (mainThreadId === null) {
-    for (const log of logData) {
-      if (log.thread_id && log.thread_id !== 0) {
-        mainThreadId = log.thread_id;
-        console.log("Using first thread as main thread:", mainThreadId);
-        break;
-      }
-    }
-  }
-  
-  console.log("Final determined main thread ID:", mainThreadId);
-  
-  // Update nodes with deep clones to avoid reference issues
-  nodes = JSON.parse(JSON.stringify(currentState.nodes));
+  // Create a new array of nodes with transition-friendly updates
+  const newNodes = JSON.parse(JSON.stringify(currentState.nodes));
   
   // Add parent_id information for all nodes from log data
-  nodes.forEach(node => {
+  newNodes.forEach(node => {
     if (node.type === "thread") {
       const threadId = parseInt(node.id.substring(1)); // Remove the 'T' prefix and convert to number
       
@@ -1198,12 +1307,21 @@ function updateVisualization() {
         }
       }
       
-      // Check if this thread is the main thread
-      if (mainThreadId !== null && threadId === mainThreadId) {
+      // Identify main thread
+      let mainThreadId = null;
+      // Find the first thread with parent_id that's not 0 (the main thread)
+      for (let i = 0; i < logData.length; i++) {
+        const log = logData[i];
+        if (log.type === "spawn" && log.parent_id !== 0 && !mainThreadId) {
+          mainThreadId = log.parent_id;
+          break;
+        }
+      }
+      
+      // Mark this node as main thread if it matches
+      if (threadId === mainThreadId) {
         node.is_main_thread = true;
-        // Change the node name to indicate it's the main thread
         node.name = "Main Thread";
-        console.log(`Marked node ${node.id} as main thread`);
       }
       
       // Add parent_id information from log data if available
@@ -1215,14 +1333,23 @@ function updateVisualization() {
         node.parent_id = threadLogEntry.parent_id;
         
         // Check if the parent is the main thread
-        if (mainThreadId !== null && node.parent_id === mainThreadId) {
+        if (threadLogEntry.parent_id === mainThreadId) {
           node.parent_id_is_main = true;
-          console.log(`Marked node ${node.id}'s parent as main thread`);
         }
       }
-    } 
+    }
     else if (node.type === "resource") {
       const resourceId = node.id.substring(1); // Remove the 'R' prefix
+      
+      // Find main thread ID
+      let mainThreadId = null;
+      for (let i = 0; i < logData.length; i++) {
+        const log = logData[i];
+        if (log.type === "spawn" && log.parent_id !== 0 && !mainThreadId) {
+          mainThreadId = log.parent_id;
+          break;
+        }
+      }
       
       // Add parent_id for resources if available
       const resourceLogEntry = logData.find(entry => 
@@ -1233,13 +1360,22 @@ function updateVisualization() {
         node.parent_id = resourceLogEntry.parent_id;
         
         // Check if the parent is the main thread
-        if (mainThreadId !== null && node.parent_id === mainThreadId) {
+        if (resourceLogEntry.parent_id === mainThreadId) {
           node.parent_id_is_main = true;
-          console.log(`Marked resource ${node.id}'s parent as main thread`);
         }
       }
     }
+    
+    // Preserve position for smooth transition if the node already exists
+    const existingNode = nodeMap[node.id];
+    if (existingNode) {
+      node.x = existingNode.x;
+      node.y = existingNode.y;
+    }
   });
+
+  // Update the nodes array
+  nodes = newNodes;
 
   // First update simulation with just the nodes
   simulation.nodes(nodes);
@@ -1317,13 +1453,20 @@ function updateVisualization() {
 
 // Helper function to update node elements
 function updateNodeElements() {
-  // Clear existing nodes
-  nodeGroup.selectAll("*").remove();
-  
-  // Create all nodes from scratch
-  const nodeElements = nodeGroup
+  // Instead of removing all nodes, we'll use D3's enter/update/exit pattern
+  const nodeSelection = nodeGroup
     .selectAll(".node")
-    .data(nodes)
+    .data(nodes, d => d.id); // Key function to maintain identity
+  
+  // Exit - remove nodes that no longer exist with animation
+  nodeSelection.exit()
+    .transition()
+    .duration(200) // Reduced from 300 for faster removal
+    .style("opacity", 0)
+    .remove();
+  
+  // Enter - add new nodes
+  const nodeEnter = nodeSelection
     .enter()
     .append("g")
     .attr("class", d => `node ${d.type}`)
@@ -1335,16 +1478,13 @@ function updateNodeElements() {
       .on("drag", dragged)
       .on("end", dragended));
   
-  // Add circles to nodes with scale animation
-  nodeElements
+  // Add circles to new nodes
+  nodeEnter
     .append("circle")
     .attr("r", 0) // Start with radius 0
     .attr("fill", d => {
       if (d.type === "thread") {
-        if (d.is_main_thread) {
-          return "#9b59b6"; // Purple for main thread
-        }
-        return "var(--danger-color)"; // Default color for normal threads
+        return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
       }
       return "var(--primary-color)"; // Default color for resources
     })
@@ -1353,62 +1493,84 @@ function updateNodeElements() {
         if (d.isInCycle) {
           return "#f44336"; // Modern red for deadlock threads
         }
-        if (d.is_main_thread) {
-          return "#8e44ad"; // Darker purple for main thread
-        }
-        return "var(--danger-dark)"; // Default for normal threads
+        return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
       }
-      return "var(--primary-dark)"; // Default for resources
+      return "var(--primary-dark)";
     })
-    .attr("stroke-width", d => {
-      if (d.is_main_thread) {
-        return "3px"; // Thicker border for main thread
-      }
-      return d.isInCycle ? "2px" : "2px";
-    })
-    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none")
-    .each(function(d) {
-      if (d.isInCycle) {
-        // Add a subtle glow effect for threads in deadlock
-        d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.5))");
-      } else if (d.is_main_thread) {
-        // Add a subtle glow effect for main thread
-        d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(155, 89, 182, 0.6))");
-      }
-    });
+    .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
+    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none");
   
-  // Add text labels
-  nodeElements
+  // Add text labels to new nodes
+  nodeEnter
     .append("text")
     .attr("dy", 5)
     .text(d => d.id)
     .attr("fill", "white")
     .style("opacity", 0); // Start with transparent text
   
-  // Animate nodes appearing
-  nodeElements
+  // Apply special effects for new nodes
+  nodeEnter.selectAll("circle").each(function(d) {
+    if (d.isInCycle) {
+      // Add a subtle glow effect for threads in deadlock
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
+    } else if (d.is_main_thread) {
+      // Add a subtle glow effect for main thread
+      d3.select(this).style("filter", "drop-shadow(0 0 4px rgba(155, 89, 182, 0.7))");
+    }
+  });
+  
+  // Animate new nodes appearing
+  nodeEnter
     .transition()
-    .duration(400)
+    .duration(250) // Reduced from 400 for faster appearance
     .style("opacity", 1) // Fade in the node
     .select("circle")
     .attr("r", 25); // Grow to full size
     
-  // Animate text appearing
-  nodeElements
+  // Animate text appearing in new nodes
+  nodeEnter
     .select("text")
     .transition()
-    .delay(200) // Slight delay after the circle starts growing
-    .duration(200)
+    .delay(100) // Reduced from 200 for faster text appearance
+    .duration(150) // Reduced from 200 for faster text appearance
     .style("opacity", 1);
+    
+  // Update - handle existing nodes
+  const nodeUpdate = nodeSelection
+    .transition()
+    .duration(300) // Reduced from 500 for faster updates
+    .attr("data-in-cycle", d => d.isInCycle === true ? "true" : "false")
+    .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`);
+    
+  // Update attributes of existing circles
+  nodeUpdate.select("circle")
+    .attr("fill", d => {
+      if (d.type === "thread") {
+        return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
+      }
+      return "var(--primary-color)"; // Default color for resources
+    })
+    .attr("stroke", d => {
+      if (d.type === "thread") {
+        if (d.isInCycle) {
+          return "#f44336"; // Modern red for deadlock threads
+        }
+        return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
+      }
+      return "var(--primary-dark)";
+    })
+    .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
+    .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none");
   
-  // Add tooltips
-  nodeElements
+  // Merge enter and update for event handlers
+  nodeSelection.merge(nodeEnter)
     .on("mouseover", function(event, d) {
+      // Don't apply any transforms that might move the node away from cursor
       let tooltipContent;
       
       // If this is the main thread, display it as such
       if (d.is_main_thread) {
-        tooltipContent = '<span style="color:#9b59b6; font-weight:bold;">Main Thread</span>';
+        tooltipContent = 'Main Thread';
       } else {
         tooltipContent = d.name;
       }
@@ -1417,9 +1579,9 @@ function updateNodeElements() {
       if (d.parent_id) {
         // Check if the parent is the main thread
         if (d.parent_id_is_main) {
-          tooltipContent += `<br><strong>Parent:</strong> <span style="color:#9b59b6; font-weight:bold;">Main Thread</span>`;
+          tooltipContent += `<br>Parent: Main Thread`;
         } else {
-          tooltipContent += `<br><strong>Parent:</strong> Thread ${d.parent_id}`;
+          tooltipContent += `<br>Parent: Thread ${d.parent_id}`;
         }
       }
       
@@ -1433,50 +1595,123 @@ function updateNodeElements() {
       d3.select(".tooltip")
         .style("opacity", 0);
     });
+    
+  // Update filter effects for existing nodes
+  nodeSelection.select("circle").each(function(d) {
+    if (d.isInCycle) {
+      d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
+    } else if (d.is_main_thread) {
+      d3.select(this).style("filter", "drop-shadow(0 0 4px rgba(155, 89, 182, 0.7))");
+    } else {
+      d3.select(this).style("filter", "none");
+    }
+  });
 }
 
 // Helper function to update link elements
 function updateLinkElements() {
-  // Clear existing links first
-  linkGroup.selectAll("*").remove();
-  
-  console.log("Updating links, count:", links.length); // Debug
-  
-  // Create all links from scratch
-  links.forEach(link => {
-    console.log("Link:", link.source.id, "->", link.target.id, "type:", link.type); // Debug
-  });
-  
-  // Add all links as SVG lines
-  const linkElements = linkGroup
+  // Use D3's enter/update/exit pattern for links
+  const linkSelection = linkGroup
     .selectAll(".link")
-    .data(links)
+    .data(links, d => `${d.source.id}-${d.target.id}-${d.type}`); // Key function to maintain identity
+  
+  // Exit - remove links that no longer exist with animation
+  linkSelection.exit()
+    .transition()
+    .duration(200) // Reduced from 300 for faster removal
+    .style("opacity", 0)
+    .remove();
+  
+  // Enter - add new links
+  const linkEnter = linkSelection
     .enter()
     .append("line")
     .attr("class", d => `link ${d.type}`)
-    .attr("stroke", d => d.type === "deadlock" ? "#f44336" : null)
-    .attr("stroke-width", d => d.type === "deadlock" ? "4" : null)
     .attr("x1", d => d.source.x || 0)
     .attr("y1", d => d.source.y || 0)
     .attr("x2", d => d.target.x || 0)
     .attr("y2", d => d.target.y || 0)
-    .attr("marker-end", d => d.type === "deadlock" ? "url(#deadlock-arrowhead)" : "url(#arrowhead)")
-    .style("opacity", 0) // Start invisible for fade-in
-    .each(function(d) {
-      // Directly apply the SVG filter for deadlock links
-      if (d.type === "deadlock") {
-        d3.select(this).style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))");
-        // Add a subtle dash pattern to make it more modern
-        d3.select(this).style("stroke-dashoffset", "0");
-      }
-    });
-    
-  // Animate links appearing with slight delay after nodes start appearing
-  linkElements
+    .style("opacity", 0); // Start invisible for fade-in
+  
+  // Apply style based on link type
+  linkEnter.each(function(d) {
+    if (d.type === "deadlock") {
+      d3.select(this)
+        .attr("stroke", "#f44336") 
+        .attr("stroke-width", "3") // Reduced from 4
+        .attr("marker-end", "url(#deadlock-arrowhead)")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
+        .style("stroke-dashoffset", "0");
+    } else if (d.type === "attempt") {
+      d3.select(this)
+        .attr("stroke", "var(--warning-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#attempt-arrowhead)")
+        .style("stroke-dasharray", "5,3");
+    } else if (d.type === "acquired") {
+      d3.select(this)
+        .attr("stroke", "var(--success-color)")
+        .attr("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
+    } else {
+      d3.select(this)
+        .attr("stroke", "var(--primary-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)");
+    }
+  });
+  
+  // Animate new links appearing with slight delay
+  linkEnter
     .transition()
-    .delay(200)
-    .duration(300)
+    .delay(100) // Reduced from 200 for faster appearance
+    .duration(200) // Reduced from 300 for faster appearance
     .style("opacity", 1);
+  
+  // Update - handle existing links
+  const linkUpdate = linkSelection
+    .transition()
+    .duration(300); // Reduced from 500 for faster updates
+    
+  // Update position attributes
+  linkUpdate
+    .attr("x1", d => d.source.x || 0)
+    .attr("y1", d => d.source.y || 0)
+    .attr("x2", d => d.target.x || 0)
+    .attr("y2", d => d.target.y || 0);
+  
+  // Update all link styles
+  linkSelection.each(function(d) {
+    if (d.type === "deadlock") {
+      d3.select(this)
+        .attr("stroke", "#f44336") 
+        .attr("stroke-width", "3") // Reduced from 4
+        .attr("marker-end", "url(#deadlock-arrowhead)")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
+        .style("stroke-dashoffset", "0");
+    } else if (d.type === "attempt") {
+      d3.select(this)
+        .attr("stroke", "var(--warning-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#attempt-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", "none");
+    } else if (d.type === "acquired") {
+      d3.select(this)
+        .attr("stroke", "var(--success-color)")
+        .attr("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
+    } else {
+      d3.select(this)
+        .attr("stroke", "var(--primary-color)")
+        .attr("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("filter", "none")
+        .style("stroke-dasharray", "none");
+    }
+  });
 }
 
 /**
@@ -1602,32 +1837,15 @@ function updateStepInfo() {
         // Create a nicer cycle visualization
         waitGraphContent += `<div class="cycle-visualization animate__animated animate__pulse">`
         cycle.forEach((threadId, index) => {
-          // Check if this thread is the main thread
-          const isMainThread = threadId === mainThreadId;
-          
-          if (isMainThread) {
-            waitGraphContent += `<span class="main-thread">Main Thread</span>`;
-          } else {
-            waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`;
-          }
-          
+          waitGraphContent += `<span class="thread-id">Thread ${threadId}</span>`
           if (index < cycle.length - 1) {
-            waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `;
+            waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `
           }
         })
 
         // Add arrow back to first thread to show the cycle clearly
         if (cycle.length > 1) {
-          // Check if the first thread is the main thread
-          const isFirstThreadMain = cycle[0] === mainThreadId;
-          
-          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> `;
-          
-          if (isFirstThreadMain) {
-            waitGraphContent += `<span class="main-thread">Main Thread</span>`;
-          } else {
-            waitGraphContent += `<span class="thread-id">Thread ${cycle[0]}</span>`;
-          }
+          waitGraphContent += ` <i class="fas fa-long-arrow-alt-right"></i> <span class="thread-id">Thread ${cycle[0]}</span>`
         }
 
         // Add non-breaking spaces for visible spacing at the end (using &nbsp;)
@@ -1702,7 +1920,7 @@ function ticked() {
   if (!svgElement) return
 
   const svgBounds = svgElement.getBoundingClientRect()
-  const padding = 30 // Padding to keep nodes away from edges
+  const padding = 40 // Increased padding to keep nodes away from edges
 
   // Update node positions while keeping them within bounds
   nodes.forEach((d) => {
@@ -1712,25 +1930,45 @@ function ticked() {
     const minY = padding
     const maxY = svgBounds.height - padding
 
-    // Enforce the bounds gently to avoid jittering
-    if (d.x < minX) d.x = minX
-    if (d.x > maxX) d.x = maxX
-    if (d.y < minY) d.y = minY
-    if (d.y > maxY) d.y = maxY
+    // Apply smoother boundary constraints
+    d.x = Math.max(minX, Math.min(maxX, d.x))
+    d.y = Math.max(minY, Math.min(maxY, d.y))
+    
+    // Apply a gentle push toward the center if nodes are getting too far away
+    const distFromCenter = Math.sqrt(
+      Math.pow(d.x - svgBounds.width/2, 2) + 
+      Math.pow(d.y - svgBounds.height/2, 2)
+    );
+    
+    const maxDist = Math.min(svgBounds.width, svgBounds.height) * 0.4;
+    
+    if (distFromCenter > maxDist) {
+      // Calculate vector from current position to center
+      const cx = svgBounds.width/2;
+      const cy = svgBounds.height/2;
+      const dx = cx - d.x;
+      const dy = cy - d.y;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      
+      // Apply a gentle push toward the center
+      const pushFactor = 0.1;
+      d.x += (dx / len) * pushFactor * (distFromCenter - maxDist);
+      d.y += (dy / len) * pushFactor * (distFromCenter - maxDist);
+    }
   })
 
-  // Update node positions
+  // Update node positions with smooth transitions
   nodeGroup
     .selectAll(".node")
-    .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`)
 
-  // Update link positions
+  // Update link positions with smooth transitions  
   linkGroup
     .selectAll(".link")
     .attr("x1", d => d.source.x)
     .attr("y1", d => d.source.y)
     .attr("x2", d => d.target.x)
-    .attr("y2", d => d.target.y);
+    .attr("y2", d => d.target.y)
 }
 
 /**
@@ -1738,20 +1976,54 @@ function ticked() {
  */
 function dragstarted(event, d) {
   if (!event.active) simulation.alphaTarget(0.3).restart()
+  
+  // Fix the node's position while dragging
   d.fx = d.x
   d.fy = d.y
+  
+  // Apply slight visual change without changing size
+  const circle = d3.select(this).select("circle");
+  circle
+    .transition()
+    .duration(100)
+    .attr("stroke-width", 4) // Increase stroke width instead of radius
+    .style("filter", "brightness(1.2)");
 }
 
 function dragged(event, d) {
+  // Update the fixed position
   d.fx = event.x
   d.fy = event.y
+  
+  // Apply boundary constraints
+  const svgElement = document.querySelector("#graph svg")
+  if (svgElement) {
+    const svgBounds = svgElement.getBoundingClientRect()
+    const padding = 40
+    
+    // Keep node within bounds
+    d.fx = Math.max(padding, Math.min(svgBounds.width - padding, d.fx));
+    d.fy = Math.max(padding, Math.min(svgBounds.height - padding, d.fy));
+  }
 }
 
 function dragended(event, d) {
   if (!event.active) simulation.alphaTarget(0)
-  // Keep the node fixed where it was dragged
-  // d.fx = null;
-  // d.fy = null;
+  
+  // Keep the node fixed at its final position unless shift key is pressed
+  if (event.sourceEvent.shiftKey) {
+    // Release the node to be affected by forces again
+    d.fx = null;
+    d.fy = null;
+  }
+  
+  // Reset the node appearance
+  const circle = d3.select(this).select("circle");
+  circle
+    .transition()
+    .duration(200)
+    .attr("stroke-width", 2) // Return to default stroke width
+    .style("filter", null);
 }
 
 /**
@@ -1793,6 +2065,11 @@ function initTimeline() {
       }
 
       eventElement.addEventListener("click", () => {
+        // Stop any ongoing animation first
+        if (isPlaying) {
+          stopAnimation();
+        }
+        
         currentStep = event.step
         updateVisualization()
       })
@@ -1801,6 +2078,9 @@ function initTimeline() {
     })
   }
 }
+
+// Variable to track if animation is in progress
+let isAnimating = false;
 
 /**
  * Toggle play/pause of animation
@@ -1815,7 +2095,7 @@ function togglePlay() {
     stopAnimation();
   } else {
     // Start playback
-    playBtnText.textContent = "Stop Animation"
+    playBtnText.textContent = "Stop"
     playBtnIcon.className = "fas fa-stop"
     isPlaying = true
 
@@ -1824,20 +2104,60 @@ function togglePlay() {
       currentStep = 1
     }
 
+    isAnimating = true;
+    disableNavigationButtons();
+    
     updateVisualization()
 
-    let step = currentStep + 1
-    animationInterval = setInterval(() => {
-      if (step > logData.length) {
-        stopAnimation();
-        return
-      }
+    // Calculate timing based on animation speed
+    const animationDuration = Math.round(400 / animationSpeed); // Base duration adjusted by speed
+    const intervalDuration = Math.round(1200 / animationSpeed); // Base interval adjusted by speed
 
-      currentStep = step
-      updateVisualization()
-      step++
-    }, 1000) // Increased from 500ms to 1000ms to slow down the animation
+    // Enable buttons after animation completes
+    setTimeout(() => {
+      isAnimating = false;
+      enableNavigationButtons();
+      
+      let step = currentStep + 1
+      animationInterval = setInterval(() => {
+        if (step > logData.length) {
+          stopAnimation();
+          return
+        }
+
+        currentStep = step
+        isAnimating = true;
+        disableNavigationButtons();
+        
+        updateVisualization()
+        
+        // Enable buttons after animation completes
+        setTimeout(() => {
+          isAnimating = false;
+          enableNavigationButtons();
+          step++;
+        }, animationDuration); // Duration adjusted by animation speed
+      }, intervalDuration) // Interval adjusted by animation speed
+    }, animationDuration); // Initial duration adjusted by animation speed
   }
+}
+
+/**
+ * Helper function to disable navigation buttons during animation
+ */
+function disableNavigationButtons() {
+  document.getElementById("prev-btn").disabled = true;
+  document.getElementById("next-btn").disabled = true;
+}
+
+/**
+ * Helper function to enable navigation buttons after animation
+ */
+function enableNavigationButtons() {
+  // Only enable prev button if not at first step
+  document.getElementById("prev-btn").disabled = currentStep <= 1;
+  // Only enable next button if not at last step
+  document.getElementById("next-btn").disabled = currentStep >= logData.length;
 }
 
 /**
@@ -1845,81 +2165,214 @@ function togglePlay() {
  */
 function setupEventListeners() {
   document.getElementById("prev-btn").addEventListener("click", () => {
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("prev-btn"));
+      }
+      return;
+    }
+    
     // Stop any ongoing animation first
     if (isPlaying) {
       stopAnimation();
     }
-    
+ 
     if (currentStep > 1) {
-      currentStep--
-      updateVisualization()
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
+      currentStep--;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, fixedAnimationDuration);
     }
   })
 
   document.getElementById("next-btn").addEventListener("click", () => {
+    // Don't allow navigation while animating or during cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to click during cooldown
+      if (buttonCooldown) {
+        showButtonCooldownFeedback(document.getElementById("next-btn"));
+      }
+      return;
+    }
+    
     // Stop any ongoing animation first
     if (isPlaying) {
       stopAnimation();
     }
     
     if (currentStep < logData.length) {
-      currentStep++
-      updateVisualization()
+      // Set cooldown to prevent rapid clicking
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
+      currentStep++;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid clicking
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, fixedAnimationDuration);
     }
   })
 
   document.getElementById("play-btn").addEventListener("click", togglePlay)
 
   document.getElementById("reset-btn").addEventListener("click", () => {
-    // Stop animation if it's playing
-    if (isPlaying) {
-      stopAnimation();
-    }
-
-    // Reset to first step
-    currentStep = 1
-
-    // Reset and redraw the visualization
-    resetVisualization()
-    initVisualization()
-    initTimeline()
-    updateVisualization()
+    resetGraph();
   })
+  
+  // Add event listeners for speed control buttons
+  document.getElementById("speed-up-btn").addEventListener("click", () => {
+    increaseAnimationSpeed();
+  });
+  
+  document.getElementById("speed-down-btn").addEventListener("click", () => {
+    decreaseAnimationSpeed();
+  });
 
   // Add keyboard navigation
-  document.addEventListener("keydown", (e) => {
-    // Left arrow key
-    if (e.keyCode === 37) {
-      // Stop any ongoing animation first
+  document.addEventListener("keydown", (event) => {
+    // Don't respond to keyboard during animation or cooldown
+    if (isAnimating || buttonCooldown) {
+      // Show feedback when user tries to use arrow keys during cooldown
+      if (buttonCooldown && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        const button = event.key === "ArrowLeft" ? 
+          document.getElementById("prev-btn") : 
+          document.getElementById("next-btn");
+        showButtonCooldownFeedback(button);
+      }
+      return;
+    }
+    
+    // Left arrow key for previous step
+    if (event.key === "ArrowLeft" && currentStep > 1) {
+      event.preventDefault()
+      
       if (isPlaying) {
         stopAnimation();
       }
       
-      if (currentStep > 1) {
-        currentStep--
-        updateVisualization()
-      }
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
+      currentStep--;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, fixedAnimationDuration);
     }
-    // Right arrow key
-    else if (e.keyCode === 39) {
-      // Stop any ongoing animation first
+    
+    // Right arrow key for next step
+    if (event.key === "ArrowRight" && currentStep < logData.length) {
+      event.preventDefault()
+      
       if (isPlaying) {
         stopAnimation();
       }
       
-      if (currentStep < logData.length) {
-        currentStep++
-        updateVisualization()
-      }
+      // Set cooldown to prevent rapid pressing
+      buttonCooldown = true;
+      
+      // Add visual indication of cooldown
+      document.getElementById("prev-btn").classList.add("btn-cooldown");
+      document.getElementById("next-btn").classList.add("btn-cooldown");
+      
+      currentStep++;
+      isAnimating = true;
+      disableNavigationButtons();
+      updateVisualization();
+      
+      // Fixed animation duration at 2x speed (half the base duration)
+      const fixedAnimationDuration = 200; // 400 / 2 = 200ms (2x speed)
+      setTimeout(() => {
+        isAnimating = false;
+        enableNavigationButtons();
+        
+        // Reset cooldown after a delay to prevent rapid pressing
+        setTimeout(() => {
+          buttonCooldown = false;
+          document.getElementById("prev-btn").classList.remove("btn-cooldown");
+          document.getElementById("next-btn").classList.remove("btn-cooldown");
+        }, 250); // Cooldown period after animation completes
+      }, fixedAnimationDuration);
     }
-    // Space key to play/pause
-    else if (e.keyCode === 32 && !e.target.matches("button, input")) {
-      e.preventDefault()
+    
+    // Up arrow key to increase animation speed
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      increaseAnimationSpeed();
+    }
+    
+    // Down arrow key to decrease animation speed
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      decreaseAnimationSpeed();
+    }
+    
+    // Spacebar for play/pause
+    if (event.key === " " || event.key === "Spacebar") {
+      event.preventDefault()
       togglePlay()
     }
-    // R key to reset
-    else if (e.keyCode === 82 && !e.target.matches("input, textarea")) {
-      document.getElementById("reset-btn").click()
+    
+    // 'r' key for reset
+    if (event.key === "r" || event.key === "R") {
+      event.preventDefault()
+      resetGraph();
     }
   })
 
@@ -1970,9 +2423,12 @@ function initApp() {
 
   // Initialize the upload feature
   initUploadFeature()
-
+    
   // Initialize the share feature
   initShareFeature()
+  
+  // Set initial animation speed
+  updateAnimationSpeedDisplay()
 
   if (hasSharedData) {
     // Process shared data
@@ -2035,17 +2491,17 @@ function showVisualizationElements() {
  * Utility functions for modal animations
  */
 function showModalWithAnimation(modal) {
-  // First set display to flex so the modal is visible
-  modal.style.display = 'flex';
-  
   // Get the modal content element
   const modalContent = modal.querySelector('.modal-content');
   
   // Reset any existing animations
-  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  modalContent.classList.remove('modal-fade-in', 'modal-fade-out');
   
-  // Add the animation
-  modalContent.classList.add('animate__animated', 'animate__fadeIn', 'animate__faster', 'animate__faster');
+  // Show the modal first
+  modal.style.display = 'flex';
+  
+  // Add the new animation class
+  modalContent.classList.add('modal-fade-in');
 }
 
 function hideModalWithAnimation(modal) {
@@ -2053,15 +2509,15 @@ function hideModalWithAnimation(modal) {
   const modalContent = modal.querySelector('.modal-content');
   
   // Reset any existing animations
-  modalContent.classList.remove('animate__fadeIn', 'animate__fadeOut', 'animate__faster');
+  modalContent.classList.remove('modal-fade-in', 'modal-fade-out');
   
-  // Add the fadeOut animation
-  modalContent.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster', 'animate__faster');
+  // Add the fade out animation
+  modalContent.classList.add('modal-fade-out');
   
-  // Wait for animation to complete before hiding the modal
+  // Hide the modal after animation completes
   setTimeout(() => {
     modal.style.display = 'none';
-  }, 100); // 100ms animation duration (reduced from 200ms)
+  }, 80); // 80ms animation duration - daha hızlı
 }
 
 /**
@@ -2073,6 +2529,235 @@ function stopAnimation() {
   const playBtn = document.getElementById("play-btn");
   const playBtnText = playBtn.querySelector("span");
   const playBtnIcon = playBtn.querySelector("i");
-  playBtnText.textContent = "Play Animation";
+  playBtnText.textContent = "Play";
   playBtnIcon.className = "fas fa-play";
+}
+
+// Toast notification system
+function showToast(message, type = 'info', duration = 5000) {
+  // Create toast container if it doesn't exist
+  let toastContainer = document.querySelector('.toast-container');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+
+  // Create toast element
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  
+  // Get the appropriate icon based on type
+  let icon = 'fa-info-circle';
+  if (type === 'success') icon = 'fa-check-circle';
+  if (type === 'error') icon = 'fa-exclamation-circle';
+  if (type === 'warning') icon = 'fa-exclamation-triangle';
+  
+  // Set toast content
+  toast.innerHTML = `
+    <i class="fas ${icon} toast-icon"></i>
+    <div class="toast-content">${message}</div>
+    <button class="toast-close">&times;</button>
+  `;
+  
+  // Add to container
+  toastContainer.appendChild(toast);
+  
+  // Setup close button functionality
+  const closeBtn = toast.querySelector('.toast-close');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent click from bubbling to toast
+    toast.style.animation = 'toast-out 0.3s forwards';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  });
+  
+  // Toggle expanded state when toast is clicked
+  toast.addEventListener('click', (e) => {
+    if (e.target !== closeBtn) {
+      toast.classList.toggle('expanded');
+      
+      // Adjust other toasts when one is expanded
+      if (toast.classList.contains('expanded')) {
+        const allToasts = document.querySelectorAll('.toast');
+        allToasts.forEach(t => {
+          if (t !== toast && t.classList.contains('expanded')) {
+            t.classList.remove('expanded');
+          }
+        });
+      }
+    }
+  });
+  
+  // Auto-dismiss after duration
+  if (duration > 0) {
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.animation = 'toast-out 0.3s forwards';
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+          }
+        }, 300);
+      }
+    }, duration);
+  }
+  
+  return toast;
+}
+
+// Add a function to reset the graph
+function resetGraph() {
+  // Don't allow reset while animating
+  if (isAnimating) return;
+  
+  // Stop animation if it's playing
+  if (isPlaying) {
+    stopAnimation();
+  }
+
+  // Reset to first step
+  currentStep = 1
+  
+  // Reset animation speed to default
+  animationSpeed = 1.0
+  updateAnimationSpeedDisplay()
+
+  // Reset and redraw the visualization
+  resetVisualization()
+  initVisualization()
+  initTimeline()
+  updateVisualization()
+  
+  // Show a toast notification
+  showToast("Visualization reset to initial state", "info", 2000);
+}
+
+/**
+ * Increase animation speed by 0.25 (faster animation)
+ */
+function increaseAnimationSpeed() {
+  // Cap the maximum speed at 2.0
+  if (animationSpeed < 2.0) {
+    // Stop any ongoing animation first
+    if (isPlaying) {
+      stopAnimation();
+    }
+    
+    animationSpeed += 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+  }
+}
+
+/**
+ * Decrease animation speed by 0.25 (slower animation)
+ */
+function decreaseAnimationSpeed() {
+  // Minimum speed of 0.25
+  if (animationSpeed > 0.25) {
+    // Stop any ongoing animation first
+    if (isPlaying) {
+      stopAnimation();
+    }
+    
+    animationSpeed -= 0.25;
+    updateAnimationSpeedDisplay();
+    showToast(`Animation speed: ${animationSpeed.toFixed(2)}x`, "info", 1500);
+  }
+}
+
+/**
+ * Update the animation speed display in the button text
+ */
+function updateAnimationSpeedDisplay() {
+  const speedUpBtn = document.getElementById("speed-up-btn");
+  const speedDownBtn = document.getElementById("speed-down-btn");
+  
+  if (speedUpBtn && speedDownBtn) {
+    // Update tooltips or other indicators if needed
+    speedUpBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+    speedDownBtn.setAttribute("title", `Current speed: ${animationSpeed.toFixed(2)}x`);
+  }
+}
+
+/**
+ * Modal Functionality
+ * Handles opening and closing modals with animations
+ */
+
+// Modal animation utility functions
+function showModalWithAnimation(modal) {
+    modal.style.display = 'flex';
+    // Small delay needed for the transition to work properly
+    setTimeout(() => {
+        modal.classList.add('active');
+        modal.querySelector('.modal-content').classList.add('show');
+    }, 10);
+}
+
+function hideModalWithAnimation(modal) {
+    const modalContent = modal.querySelector('.modal-content');
+    modalContent.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }, 200);
+}
+
+// Initialize modals when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Modal handling
+    const modals = document.querySelectorAll('.modal');
+    const closeButtons = document.querySelectorAll('.modal-close');
+    const helpToggle = document.querySelector('.help-toggle');
+    const uploadBtn = document.getElementById('upload-btn');
+    const shareBtn = document.getElementById('share-btn');
+    
+    // Close modal when clicking outside of it
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModalWithAnimation(modal);
+            }
+        });
+    });
+    
+    // Close modal with close button
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            hideModalWithAnimation(modal);
+        });
+    });
+    
+    // Open help modal
+    if (helpToggle) {
+        helpToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            showModalWithAnimation(document.getElementById('help-modal'));
+        });
+    }
+    
+    // Close modals with ESC key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            modals.forEach(modal => {
+                if (modal.classList.contains('active')) {
+                    hideModalWithAnimation(modal);
+                }
+            });
+        }
+    });
+});
+
+// Function to show visual feedback when buttons are in cooldown
+function showButtonCooldownFeedback(button) {
+  button.classList.add("btn-cooldown-feedback");
+  setTimeout(() => {
+    button.classList.remove("btn-cooldown-feedback");
+  }, 300);
 }
