@@ -11,7 +11,6 @@ pub use types::*;
 
 // Logging functionality
 pub mod logger;
-pub use logger::init_logger;
 
 // Graph implementation
 pub mod graph;
@@ -36,7 +35,8 @@ pub mod stress;
 #[cfg(feature = "stress-test")]
 pub use stress::{StressConfig, StressMode};
 
-use anyhow::{Context, Result};
+use crate::core::logger::EventLogger;
+use anyhow::Result;
 
 /// Deloxide configuration builder struct
 ///
@@ -185,14 +185,16 @@ impl Deloxide {
     /// ```
     pub fn start(self) -> Result<()> {
         // Initialize the logger if a path was provided
-        if let Some(log_path) = self.log_path {
-            init_logger(Some(log_path)).context("Failed to initialize logger")?;
-        }
+        let logger = if let Some(log_path) = self.log_path {
+            Some(EventLogger::with_file(log_path)?)
+        } else {
+            None
+        };
 
         // Initialize the detector
         #[cfg(not(feature = "stress-test"))]
         {
-            init_detector(self.callback);
+            init_detector(self.callback, logger);
         }
 
         #[cfg(feature = "stress-test")]
@@ -202,6 +204,7 @@ impl Deloxide {
                 self.callback,
                 self.stress_mode,
                 self.stress_config,
+                logger,
             );
         }
 

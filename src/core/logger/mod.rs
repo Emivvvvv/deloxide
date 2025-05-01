@@ -2,12 +2,15 @@
 //!
 //! This module provides logging capabilities for lock events and thread-lock
 //! relationships, supporting deadlock detection and visualization.
+//!
+//! The module is structured to allow each EventLogger instance to maintain its
+//! own graph state for independent tracking of thread-lock relationships.
 
 mod event_logger;
 mod graph_logger;
 
 // Re-export core unified logging functionality
 pub use event_logger::{
-    get_current_log_file, init_logger, is_logging_enabled, log_interaction_event, log_lock_event,
-    log_thread_event,
+    EventLogger,
+    get_current_log_file
 };

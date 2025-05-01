@@ -3,16 +3,18 @@ use crate::core::StressConfig;
 #[cfg(feature = "stress-test")]
 use crate::core::StressMode;
 use crate::core::graph::WaitForGraph;
-use crate::core::logger;
+use crate::core::logger::EventLogger;
 #[cfg(feature = "stress-test")]
 use crate::core::stress::{
     on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release,
 };
 use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
+use anyhow::Result;
 use chrono::Utc;
 use crossbeam_channel::{Sender, unbounded};
 use fxhash::{FxHashMap, FxHashSet};
-use std::sync::{Arc, Mutex, OnceLock};
+use parking_lot::Mutex;
+use std::sync::{Arc, OnceLock};
 
 // Global dispatcher for asynchronous deadlock callback execution
 // Ensures callbacks can execute even when the detecting thread is deadlocked.
@@ -87,6 +89,8 @@ pub struct Detector {
     thread_waits_for: FxHashMap<ThreadId, LockId>,
     /// Tracks, for each thread, which locks it currently holds
     thread_holds: FxHashMap<ThreadId, FxHashSet<LockId>>,
+    /// Event logger for recording lock, thread operations, and interactions (logging is optional)
+    logger: Option<EventLogger>,
     #[cfg(feature = "stress-test")]
     /// Stress testing mode
     stress_mode: StressMode,
@@ -109,6 +113,7 @@ impl Detector {
             lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
+            logger: None,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
             #[cfg(feature = "stress-test")]
@@ -125,9 +130,23 @@ impl Detector {
             lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
+            logger: None,
             stress_mode: mode,
             stress_config: config,
         }
+    }
+
+    /// Set EventLogger for logging thread, lock, and interaction events
+    ///
+    /// The logger records events such as:
+    /// - Thread creation and exit
+    /// - Lock creation and destruction
+    /// - Thread-lock interactions (attempt, acquire, release)
+    ///
+    /// # Arguments
+    /// * `logger` - An optional EventLogger instance. Pass `None` to disable logging
+    pub fn set_logger(&mut self, logger: Option<EventLogger>) {
+        self.logger = logger;
     }
 
     /// Set callback to be invoked when a deadlock is detected
@@ -152,9 +171,10 @@ impl Detector {
     /// * `thread_id` - ID of the newly spawned thread
     /// * `parent_id` - Optional ID of the parent thread that created this thread
     pub fn on_thread_spawn(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
-        if logger::is_logging_enabled() {
-            logger::log_thread_event(thread_id, parent_id, Events::Spawn);
+        if let Some(logger) = &self.logger {
+            logger.log_thread_event(thread_id, parent_id, Events::Spawn);
         }
+
         // Ensure node exists in the wait-for graph
         self.wait_for_graph.edges.entry(thread_id).or_default();
     }
@@ -167,9 +187,10 @@ impl Detector {
     /// # Arguments
     /// * `thread_id` - ID of the exiting thread
     pub fn on_thread_exit(&mut self, thread_id: ThreadId) {
-        if logger::is_logging_enabled() {
-            logger::log_thread_event(thread_id, None, Events::Exit);
+        if let Some(logger) = &self.logger {
+            logger.log_thread_event(thread_id, None, Events::Exit);
         }
+
         // remove thread and its edges from the wait-for graph
         self.wait_for_graph.remove_thread(thread_id);
         // no more held locks
@@ -186,8 +207,8 @@ impl Detector {
     /// * `creator_id` - Optional ID of the thread that created this lock
     pub fn on_lock_create(&mut self, lock_id: LockId, creator_id: Option<ThreadId>) {
         let creator = creator_id.unwrap_or_else(get_current_thread_id);
-        if logger::is_logging_enabled() {
-            logger::log_lock_event(lock_id, Some(creator), Events::Spawn);
+        if let Some(logger) = &self.logger {
+            logger.log_lock_event(lock_id, Some(creator), Events::Spawn);
         }
     }
 
@@ -209,9 +230,10 @@ impl Detector {
         }
         self.thread_waits_for.retain(|_, &mut l| l != 0);
 
-        if logger::is_logging_enabled() {
-            logger::log_lock_event(lock_id, None, Events::Exit);
+        if let Some(logger) = &self.logger {
+            logger.log_lock_event(lock_id, None, Events::Exit);
         }
+
         // purge from all held-lock sets
         for holds in self.thread_holds.values_mut() {
             holds.remove(&lock_id);
@@ -228,8 +250,8 @@ impl Detector {
     /// * `thread_id` - ID of the thread attempting to acquire the lock
     /// * `lock_id` - ID of the lock being attempted
     pub fn on_lock_attempt(&mut self, thread_id: ThreadId, lock_id: LockId) {
-        if logger::is_logging_enabled() {
-            logger::log_interaction_event(thread_id, lock_id, Events::Attempt);
+        if let Some(logger) = &self.logger {
+            logger.log_interaction_event(thread_id, lock_id, Events::Attempt);
         }
 
         #[cfg(feature = "stress-test")]
@@ -299,8 +321,8 @@ impl Detector {
     /// * `thread_id` - ID of the thread that acquired the lock
     /// * `lock_id` - ID of the lock that was acquired
     pub fn on_lock_acquired(&mut self, thread_id: ThreadId, lock_id: LockId) {
-        if logger::is_logging_enabled() {
-            logger::log_interaction_event(thread_id, lock_id, Events::Acquired);
+        if let Some(logger) = &self.logger {
+            logger.log_interaction_event(thread_id, lock_id, Events::Acquired);
         }
 
         // Update ownership
@@ -326,8 +348,8 @@ impl Detector {
     /// * `thread_id` - ID of the thread releasing the lock
     /// * `lock_id` - ID of the lock being released
     pub fn on_lock_release(&mut self, thread_id: ThreadId, lock_id: LockId) {
-        if logger::is_logging_enabled() {
-            logger::log_interaction_event(thread_id, lock_id, Events::Released);
+        if let Some(logger) = &self.logger {
+            logger.log_interaction_event(thread_id, lock_id, Events::Released);
         }
         if self.lock_owners.get(&lock_id) == Some(&thread_id) {
             self.lock_owners.remove(&lock_id);
@@ -350,44 +372,74 @@ impl Detector {
             }
         }
     }
-}
 
-// Global detector instance
-lazy_static::lazy_static! {
-    static ref GLOBAL_DETECTOR: Mutex<Detector> = Mutex::new(Detector::new());
-}
+    /// Flush all pending log entries to disk (method version)
+    ///
+    /// This method forces the associated logger (if enabled) to write all
+    /// buffered events to disk immediately. This is the instance method that
+    /// works on a specific detector instance.
+    ///
+    /// # Returns
+    /// `Ok(())` if the flush succeeded or no logger is configured
+    /// `Err` if the flush operation failed
+    pub fn flush_logs(&self) -> Result<()> {
+        if let Some(logger) = &self.logger {
+            return logger.flush();
+        }
 
-/// Initialize the global detector with a deadlock callback
-///
-/// This function sets up the global deadlock detector with a callback function
-/// that will be invoked when a deadlock is detected.
-///
-/// # Arguments
-/// * `callback` - Function to call when a deadlock is detected
-#[allow(dead_code)]
-pub fn init_detector<F>(callback: F)
-where
-    F: Fn(DeadlockInfo) + Send + Sync + 'static,
-{
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.set_deadlock_callback(callback);
+        Ok(())
     }
 }
 
+// Global detector instance and logging info for ffi
+lazy_static::lazy_static! {
+    static ref GLOBAL_DETECTOR: Mutex<Detector> = Mutex::new(Detector::new());
+    static ref IS_LOGGING_ENABLED: OnceLock<bool> = OnceLock::new();
+}
+
+/// Initialize the global detector with a deadlock callback and logger
+///
+/// This function sets up the global deadlock detector with a callback function
+/// that will be invoked when a deadlock is detected, and optionally enables logging
+/// for tracking thread and lock interactions.
+///
+/// # Arguments
+/// * `callback` - Function to call when a deadlock is detected
+/// * `logger` - Optional EventLogger for recording thread and lock events
+#[allow(dead_code)]
+pub fn init_detector<F>(callback: F, logger: Option<EventLogger>)
+where
+    F: Fn(DeadlockInfo) + Send + Sync + 'static,
+{
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.set_logger(logger);
+    detector.set_deadlock_callback(callback);
+}
+
+/// Initialize the global detector with stress testing configuration and logger
+///
+/// This function sets up the global deadlock detector with a callback function,
+/// stress testing capabilities, and optional logging.
+///
+/// # Arguments
+/// * `callback` - Function to call when a deadlock is detected
+/// * `stress_mode` - The stress testing mode to use
+/// * `stress_config` - Optional stress testing configuration
+/// * `logger` - Optional EventLogger for recording thread and lock events
 #[cfg(feature = "stress-test")]
-/// Initialize the global detector with stress testing configuration
 pub fn init_detector_with_stress<F>(
     callback: F,
     stress_mode: StressMode,
     stress_config: Option<StressConfig>,
+    logger: Option<EventLogger>,
 ) where
     F: Fn(DeadlockInfo) + Send + Sync + 'static,
 {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.set_deadlock_callback(callback);
-        detector.stress_mode = stress_mode;
-        detector.stress_config = stress_config;
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.set_logger(logger);
+    detector.set_deadlock_callback(callback);
+    detector.stress_mode = stress_mode;
+    detector.stress_config = stress_config;
 }
 
 /// Register a thread spawn with the global detector
@@ -396,9 +448,8 @@ pub fn init_detector_with_stress<F>(
 /// * `thread_id` - ID of the spawned thread
 /// * `parent_id` - Optional ID of the parent thread that created this thread
 pub fn on_thread_spawn(thread_id: ThreadId, parent_id: Option<ThreadId>) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_thread_spawn(thread_id, parent_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_thread_spawn(thread_id, parent_id);
 }
 
 /// Register a thread exit with the global detector
@@ -406,9 +457,8 @@ pub fn on_thread_spawn(thread_id: ThreadId, parent_id: Option<ThreadId>) {
 /// # Arguments
 /// * `thread_id` - ID of the exiting thread
 pub fn on_thread_exit(thread_id: ThreadId) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_thread_exit(thread_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_thread_exit(thread_id);
 }
 
 /// Register a lock creation with the global detector
@@ -417,9 +467,8 @@ pub fn on_thread_exit(thread_id: ThreadId) {
 /// * `lock_id` - ID of the created lock
 /// * `creator_id` - Optional ID of the thread that created this lock
 pub fn on_lock_create(lock_id: LockId, creator_id: Option<ThreadId>) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_lock_create(lock_id, creator_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_lock_create(lock_id, creator_id);
 }
 
 /// Register a lock destruction with the global detector
@@ -427,9 +476,8 @@ pub fn on_lock_create(lock_id: LockId, creator_id: Option<ThreadId>) {
 /// # Arguments
 /// * `lock_id` - ID of the lock being destroyed
 pub fn on_lock_destroy(lock_id: LockId) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_lock_destroy(lock_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_lock_destroy(lock_id);
 }
 
 /// Register a lock attempt with the global detector
@@ -438,9 +486,8 @@ pub fn on_lock_destroy(lock_id: LockId) {
 /// * `thread_id` - ID of the thread attempting to acquire the lock
 /// * `lock_id` - ID of the lock being attempted
 pub fn on_lock_attempt(thread_id: ThreadId, lock_id: LockId) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_lock_attempt(thread_id, lock_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_lock_attempt(thread_id, lock_id);
 }
 
 /// Register a lock acquisition with the global detector
@@ -449,9 +496,8 @@ pub fn on_lock_attempt(thread_id: ThreadId, lock_id: LockId) {
 /// * `thread_id` - ID of the thread that acquired the lock
 /// * `lock_id` - ID of the lock that was acquired
 pub fn on_lock_acquired(thread_id: ThreadId, lock_id: LockId) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_lock_acquired(thread_id, lock_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_lock_acquired(thread_id, lock_id);
 }
 
 /// Register a lock release with the global detector
@@ -460,7 +506,24 @@ pub fn on_lock_acquired(thread_id: ThreadId, lock_id: LockId) {
 /// * `thread_id` - ID of the thread releasing the lock
 /// * `lock_id` - ID of the lock being released
 pub fn on_lock_release(thread_id: ThreadId, lock_id: LockId) {
-    if let Ok(mut detector) = GLOBAL_DETECTOR.lock() {
-        detector.on_lock_release(thread_id, lock_id);
-    }
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.on_lock_release(thread_id, lock_id);
+}
+
+/// Flush all pending log entries from the global detector to disk
+///
+/// This function accesses the global detector instance and attempts to
+/// flush its logger. Unlike the method version, this requires first
+/// acquiring the global detector lock.
+///
+/// # Returns
+/// `Ok(())` if the flush succeeded
+///
+/// # Errors
+/// Returns an error if:
+/// - The global detector lock cannot be acquired
+/// - The logger flush operation fails
+pub fn flush_global_detector_logs() -> Result<()> {
+    let detector = GLOBAL_DETECTOR.lock();
+    detector.flush_logs()
 }

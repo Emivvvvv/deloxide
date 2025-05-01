@@ -1,3 +1,6 @@
+use crate::core::tracked_mutex::TrackedGuard;
+use crate::core::types::get_current_thread_id;
+use crate::core::{ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn};
 /// FFI bindings for Deloxide C API
 ///
 /// This module provides the C API bindings for the Deloxide deadlock detection library.
@@ -6,25 +9,18 @@
 ///
 /// The FFI interface provides all the functionality needed to use Deloxide from C or C++,
 /// including initialization, mutex tracking, thread tracking, and deadlock detection.
-use crate::core::logger;
-use crate::core::tracked_mutex::TrackedGuard;
-use crate::core::types::get_current_thread_id;
-use crate::core::{ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn};
+use crate::core::{detector, logger};
 use serde_json;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_double, c_void};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(not(feature = "stress-test"))]
-use crate::core::init_detector;
-
-#[cfg(feature = "stress-test")]
-use crate::core::detector;
 #[cfg(feature = "stress-test")]
 use crate::core::{StressConfig, StressMode};
 #[cfg(feature = "stress-test")]
 use std::sync::atomic::AtomicU8;
+
 #[cfg(feature = "stress-test")]
 static STRESS_MODE: AtomicU8 = AtomicU8::new(0); // 0=None, 1=Random, 2=Component
 #[cfg(feature = "stress-test")]
@@ -39,6 +35,7 @@ thread_local! {
 // Globals to track initialization state
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 static mut DEADLOCK_DETECTED: AtomicBool = AtomicBool::new(false);
+static IS_LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
 
 // Optional callback function provided by C code
 static mut DEADLOCK_CALLBACK: Option<extern "C" fn(*const c_char)> = None;
@@ -86,6 +83,37 @@ pub unsafe extern "C" fn deloxide_init(
         // Store callback for later use
         DEADLOCK_CALLBACK = callback;
 
+        // Create event logger if path is provided
+        let logger = if let Some(log_path) = log_path_option {
+            match logger::EventLogger::with_file(log_path) {
+                Ok(logger) => {
+                    IS_LOGGING_ENABLED.store(true, Ordering::SeqCst);
+                    Some(logger)
+                }
+                Err(_) => return -2, // Failed to initialize logger
+            }
+        } else {
+            IS_LOGGING_ENABLED.store(false, Ordering::SeqCst);
+            None
+        };
+
+        // Create callback closure that sets flag and calls C callback
+        let deadlock_callback = move |deadlock_info| {
+            #[allow(static_mut_refs)]
+            DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
+
+            // Call C callback if provided
+            if let Some(cb) = DEADLOCK_CALLBACK {
+                // Format deadlock info as JSON
+                if let Ok(json) = serde_json::to_string(&deadlock_info) {
+                    // Convert JSON to CString, then pass ptr to callback
+                    if let Ok(c_str) = CString::new(json) {
+                        cb(c_str.as_ptr());
+                    }
+                }
+            }
+        };
+
         #[cfg(feature = "stress-test")]
         {
             // Get stress settings if feature is enabled
@@ -98,65 +126,23 @@ pub unsafe extern "C" fn deloxide_init(
             #[allow(static_mut_refs)]
             let stress_config = STRESS_CONFIG.take();
 
-            // Initialize with a callback that sets a flag and calls the C callback
-            match logger::init_logger(log_path_option) {
-                Ok(_) => {
-                    // Initialize detector with stress settings
-                    detector::init_detector_with_stress(
-                        |deadlock_info| {
-                            #[allow(static_mut_refs)]
-                            DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
-
-                            // Call C callback if provided
-                            if let Some(cb) = DEADLOCK_CALLBACK {
-                                // Format deadlock info as JSON
-                                if let Ok(json) = serde_json::to_string(&deadlock_info) {
-                                    // Convert JSON to CString, then pass ptr to callback
-                                    if let Ok(c_str) = CString::new(json) {
-                                        cb(c_str.as_ptr());
-                                    }
-                                }
-                            }
-                        },
-                        stress_mode,
-                        stress_config,
-                    );
-
-                    INITIALIZED.store(true, Ordering::SeqCst);
-                    0 // Success
-                }
-                Err(_) => -2, // Failed to initialize logger
-            }
+            // Initialize detector with stress settings
+            detector::init_detector_with_stress(
+                deadlock_callback,
+                stress_mode,
+                stress_config,
+                logger,
+            );
         }
 
         #[cfg(not(feature = "stress-test"))]
         {
             // Standard initialization without stress testing
-            match logger::init_logger(log_path_option) {
-                Ok(_) => {
-                    // Initialize with a callback that sets a flag and calls the C callback
-                    init_detector(|deadlock_info| {
-                        #[allow(static_mut_refs)]
-                        DEADLOCK_DETECTED.store(true, Ordering::SeqCst);
-
-                        // Call C callback if provided
-                        if let Some(cb) = DEADLOCK_CALLBACK {
-                            // Format deadlock info as JSON
-                            if let Ok(json) = serde_json::to_string(&deadlock_info) {
-                                // Convert JSON to CString, then pass ptr to callback
-                                if let Ok(c_str) = CString::new(json) {
-                                    cb(c_str.as_ptr());
-                                }
-                            }
-                        }
-                    });
-
-                    INITIALIZED.store(true, Ordering::SeqCst);
-                    0 // Success
-                }
-                Err(_) => -2, // Failed to initialize logger
-            }
+            detector::init_detector(deadlock_callback, logger);
         }
+
+        INITIALIZED.store(true, Ordering::SeqCst);
+        0 // Success
     }
 }
 
@@ -208,10 +194,15 @@ pub unsafe extern "C" fn deloxide_reset_deadlock_flag() {
 /// * `0` if logging is disabled
 ///
 /// # Safety
-/// This function is safe to call from FFI contexts.
+/// This function reads from a global atomic boolean.
+/// This is safe to call from FFI contexts as atomics provide thread safety.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_is_logging_enabled() -> c_int {
-    if logger::is_logging_enabled() { 1 } else { 0 }
+    if IS_LOGGING_ENABLED.load(Ordering::SeqCst) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Create a new tracked mutex.
@@ -425,10 +416,32 @@ pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulo
     }
 }
 
+/// Flush all pending log entries to disk
+///
+/// This function forces all buffered log entries to be written to disk.
+/// It should be called before reading or processing the log file to ensure completeness.
+///
+/// # Returns
+/// * `0` on success
+/// * `-1` if flushing failed
+///
+/// # Safety
+/// This function accesses global state and should be called from a single thread at a time.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn deloxide_flush_logs() -> c_int {
+    match detector::flush_global_detector_logs() {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Failed to flush logs: {:#}", e);
+            -1
+        }
+    }
+}
+
 /// Showcase the log data by sending it to the showcase server.
 ///
-/// This function processes a log file and opens a web browser to visualize
-/// the thread-lock relationships recorded in the log.
+/// This function flushes pending log entries, processes a log file, and opens
+/// a web browser to visualize the thread-lock relationships recorded in the log.
 ///
 /// # Arguments
 /// * `log_path` - Path to the log file as a null-terminated C string.
@@ -437,6 +450,7 @@ pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulo
 /// * `0` on success
 /// * `-1` if the log path is NULL or invalid UTF-8
 /// * `-2` if showcasing failed (for example, file read or network error)
+/// * `-3` if flushing failed
 ///
 /// # Safety
 /// This function dereferences `log_path`. The caller must ensure it is a valid, null-terminated
@@ -447,7 +461,7 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
         return -1;
     }
 
-    // Convert C string to Rust string.
+    // Convert C string to Rust string
     let path_str = unsafe {
         match CStr::from_ptr(log_path).to_str() {
             Ok(s) => s,
@@ -455,41 +469,51 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
         }
     };
 
-    // Call the Rust showcase function handling anyhow Result
+    // First flush all logs
+    if let Err(e) = detector::flush_global_detector_logs() {
+        eprintln!("Failed to flush logs: {:#}", e);
+        return -3;
+    }
+
+    // Call the Rust showcase function
     match crate::showcase(path_str) {
-        Ok(_) => 0, // Success
+        Ok(_) => 0,
         Err(e) => {
-            // Log the error in a way that's accessible to C code
             eprintln!("Showcase error: {:#}", e);
-            -2 // Showcase failed
+            -2
         }
     }
 }
 
 /// Showcase the current active log data by sending it to the showcase server.
 ///
-/// This is a convenience function that showcases the log file that was specified
-/// in the deloxide_init() call. It's useful when you don't want to keep track of
-/// the log file path manually.
+/// This function ensures all buffered log entries are flushed to disk before showcasing
+/// the log file that was specified in the deloxide_init() call.
 ///
 /// # Returns
 /// * `0` on success
 /// * `-1` if no active log file exists
 /// * `-2` if showcasing failed (for example, file read or network error)
+/// * `-3` if flushing failed
 ///
 /// # Safety
-/// This function is safe to call from FFI contexts.
+/// This function accesses global state and should be called from a single thread at a time.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
+    // First flush all logs
+    if let Err(e) = detector::flush_global_detector_logs() {
+        eprintln!("Failed to flush logs: {:#}", e);
+        return -3;
+    }
+
     match crate::showcase::showcase_this() {
-        Ok(_) => 0, // Success
+        Ok(_) => 0,
         Err(e) => {
             if e.to_string().contains("No active log file") {
-                -1 // No active log file
+                -1
             } else {
-                // Log the error in a way that's accessible to C code
                 eprintln!("Showcase error: {:#}", e);
-                -2 // Showcase failed
+                -2
             }
         }
     }

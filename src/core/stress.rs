@@ -4,7 +4,7 @@
 
 use crate::core::types::{LockId, ThreadId};
 use fxhash::FxHashMap;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -165,7 +165,7 @@ pub fn try_random_preemption(
 
     if rng.random::<f64>() < probability {
         // Track this preemption
-        let mut state = STRESS_STATE.lock().unwrap();
+        let mut state = STRESS_STATE.lock();
         state.track_preemption(lock_id);
         drop(state); // Release lock before sleeping
 
@@ -204,7 +204,7 @@ pub fn apply_component_delay(
     let mut should_delay = false;
 
     // Check relationships with held locks
-    let mut state = STRESS_STATE.lock().unwrap();
+    let mut state = STRESS_STATE.lock();
     for &held_lock in held_locks {
         // Record the acquisition pattern for future analysis
         state.record_acquisition(held_lock, lock_id);
