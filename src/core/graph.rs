@@ -1,5 +1,5 @@
 use crate::core::types::ThreadId;
-use std::collections::{HashMap, HashSet};
+use fxhash::{FxHashMap, FxHashSet};
 
 /// Represents a directed graph of thread wait relationships
 ///
@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 /// a circular wait condition that can lead to a deadlock.
 pub struct WaitForGraph {
     /// Maps a thread to all the threads it is waiting for
-    pub(crate) edges: HashMap<ThreadId, HashSet<ThreadId>>,
+    pub(crate) edges: FxHashMap<ThreadId, FxHashSet<ThreadId>>,
 }
 
 impl Default for WaitForGraph {
@@ -29,7 +29,7 @@ impl WaitForGraph {
     /// Create a new empty wait-for graph
     pub fn new() -> Self {
         WaitForGraph {
-            edges: HashMap::new(),
+            edges: FxHashMap::default(),
         }
     }
 
@@ -81,16 +81,16 @@ impl WaitForGraph {
         }
 
         // Using DFS to detect cycles
-        let mut visited = HashSet::new();
+        let mut visited = FxHashSet::default();
         let mut path = Vec::new();
-        let mut path_set = HashSet::new();
+        let mut path_set = FxHashSet::default();
 
         fn dfs(
             graph: &WaitForGraph,
             current: ThreadId,
-            visited: &mut HashSet<ThreadId>,
+            visited: &mut FxHashSet<ThreadId>,
             path: &mut Vec<ThreadId>,
-            path_set: &mut HashSet<ThreadId>,
+            path_set: &mut FxHashSet<ThreadId>,
         ) -> Option<Vec<ThreadId>> {
             if path_set.contains(&current) {
                 // Found a cycle - extract the cycle part of the path

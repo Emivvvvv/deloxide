@@ -3,7 +3,7 @@
 // It's only compiled when the "stress-test" feature is enabled
 
 use crate::core::types::{LockId, ThreadId};
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -56,7 +56,7 @@ impl Default for StressConfig {
 #[derive(Default)]
 struct ComponentTracker {
     /// Maps locks to their component IDs
-    components: HashMap<LockId, usize>,
+    components: FxHashMap<LockId, usize>,
     /// Records lock acquisition order
     acquisitions: Vec<(LockId, LockId)>,
 }
@@ -100,14 +100,14 @@ struct StressState {
     /// Track lock relationships
     tracker: ComponentTracker,
     /// Count preemptions per lock
-    preemption_counts: HashMap<LockId, usize>,
+    preemption_counts: FxHashMap<LockId, usize>,
 }
 
 impl StressState {
     fn new() -> Self {
         StressState {
             tracker: ComponentTracker::new(),
-            preemption_counts: HashMap::new(),
+            preemption_counts: FxHashMap::default(),
         }
     }
 

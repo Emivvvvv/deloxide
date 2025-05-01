@@ -25,6 +25,7 @@ stress-test = [] # for stress testing functionality
 
 [dependencies]
 parking_lot = "0.12.1"  # Alternative to std mutex with better performance
+fxhash = "0.2.1" # Faster alternative for HashMap and HashSet
 chrono = "0.4"  # For timestamps in logging
 anyhow = "1.0.95" # For better error handling
 

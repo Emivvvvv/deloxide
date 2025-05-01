@@ -2,7 +2,7 @@ use crate::core::graph::WaitForGraph;
 use crate::core::logger;
 use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
 use chrono::Utc;
-use std::collections::{HashMap, HashSet};
+use fxhash::{FxHashMap, FxHashSet};
 use std::sync::Mutex;
 
 #[cfg(feature = "stress-test")]
@@ -29,13 +29,13 @@ pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
     /// Maps locks to the threads that currently own them
-    lock_owners: HashMap<LockId, ThreadId>,
+    lock_owners: FxHashMap<LockId, ThreadId>,
     /// Maps threads to the locks they're attempting to acquire
-    thread_waits_for: HashMap<ThreadId, LockId>,
+    thread_waits_for: FxHashMap<ThreadId, LockId>,
     /// Callback to invoke when a deadlock is detected
     on_deadlock: Option<Box<dyn Fn(DeadlockInfo) + Send>>,
     /// Tracks, for each thread, which locks it currently holds
-    thread_holds: HashMap<ThreadId, HashSet<LockId>>,
+    thread_holds: FxHashMap<ThreadId, FxHashSet<LockId>>,
     #[cfg(feature = "stress-test")]
     /// Stress testing mode
     stress_mode: StressMode,
@@ -55,10 +55,10 @@ impl Detector {
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_owners: HashMap::new(),
-            thread_waits_for: HashMap::new(),
+            lock_owners: FxHashMap::default(),
+            thread_waits_for: FxHashMap::default(),
             on_deadlock: None,
-            thread_holds: HashMap::new(),
+            thread_holds: FxHashMap::default(),
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
             #[cfg(feature = "stress-test")]
@@ -72,10 +72,10 @@ impl Detector {
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_owners: HashMap::new(),
-            thread_waits_for: HashMap::new(),
+            lock_owners: FxHashMap::default(),
+            thread_waits_for: FxHashMap::default(),
             on_deadlock: None,
-            thread_holds: HashMap::new(),
+            thread_holds: FxHashMap::default(),
             stress_mode: mode,
             stress_config: config,
         }

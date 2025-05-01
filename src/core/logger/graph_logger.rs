@@ -1,6 +1,6 @@
 use crate::core::types::{Events, LockId, ThreadId};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use fxhash::{FxHashMap, FxHashSet};
 use std::sync::Mutex;
 
 /// Represents a link between a thread and a lock
@@ -29,22 +29,22 @@ pub struct GraphState {
 /// Maintains the current state of threads and locks in the system
 pub struct GraphLogger {
     /// Maps locks to the threads that currently own them (runtime ownership)
-    lock_owners: HashMap<LockId, ThreadId>,
+    lock_owners: FxHashMap<LockId, ThreadId>,
 
     /// Maps threads to the locks they're attempting to acquire
-    thread_attempts: HashMap<ThreadId, HashSet<LockId>>,
+    thread_attempts: FxHashMap<ThreadId, FxHashSet<LockId>>,
 
     /// Maps locks to the threads that created them (creation ownership)
-    lock_creators: HashMap<LockId, ThreadId>,
+    lock_creators: FxHashMap<LockId, ThreadId>,
 
     /// Maps threads to their parent threads (if any)
-    thread_parents: HashMap<ThreadId, ThreadId>,
+    thread_parents: FxHashMap<ThreadId, ThreadId>,
 
     /// Set of all threads that have been seen
-    threads: HashSet<ThreadId>,
+    threads: FxHashSet<ThreadId>,
 
     /// Set of all locks that have been seen
-    locks: HashSet<LockId>,
+    locks: FxHashSet<LockId>,
 }
 
 impl Default for GraphLogger {
@@ -57,12 +57,12 @@ impl GraphLogger {
     /// Create a new graph logger
     pub fn new() -> Self {
         GraphLogger {
-            lock_owners: HashMap::new(),
-            thread_attempts: HashMap::new(),
-            lock_creators: HashMap::new(),
-            thread_parents: HashMap::new(),
-            threads: HashSet::new(),
-            locks: HashSet::new(),
+            lock_owners: FxHashMap::default(),
+            thread_attempts: FxHashMap::default(),
+            lock_creators: FxHashMap::default(),
+            thread_parents: FxHashMap::default(),
+            threads: FxHashSet::default(),
+            locks: FxHashSet::default(),
         }
     }
 
