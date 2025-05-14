@@ -1,0 +1,1032 @@
+just bench-report
+just bench-all
+cd deloxide-tests && rm -rf target/criterion
+just bench-baseline-all
+cd deloxide-tests && cargo bench --no-default-features --bench single_mutex_baseline        -- --save-baseline baseline && cargo bench --no-default-features --bench ordered_locking_baseline     -- --save-baseline baseline && cargo bench --no-default-features --bench reader_writer_baseline       -- --save-baseline baseline && cargo bench --no-default-features --bench hierarchical_locking_baseline -- --save-baseline baseline && cargo bench --no-default-features --bench producer_consumer_baseline   -- --save-baseline baseline
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/single_mutex.rs (target/release/deps/single_mutex_baseline-ab3580b3ac17808c)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [8.1643 ns 8.1686 ns 8.1733 ns]
+Found 10 outliers among 100 measurements (10.00%)
+  2 (2.00%) low mild
+  4 (4.00%) high mild
+  4 (4.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/ordered_locking.rs (target/release/deps/ordered_locking_baseline-484c4bbf5cc4095a)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [8.1667 ns 8.1730 ns 8.1805 ns]
+                        change: [-0.2008% -0.0114% +0.1833%] (p = 0.91 > 0.05)
+                        No change in performance detected.
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) low mild
+  2 (2.00%) high mild
+  5 (5.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/reader_writer.rs (target/release/deps/reader_writer_baseline-dc607d5dc3bf70cc)
+Gnuplot not found, using plotters backend
+reader_writer/threads_4_write_1pct
+                        time:   [53.943 µs 54.011 µs 54.080 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_4_write_5pct
+                        time:   [54.303 µs 54.460 µs 54.627 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_4_write_10pct
+                        time:   [54.383 µs 54.444 µs 54.500 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) low severe
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_4_write_20pct
+                        time:   [56.795 µs 57.118 µs 57.435 µs]
+reader_writer/threads_8_write_1pct
+                        time:   [104.18 µs 104.61 µs 105.03 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+reader_writer/threads_8_write_5pct
+                        time:   [82.558 µs 83.338 µs 84.368 µs]
+reader_writer/threads_8_write_10pct
+                        time:   [90.108 µs 92.676 µs 95.290 µs]
+reader_writer/threads_8_write_20pct
+                        time:   [85.443 µs 87.212 µs 89.440 µs]
+reader_writer/threads_16_write_1pct
+                        time:   [217.19 µs 218.71 µs 220.08 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) low severe
+  1 (1.00%) low mild
+reader_writer/threads_16_write_5pct
+                        time:   [221.33 µs 222.40 µs 223.52 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+reader_writer/threads_16_write_10pct
+                        time:   [213.08 µs 218.56 µs 222.95 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  3 (3.00%) low severe
+  2 (2.00%) low mild
+  3 (3.00%) high mild
+reader_writer/threads_16_write_20pct
+                        time:   [222.49 µs 223.42 µs 224.33 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low severe
+  3 (3.00%) low mild
+  5 (5.00%) high mild
+  1 (1.00%) high severe
+reader_writer/threads_32_write_1pct
+                        time:   [420.52 µs 424.12 µs 427.63 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+reader_writer/threads_32_write_5pct
+                        time:   [427.11 µs 429.86 µs 432.55 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) low mild
+  4 (4.00%) high mild
+reader_writer/threads_32_write_10pct
+                        time:   [422.94 µs 426.50 µs 429.98 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low severe
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+reader_writer/threads_32_write_20pct
+                        time:   [421.37 µs 424.59 µs 427.74 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/hierarchical_locking.rs (target/release/deps/hierarchical_locking_baseline-f99b930dc2f06cc4)
+Gnuplot not found, using plotters backend
+hierarchical/locks_2_threads_2
+                        time:   [30.168 µs 30.297 µs 30.471 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low severe
+  3 (3.00%) low mild
+  3 (3.00%) high mild
+  6 (6.00%) high severe
+hierarchical/locks_2_threads_4
+                        time:   [57.543 µs 57.900 µs 58.243 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) low mild
+hierarchical/locks_2_threads_8
+                        time:   [86.554 µs 88.782 µs 91.258 µs]
+hierarchical/locks_4_threads_2
+                        time:   [31.279 µs 31.317 µs 31.359 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) low mild
+  5 (5.00%) high mild
+  6 (6.00%) high severe
+hierarchical/locks_4_threads_4
+                        time:   [56.457 µs 56.621 µs 56.772 µs]
+Found 14 outliers among 100 measurements (14.00%)
+  3 (3.00%) low mild
+  3 (3.00%) high mild
+  8 (8.00%) high severe
+hierarchical/locks_4_threads_8
+                        time:   [84.099 µs 84.376 µs 84.781 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+hierarchical/locks_8_threads_2
+                        time:   [33.446 µs 33.523 µs 33.583 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) low severe
+  2 (2.00%) high mild
+  9 (9.00%) high severe
+hierarchical/locks_8_threads_4
+                        time:   [55.524 µs 55.838 µs 56.279 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  4 (4.00%) high mild
+  9 (9.00%) high severe
+hierarchical/locks_8_threads_8
+                        time:   [88.351 µs 89.010 µs 89.769 µs]
+Found 15 outliers among 100 measurements (15.00%)
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+  8 (8.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/producer_consumer.rs (target/release/deps/producer_consumer_baseline-efdb546fdefd073f)
+Gnuplot not found, using plotters backend
+producer_consumer/prod_1_cons_1
+                        time:   [29.902 µs 29.950 µs 29.999 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  5 (5.00%) low mild
+  8 (8.00%) high severe
+producer_consumer/prod_1_cons_2
+                        time:   [45.252 µs 45.297 µs 45.343 µs]
+Found 17 outliers among 100 measurements (17.00%)
+  1 (1.00%) low severe
+  3 (3.00%) low mild
+  3 (3.00%) high mild
+  10 (10.00%) high severe
+producer_consumer/prod_1_cons_4
+                        time:   [68.293 µs 68.406 µs 68.526 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  10 (10.00%) high mild
+  3 (3.00%) high severe
+producer_consumer/prod_2_cons_1
+                        time:   [45.447 µs 45.507 µs 45.570 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+producer_consumer/prod_2_cons_2
+                        time:   [55.215 µs 55.286 µs 55.357 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  5 (5.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_2_cons_4
+                        time:   [76.911 µs 77.062 µs 77.240 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_4_cons_1
+                        time:   [71.016 µs 71.188 µs 71.397 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+producer_consumer/prod_4_cons_2
+                        time:   [67.538 µs 67.604 µs 67.676 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  5 (5.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_4_cons_4
+                        time:   [100.54 µs 102.54 µs 104.28 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) low severe
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+
+just bench-detector-all
+cd deloxide-tests && cargo bench --no-default-features --features detector --bench single_mutex_detector        -- --save-baseline detector && cargo bench --no-default-features --features detector --bench ordered_locking_detector     -- --save-baseline detector && cargo bench --no-default-features --features detector --bench reader_writer_detector       -- --save-baseline detector && cargo bench --no-default-features --features detector --bench hierarchical_locking_detector -- --save-baseline detector && cargo bench --no-default-features --features detector --bench producer_consumer_detector   -- --save-baseline detector
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: variable does not need to be mutable
+  --> src/lib.rs:64:9
+   |
+64 |     let mut deloxide = Deloxide::new().callback(callback);
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `deloxide-tests` (lib) generated 1 warning (run `cargo fix --lib -p deloxide-tests` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/single_mutex.rs (target/release/deps/single_mutex_detector-7655b627162a9343)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [59.580 ns 59.654 ns 59.720 ns]
+Found 21 outliers among 100 measurements (21.00%)
+  12 (12.00%) low severe
+  5 (5.00%) low mild
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: variable does not need to be mutable
+  --> src/lib.rs:64:9
+   |
+64 |     let mut deloxide = Deloxide::new().callback(callback);
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `deloxide-tests` (lib) generated 1 warning (run `cargo fix --lib -p deloxide-tests` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.05s
+     Running benches/ordered_locking.rs (target/release/deps/ordered_locking_detector-3183d0eb06004492)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [59.020 ns 59.153 ns 59.304 ns]
+                        change: [-0.6496% -0.3973% -0.1401%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: variable does not need to be mutable
+  --> src/lib.rs:64:9
+   |
+64 |     let mut deloxide = Deloxide::new().callback(callback);
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `deloxide-tests` (lib) generated 1 warning (run `cargo fix --lib -p deloxide-tests` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.05s
+     Running benches/reader_writer.rs (target/release/deps/reader_writer_detector-b03e4f2812aecece)
+Gnuplot not found, using plotters backend
+reader_writer/threads_4_write_1pct
+                        time:   [71.288 µs 71.420 µs 71.602 µs]
+Found 7 outliers among 100 measurements (7.00%)
+  3 (3.00%) high mild
+  4 (4.00%) high severe
+reader_writer/threads_4_write_5pct
+                        time:   [71.555 µs 71.646 µs 71.748 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_4_write_10pct
+                        time:   [71.651 µs 71.750 µs 71.829 µs]
+Found 16 outliers among 100 measurements (16.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  8 (8.00%) high mild
+  6 (6.00%) high severe
+reader_writer/threads_4_write_20pct
+                        time:   [72.164 µs 72.255 µs 72.343 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  6 (6.00%) high severe
+reader_writer/threads_8_write_1pct
+                        time:   [120.43 µs 120.65 µs 120.88 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_8_write_5pct
+                        time:   [120.96 µs 121.15 µs 121.33 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_8_write_10pct
+                        time:   [121.64 µs 121.88 µs 122.19 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  7 (7.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_8_write_20pct
+                        time:   [122.77 µs 122.99 µs 123.25 µs]
+Found 14 outliers among 100 measurements (14.00%)
+  4 (4.00%) low severe
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+reader_writer/threads_16_write_1pct
+                        time:   [219.35 µs 219.88 µs 220.38 µs]
+Found 15 outliers among 100 measurements (15.00%)
+  6 (6.00%) low severe
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_16_write_5pct
+                        time:   [221.18 µs 221.66 µs 222.18 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low severe
+  2 (2.00%) low mild
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+reader_writer/threads_16_write_10pct
+                        time:   [222.13 µs 222.80 µs 223.38 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_16_write_20pct
+                        time:   [224.84 µs 226.02 µs 227.20 µs]
+Found 15 outliers among 100 measurements (15.00%)
+  3 (3.00%) low severe
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_32_write_1pct
+                        time:   [543.72 µs 574.07 µs 604.75 µs]
+reader_writer/threads_32_write_5pct
+                        time:   [534.94 µs 567.22 µs 601.48 µs]
+reader_writer/threads_32_write_10pct
+                        time:   [555.92 µs 585.46 µs 616.09 µs]
+reader_writer/threads_32_write_20pct
+                        time:   [641.53 µs 678.99 µs 715.84 µs]
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: variable does not need to be mutable
+  --> src/lib.rs:64:9
+   |
+64 |     let mut deloxide = Deloxide::new().callback(callback);
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `deloxide-tests` (lib) generated 1 warning (run `cargo fix --lib -p deloxide-tests` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/hierarchical_locking.rs (target/release/deps/hierarchical_locking_detector-8a107c3994de2306)
+Gnuplot not found, using plotters backend
+hierarchical/locks_2_threads_2
+                        time:   [42.396 µs 42.430 µs 42.464 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+hierarchical/locks_2_threads_4
+                        time:   [75.268 µs 75.375 µs 75.498 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) high mild
+  8 (8.00%) high severe
+hierarchical/locks_2_threads_8
+                        time:   [125.44 µs 125.92 µs 126.28 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low severe
+  2 (2.00%) high mild
+  6 (6.00%) high severe
+hierarchical/locks_4_threads_2
+                        time:   [56.534 µs 56.612 µs 56.692 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+hierarchical/locks_4_threads_4
+                        time:   [112.03 µs 112.32 µs 112.62 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+hierarchical/locks_4_threads_8
+                        time:   [238.53 µs 239.75 µs 240.98 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low severe
+  4 (4.00%) low mild
+  4 (4.00%) high mild
+hierarchical/locks_8_threads_2
+                        time:   [89.154 µs 89.355 µs 89.549 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+hierarchical/locks_8_threads_4
+                        time:   [214.44 µs 217.44 µs 222.61 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  2 (2.00%) low severe
+  3 (3.00%) high mild
+  7 (7.00%) high severe
+hierarchical/locks_8_threads_8
+                        time:   [569.27 µs 573.49 µs 578.94 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low severe
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: variable does not need to be mutable
+  --> src/lib.rs:64:9
+   |
+64 |     let mut deloxide = Deloxide::new().callback(callback);
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `deloxide-tests` (lib) generated 1 warning (run `cargo fix --lib -p deloxide-tests` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/producer_consumer.rs (target/release/deps/producer_consumer_detector-3cad8abc1c7b416d)
+Gnuplot not found, using plotters backend
+producer_consumer/prod_1_cons_1
+                        time:   [43.175 µs 43.326 µs 43.572 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) low mild
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+producer_consumer/prod_1_cons_2
+                        time:   [58.956 µs 59.030 µs 59.105 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_1_cons_4
+                        time:   [85.374 µs 86.201 µs 86.957 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+producer_consumer/prod_2_cons_1
+                        time:   [59.243 µs 59.350 µs 59.462 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+producer_consumer/prod_2_cons_2
+                        time:   [70.649 µs 70.769 µs 70.866 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  2 (2.00%) low severe
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+producer_consumer/prod_2_cons_4
+                        time:   [94.065 µs 94.217 µs 94.391 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  5 (5.00%) high mild
+  6 (6.00%) high severe
+producer_consumer/prod_4_cons_1
+                        time:   [82.684 µs 82.771 µs 82.858 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) high mild
+  6 (6.00%) high severe
+producer_consumer/prod_4_cons_2
+                        time:   [94.993 µs 95.365 µs 96.008 µs]
+Found 21 outliers among 100 measurements (21.00%)
+  6 (6.00%) low severe
+  3 (3.00%) low mild
+  5 (5.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_4_cons_4
+                        time:   [119.05 µs 120.19 µs 121.68 µs]
+Found 20 outliers among 100 measurements (20.00%)
+  2 (2.00%) low severe
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  13 (13.00%) high severe
+
+just bench-detector-log-all
+cd deloxide-tests && cargo bench --features detector-log --bench single_mutex_detector_log         -- --save-baseline detector_log && cargo bench --features detector-log --bench ordered_locking_detector_log      -- --save-baseline detector_log && cargo bench --features detector-log --bench reader_writer_detector_log        -- --save-baseline detector_log && cargo bench --features detector-log --bench hierarchical_locking_detector_log -- --save-baseline detector_log && cargo bench --features detector-log --bench producer_consumer_detector_log    -- --save-baseline detector_log
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.09s
+     Running benches/single_mutex.rs (target/release/deps/single_mutex_detector_log-107988acb07eb82a)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [59.640 ns 59.672 ns 59.707 ns]
+Found 12 outliers among 100 measurements (12.00%)
+  3 (3.00%) low severe
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/ordered_locking.rs (target/release/deps/ordered_locking_detector_log-067683aa4d485ec1)
+Gnuplot not found, using plotters backend
+single_mutex/lock_unlock
+                        time:   [59.699 ns 59.729 ns 59.758 ns]
+                        change: [-0.0626% +0.0872% +0.2385%] (p = 0.27 > 0.05)
+                        No change in performance detected.
+Found 8 outliers among 100 measurements (8.00%)
+  3 (3.00%) low severe
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/reader_writer.rs (target/release/deps/reader_writer_detector_log-42a71fe9b83a3d12)
+Gnuplot not found, using plotters backend
+reader_writer/threads_4_write_1pct
+                        time:   [69.447 µs 69.517 µs 69.590 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  4 (4.00%) high severe
+reader_writer/threads_4_write_5pct
+                        time:   [69.941 µs 70.016 µs 70.095 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  6 (6.00%) high severe
+reader_writer/threads_4_write_10pct
+                        time:   [70.211 µs 70.370 µs 70.572 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_4_write_20pct
+                        time:   [70.532 µs 70.597 µs 70.660 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) high mild
+  9 (9.00%) high severe
+reader_writer/threads_8_write_1pct
+                        time:   [116.79 µs 118.97 µs 121.69 µs]
+Found 17 outliers among 100 measurements (17.00%)
+  5 (5.00%) high mild
+  12 (12.00%) high severe
+reader_writer/threads_8_write_5pct
+                        time:   [116.57 µs 117.29 µs 118.40 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  8 (8.00%) high mild
+  5 (5.00%) high severe
+reader_writer/threads_8_write_10pct
+                        time:   [116.56 µs 116.73 µs 116.92 µs]
+Found 18 outliers among 100 measurements (18.00%)
+  4 (4.00%) high mild
+  14 (14.00%) high severe
+reader_writer/threads_8_write_20pct
+                        time:   [118.06 µs 118.33 µs 118.70 µs]
+Found 17 outliers among 100 measurements (17.00%)
+  5 (5.00%) low mild
+  5 (5.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_16_write_1pct
+                        time:   [205.35 µs 206.25 µs 207.08 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  5 (5.00%) low mild
+  3 (3.00%) high mild
+  4 (4.00%) high severe
+reader_writer/threads_16_write_5pct
+                        time:   [209.36 µs 210.00 µs 210.84 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  2 (2.00%) high mild
+  7 (7.00%) high severe
+reader_writer/threads_16_write_10pct
+                        time:   [208.94 µs 210.50 µs 212.41 µs]
+Found 21 outliers among 100 measurements (21.00%)
+  3 (3.00%) low severe
+  7 (7.00%) low mild
+  3 (3.00%) high mild
+  8 (8.00%) high severe
+reader_writer/threads_16_write_20pct
+                        time:   [211.52 µs 212.62 µs 213.59 µs]
+Found 14 outliers among 100 measurements (14.00%)
+  2 (2.00%) low severe
+  5 (5.00%) low mild
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+reader_writer/threads_32_write_1pct
+                        time:   [472.52 µs 491.98 µs 512.00 µs]
+reader_writer/threads_32_write_5pct
+                        time:   [505.03 µs 528.45 µs 552.67 µs]
+reader_writer/threads_32_write_10pct
+                        time:   [490.14 µs 515.88 µs 542.51 µs]
+reader_writer/threads_32_write_20pct
+                        time:   [555.62 µs 583.67 µs 611.62 µs]
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/hierarchical_locking.rs (target/release/deps/hierarchical_locking_detector_log-daecc6216e5f71c1)
+Gnuplot not found, using plotters backend
+hierarchical/locks_2_threads_2
+                        time:   [42.438 µs 42.511 µs 42.599 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  3 (3.00%) high mild
+  9 (9.00%) high severe
+hierarchical/locks_2_threads_4
+                        time:   [75.392 µs 75.469 µs 75.547 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low mild
+  5 (5.00%) high mild
+  5 (5.00%) high severe
+hierarchical/locks_2_threads_8
+                        time:   [125.87 µs 126.18 µs 126.59 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  4 (4.00%) high mild
+  7 (7.00%) high severe
+hierarchical/locks_4_threads_2
+                        time:   [57.300 µs 57.397 µs 57.500 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  5 (5.00%) high mild
+  6 (6.00%) high severe
+hierarchical/locks_4_threads_4
+                        time:   [113.39 µs 113.55 µs 113.71 µs]
+Found 7 outliers among 100 measurements (7.00%)
+  1 (1.00%) low severe
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+hierarchical/locks_4_threads_8
+                        time:   [240.31 µs 241.94 µs 243.46 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) low mild
+  1 (1.00%) high mild
+hierarchical/locks_8_threads_2
+                        time:   [89.157 µs 89.379 µs 89.619 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+hierarchical/locks_8_threads_4
+                        time:   [212.88 µs 213.22 µs 213.57 µs]
+Found 7 outliers among 100 measurements (7.00%)
+  2 (2.00%) low severe
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+hierarchical/locks_8_threads_8
+                        time:   [565.13 µs 567.77 µs 570.44 µs]
+
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/reader_writer.rs` found to be present in multiple build targets:
+  * `bench` target `reader_writer_baseline`
+  * `bench` target `reader_writer_detector`
+  * `bench` target `reader_writer_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/single_mutex.rs` found to be present in multiple build targets:
+  * `bench` target `single_mutex_baseline`
+  * `bench` target `single_mutex_detector`
+  * `bench` target `single_mutex_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/hierarchical_locking.rs` found to be present in multiple build targets:
+  * `bench` target `hierarchical_locking_baseline`
+  * `bench` target `hierarchical_locking_detector`
+  * `bench` target `hierarchical_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/ordered_locking.rs` found to be present in multiple build targets:
+  * `bench` target `ordered_locking_baseline`
+  * `bench` target `ordered_locking_detector`
+  * `bench` target `ordered_locking_detector_log`
+warning: file `/Users/emivvvvv/Documents/GitHub/deloxide/deloxide-tests/benches/producer_consumer.rs` found to be present in multiple build targets:
+  * `bench` target `producer_consumer_baseline`
+  * `bench` target `producer_consumer_detector`
+  * `bench` target `producer_consumer_detector_log`
+    Finished `bench` profile [optimized] target(s) in 0.06s
+     Running benches/producer_consumer.rs (target/release/deps/producer_consumer_detector_log-ee8f57a06fb9b304)
+Gnuplot not found, using plotters backend
+producer_consumer/prod_1_cons_1
+                        time:   [42.976 µs 43.029 µs 43.085 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  6 (6.00%) high severe
+producer_consumer/prod_1_cons_2
+                        time:   [58.634 µs 58.692 µs 58.750 µs]
+Found 7 outliers among 100 measurements (7.00%)
+  3 (3.00%) high mild
+  4 (4.00%) high severe
+producer_consumer/prod_1_cons_4
+                        time:   [81.343 µs 81.842 µs 82.488 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  4 (4.00%) high mild
+  8 (8.00%) high severe
+producer_consumer/prod_2_cons_1
+                        time:   [58.979 µs 59.052 µs 59.137 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+producer_consumer/prod_2_cons_2
+                        time:   [70.419 µs 70.591 µs 70.815 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  7 (7.00%) high severe
+producer_consumer/prod_2_cons_4
+                        time:   [93.811 µs 93.930 µs 94.071 µs]
+Found 12 outliers among 100 measurements (12.00%)
+  4 (4.00%) high mild
+  8 (8.00%) high severe
+producer_consumer/prod_4_cons_1
+                        time:   [82.520 µs 82.620 µs 82.719 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  5 (5.00%) high mild
+  5 (5.00%) high severe
+producer_consumer/prod_4_cons_2
+                        time:   [94.911 µs 95.092 µs 95.345 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) low mild
+  3 (3.00%) high mild
+  6 (6.00%) high severe
+producer_consumer/prod_4_cons_4
+                        time:   [118.47 µs 118.77 µs 119.21 µs]
+Found 11 outliers among 100 measurements (11.00%)
+  5 (5.00%) high mild
+  6 (6.00%) high severe
+
+cd deloxide-tests && critcmp baseline detector detector_log
+group                                   baseline                        detector                        detector_log
+-----                                   --------                        --------                        ------------
+hierarchical/locks_2_threads_2          1.00     30.3±0.91µs            1.40     42.6±0.75µs            1.41     42.9±2.26µs
+hierarchical/locks_2_threads_4          1.00     58.0±1.24µs            1.31     75.9±2.63µs            1.31     75.9±1.67µs
+hierarchical/locks_2_threads_8          1.00     87.9±8.98µs            1.45    127.1±3.83µs            1.44    126.9±3.57µs
+hierarchical/locks_4_threads_2          1.00     31.5±0.86µs            1.80     56.9±1.28µs            1.84     58.1±1.93µs
+hierarchical/locks_4_threads_4          1.00     57.2±2.01µs            1.97    112.5±1.80µs            1.99    113.8±1.77µs
+hierarchical/locks_4_threads_8          1.00     85.2±4.14µs            2.80    239.0±8.04µs            2.83    241.6±8.03µs
+hierarchical/locks_8_threads_2          1.00     33.8±1.19µs            2.65     89.7±2.97µs            2.66     90.0±1.72µs
+hierarchical/locks_8_threads_4          1.00     56.0±1.57µs            3.87   216.8±19.71µs            3.82    213.7±4.29µs
+hierarchical/locks_8_threads_8          1.00     89.2±3.61µs            6.48   578.0±40.32µs            6.37   567.8±12.53µs
+producer_consumer/prod_1_cons_1         1.00     30.1±1.19µs            1.44     43.5±1.94µs            1.44     43.4±2.50µs
+producer_consumer/prod_1_cons_2         1.00     45.7±2.07µs            1.30     59.6±3.20µs            1.29     59.0±1.40µs
+producer_consumer/prod_1_cons_4         1.00     69.0±1.40µs            1.25     86.1±3.28µs            1.19     82.2±3.11µs
+producer_consumer/prod_2_cons_1         1.00     45.7±0.97µs            1.30     59.6±1.61µs            1.30     59.4±1.57µs
+producer_consumer/prod_2_cons_2         1.00     55.9±2.51µs            1.27     71.1±2.00µs            1.27     70.9±1.84µs
+producer_consumer/prod_2_cons_4         1.00     77.9±3.02µs            1.22     94.9±2.72µs            1.22     94.7±3.21µs
+producer_consumer/prod_4_cons_1         1.00     71.5±2.03µs            1.16     83.3±2.37µs            1.16     83.1±2.28µs
+producer_consumer/prod_4_cons_2         1.00     68.2±2.91µs            1.39     95.1±5.00µs            1.40     95.6±2.69µs
+producer_consumer/prod_4_cons_4         1.00    104.0±4.40µs            1.16    121.1±7.88µs            1.15    119.8±4.82µs
+reader_writer/threads_16_write_10pct    1.03   221.9±12.39µs            1.04    224.3±7.32µs            1.00   215.7±19.90µs
+reader_writer/threads_16_write_1pct     1.04    216.8±8.47µs            1.06    220.7±6.74µs            1.00    208.9±9.10µs
+reader_writer/threads_16_write_20pct    1.04    223.7±8.75µs            1.06    227.4±9.21µs            1.00    214.8±8.47µs
+reader_writer/threads_16_write_5pct     1.05    223.1±7.47µs            1.05    223.0±8.13µs            1.00   212.9±11.68µs
+reader_writer/threads_32_write_10pct    1.00   425.5±24.79µs            1.39  591.5±141.83µs            1.22  520.8±106.84µs
+reader_writer/threads_32_write_1pct     1.00   420.6±24.29µs            1.38  579.1±127.69µs            1.20   503.3±96.58µs
+reader_writer/threads_32_write_20pct    1.00   427.4±21.94µs            1.59  680.6±155.61µs            1.36  582.5±125.91µs
+reader_writer/threads_32_write_5pct     1.00   432.0±19.26µs            1.32  570.3±136.37µs            1.25  540.9±102.59µs
+reader_writer/threads_4_write_10pct     1.00     55.0±3.34µs            1.31     72.2±1.90µs            1.29     70.7±1.95µs
+reader_writer/threads_4_write_1pct      1.00     54.4±1.54µs            1.32     71.9±2.17µs            1.28     69.9±1.99µs
+reader_writer/threads_4_write_20pct     1.00     57.3±1.41µs            1.27     72.7±2.40µs            1.24     71.2±2.47µs
+reader_writer/threads_4_write_5pct      1.00     54.8±2.21µs            1.32     72.3±2.90µs            1.29     70.5±1.96µs
+reader_writer/threads_8_write_10pct     1.00     90.0±9.55µs            1.37    123.1±5.19µs            1.32    119.1±7.75µs
+reader_writer/threads_8_write_1pct      1.00    104.1±2.80µs            1.17    122.1±6.11µs            1.14    119.0±9.98µs
+reader_writer/threads_8_write_20pct     1.00    95.4±10.32µs            1.29    123.4±3.96µs            1.25    118.8±3.24µs
+reader_writer/threads_8_write_5pct      1.00    91.2±10.94µs            1.33    121.8±2.93µs            1.30    118.2±4.34µs
+single_mutex/lock_unlock                1.00      8.2±0.06ns            7.27     59.5±0.65ns            7.31     59.8±0.36ns

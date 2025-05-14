@@ -2,22 +2,23 @@ use crate::core::types::ThreadId;
 use fxhash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
-/// Represents a directed graph of thread wait relationships with efficient cycle detection
+/// Represents a directed graph of thread wait relationships with optimized cycle detection
 ///
-/// This implementation uses an incremental approach to cycle detection, avoiding
-/// full DFS traversals on every edge addition. It maintains additional data structures
-/// to quickly detect when a new edge would create a cycle.
+/// This implementation uses an incremental approach for cycle detection, which avoids
+/// costly full graph traversals on each edge addition. It maintains specialized data structures
+/// to efficiently detect potential cycles and track thread dependencies.
 pub struct WaitForGraph {
-    /// Maps a thread to all the threads it is waiting for
+    /// Maps a thread to all the threads it is waiting for (outgoing edges)
     pub(crate) edges: FxHashMap<ThreadId, FxHashSet<ThreadId>>,
 
-    /// Reverse edges for quick backward traversal (maps thread to threads waiting for it)
+    /// Reverse mapping for efficient backward traversal (maps thread to threads waiting for it)
     reverse_edges: FxHashMap<ThreadId, FxHashSet<ThreadId>>,
 
-    /// Tracks which nodes are in known cycles
+    /// Tracks which nodes are known to be part of at least one cycle
     nodes_in_cycles: FxHashSet<ThreadId>,
 
-    /// Cached cycle detection results (reachability matrix)
+    /// Cached reachability information for fast cycle detection
+    /// Maps each node to the set of nodes reachable from it
     reachability: FxHashMap<ThreadId, FxHashSet<ThreadId>>,
 }
 
@@ -40,8 +41,9 @@ impl WaitForGraph {
 
     /// Add a directed edge: `from` thread waits for `to` thread
     ///
-    /// This method uses a more efficient approach by checking if the edge would create
-    /// a cycle before adding it. It also maintains reverse edges and reachability info.
+    /// Adds the edge and detects if it would create a deadlock cycle.
+    /// Uses optimized detection by checking reachability before the edge is added,
+    /// and maintains reverse edges and reachability information for future checks.
     ///
     /// # Arguments
     /// * `from` - The thread ID that is waiting
@@ -77,6 +79,9 @@ impl WaitForGraph {
     }
 
     /// Check if adding an edge would create a cycle
+    ///
+    /// Uses cached reachability information to efficiently determine if
+    /// adding an edge from `from` to `to` would create a cycle.
     fn would_create_cycle(&self, from: ThreadId, to: ThreadId) -> bool {
         // If 'to' can reach 'from', adding this edge would create a cycle
         if let Some(reachable) = self.reachability.get(&to) {
@@ -94,7 +99,10 @@ impl WaitForGraph {
         false
     }
 
-    /// Update reachability information incrementally
+    /// Update reachability information after adding a new edge
+    ///
+    /// Efficiently updates the reachability cache to reflect the new
+    /// connection between `from` and `to` threads.
     fn update_reachability(&mut self, from: ThreadId, to: ThreadId) {
         // BFS to update reachability from 'from' node
         let mut queue = VecDeque::new();
@@ -128,7 +136,10 @@ impl WaitForGraph {
         }
     }
 
-    /// Find the actual cycle path when we know one exists
+    /// Find the exact cycle path when we know one exists
+    ///
+    /// Uses BFS to find the shortest path forming the cycle.
+    /// Called after detecting that a cycle exists between the nodes.
     fn find_cycle_path(&self, from: ThreadId, to: ThreadId) -> Option<Vec<ThreadId>> {
         // Use BFS to find shortest path from 'to' to 'from'
         let mut queue = VecDeque::new();
@@ -190,7 +201,11 @@ impl WaitForGraph {
         false
     }
 
-    /// Remove all edges for the specified thread (both incoming and outgoing)
+    /// Remove all edges for the specified thread
+    ///
+    /// Completely removes the thread from the graph, updating all
+    /// related data structures including edges, reverse edges,
+    /// cycle tracking, and reachability information.
     pub fn remove_thread(&mut self, thread_id: ThreadId) {
         // Remove from cycle tracking
         self.nodes_in_cycles.remove(&thread_id);

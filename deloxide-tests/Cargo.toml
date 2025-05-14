@@ -1,0 +1,92 @@
+[package]
+name = "deloxide-tests"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["detector"]
+detector = ["deloxide"]         # Enables deadlock detection via Deloxide
+detector-log = ["detector"]     # Enables Deloxide and logging
+
+[dependencies]
+deloxide = { path = "../../deloxide", optional = true }
+parking_lot = "0.12"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1.0"  # Optional for now
+
+# === single_mutex benchmarks ===
+[[bench]]
+name = "single_mutex_baseline"
+path = "benches/single_mutex.rs"
+harness = false
+
+[[bench]]
+name = "single_mutex_detector"
+path = "benches/single_mutex.rs"
+harness = false
+required-features = ["detector"]
+
+[[bench]]
+name = "single_mutex_detector_log"
+path = "benches/single_mutex.rs"
+harness = false
+required-features = ["detector-log"]
+
+# === reader_writer benchmarks ===
+[[bench]]
+name = "reader_writer_baseline"
+path = "benches/reader_writer.rs"
+harness = false
+
+[[bench]]
+name = "reader_writer_detector"
+path = "benches/reader_writer.rs"
+harness = false
+required-features = ["detector"]
+
+[[bench]]
+name = "reader_writer_detector_log"
+path = "benches/reader_writer.rs"
+harness = false
+required-features = ["detector-log"]
+
+# === hierarchical_locking benchmarks ===
+[[bench]]
+name = "hierarchical_locking_baseline"
+path = "benches/hierarchical_locking.rs"
+harness = false
+
+[[bench]]
+name = "hierarchical_locking_detector"
+path = "benches/hierarchical_locking.rs"
+harness = false
+required-features = ["detector"]
+
+[[bench]]
+name = "hierarchical_locking_detector_log"
+path = "benches/hierarchical_locking.rs"
+harness = false
+required-features = ["detector-log"]
+
+# === producer_consumer benchmarks ===
+[[bench]]
+name = "producer_consumer_baseline"
+path = "benches/producer_consumer.rs"
+harness = false
+
+[[bench]]
+name = "producer_consumer_detector"
+path = "benches/producer_consumer.rs"
+harness = false
+required-features = ["detector"]
+
+[[bench]]
+name = "producer_consumer_detector_log"
+path = "benches/producer_consumer.rs"
+harness = false
+required-features = ["detector-log"]

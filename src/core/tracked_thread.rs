@@ -32,7 +32,7 @@ use std::thread::{self, JoinHandle};
 /// let result = handle.join().unwrap();
 /// assert_eq!(result, 42);
 /// ```
-pub struct TrackedThread<T>(JoinHandle<T>);
+pub struct TrackedThread<T>(pub JoinHandle<T>);
 
 impl<T> TrackedThread<T>
 where

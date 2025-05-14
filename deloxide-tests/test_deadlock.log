@@ -1,0 +1,10 @@
+{"event":{"thread_id":0,"lock_id":1,"event":"Spawn","timestamp":1746270549.232579,"parent_id":1},"graph":{"threads":[],"locks":[1],"links":[]}}
+{"event":{"thread_id":0,"lock_id":2,"event":"Spawn","timestamp":1746270549.232649,"parent_id":1},"graph":{"threads":[],"locks":[1,2],"links":[]}}
+{"event":{"thread_id":2,"lock_id":0,"event":"Spawn","timestamp":1746270549.232782,"parent_id":1},"graph":{"threads":[2],"locks":[1,2],"links":[]}}
+{"event":{"thread_id":2,"lock_id":1,"event":"Attempt","timestamp":1746270549.232794},"graph":{"threads":[2],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Attempt"}]}}
+{"event":{"thread_id":2,"lock_id":1,"event":"Acquired","timestamp":1746270549.232801},"graph":{"threads":[2],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"}]}}
+{"event":{"thread_id":3,"lock_id":0,"event":"Spawn","timestamp":1746270549.232817,"parent_id":1},"graph":{"threads":[2,3],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"}]}}
+{"event":{"thread_id":3,"lock_id":2,"event":"Attempt","timestamp":1746270549.232838},"graph":{"threads":[2,3],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"},{"source":3,"target":2,"type":"Attempt"}]}}
+{"event":{"thread_id":3,"lock_id":2,"event":"Acquired","timestamp":1746270549.232844},"graph":{"threads":[2,3],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"},{"source":3,"target":2,"type":"Acquired"}]}}
+{"event":{"thread_id":2,"lock_id":2,"event":"Attempt","timestamp":1746270549.287837},"graph":{"threads":[2,3],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"},{"source":3,"target":2,"type":"Acquired"},{"source":2,"target":2,"type":"Attempt"}]}}
+{"event":{"thread_id":3,"lock_id":1,"event":"Attempt","timestamp":1746270549.287887},"graph":{"threads":[2,3],"locks":[1,2],"links":[{"source":2,"target":1,"type":"Acquired"},{"source":3,"target":2,"type":"Acquired"},{"source":2,"target":2,"type":"Attempt"},{"source":3,"target":1,"type":"Attempt"}]}}
