@@ -305,7 +305,7 @@ impl Detector {
                         timestamp: Utc::now().to_rfc3339(),
                     };
 
-                    // Send to dispatcher instead of calling directly
+                    // Send deadlock info to dispatcher
                     DISPATCHER.send(info);
                 }
             }

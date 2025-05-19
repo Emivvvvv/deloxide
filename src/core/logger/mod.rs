@@ -10,7 +10,4 @@ mod event_logger;
 mod graph_logger;
 
 // Re-export core unified logging functionality
-pub use event_logger::{
-    EventLogger,
-    get_current_log_file
-};
+pub use event_logger::{EventLogger, get_current_log_file};

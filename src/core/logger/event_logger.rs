@@ -86,10 +86,15 @@ impl EventLogger {
     /// Create a new logger that writes to the default log file
     pub fn new() -> Self {
         Self::with_file(DEFAULT_LOG_PATH).unwrap_or_else(|e| {
-            eprintln!("Failed to create default logger: {}. Falling back to simple file logger.", e);
+            eprintln!(
+                "Failed to create default logger: {}. Falling back to simple file logger.",
+                e
+            );
             // If default log creation fails, create a simple logger with basic timestamp
-            let fallback_path = format!("deadlock_detection_{}.log",
-                                        Utc::now().format("%Y%m%d_%H%M%S"));
+            let fallback_path = format!(
+                "deadlock_detection_{}.log",
+                Utc::now().format("%Y%m%d_%H%M%S")
+            );
             Self::with_simple_file(&fallback_path).expect("Failed to create fallback logger")
         })
     }
@@ -213,8 +218,7 @@ impl EventLogger {
         parent_id: Option<ThreadId>,
     ) {
         let now = Utc::now();
-        let timestamp =
-            now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1_000_000.0;
+        let timestamp = now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1_000_000.0;
 
         let entry = LogEntry {
             thread_id,
@@ -294,7 +298,12 @@ impl EventLogger {
     /// * `thread_id` - ID of the thread involved
     /// * `parent_id` - Optional ID of the thread that created this thread
     /// * `event` - Type of event (Spawn or Exit)
-    pub fn log_thread_event(&self, thread_id: ThreadId, parent_id: Option<ThreadId>, event: Events) {
+    pub fn log_thread_event(
+        &self,
+        thread_id: ThreadId,
+        parent_id: Option<ThreadId>,
+        event: Events,
+    ) {
         if let Ok(mut logger) = self.graph_logger.lock() {
             match event {
                 Events::Spawn => logger.update_thread_spawn(thread_id, parent_id),

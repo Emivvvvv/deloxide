@@ -497,11 +497,19 @@ mod tests {
         assert_eq!(state.links.len(), 2);
 
         // Check links
-        let attempt_link = state.links.iter().find(|l| l.link_type == "Attempt").unwrap();
+        let attempt_link = state
+            .links
+            .iter()
+            .find(|l| l.link_type == "Attempt")
+            .unwrap();
         assert_eq!(attempt_link.source, 1);
         assert_eq!(attempt_link.target, 20);
 
-        let acquired_link = state.links.iter().find(|l| l.link_type == "Acquired").unwrap();
+        let acquired_link = state
+            .links
+            .iter()
+            .find(|l| l.link_type == "Acquired")
+            .unwrap();
         assert_eq!(acquired_link.source, 2);
         assert_eq!(acquired_link.target, 10);
     }
