@@ -193,7 +193,7 @@ fn parse_log_entry(entry: LogEntry) -> Result<(Event, Graph)> {
         let link_type_code = match link.link_type.as_str() {
             "Attempt" | "attempt" => 0u8,
             "Acquired" | "acquired" => 1u8,
-            "Created" | "created" => 2u8, // New code for Created relationship
+            "Created" | "created" => 2u8,
             _ => anyhow::bail!("Invalid link type: {}", link.link_type),
         };
 

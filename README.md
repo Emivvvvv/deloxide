@@ -108,6 +108,8 @@ fn main() {
 
 ### C
 
+find `deloxide.h` in `include/deloxide.h`
+
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -321,8 +323,84 @@ Additionally, you can manually upload a log file to visualize deadlocks through 
 
 For more detailed documentation:
 
-- Rust API: `https://docs.rs/deloxide`
-- C API: See `include/deloxide.h`
+- Crates.io: `https://crates.io/crates/deloxide`
+- Rust Docs: `https://docs.rs/deloxide`
+- C API: See `include/deloxide.h` and `https://docs.rs/deloxide/latest/deloxide/ffi/index.html`
+
+## Benchmarks
+
+To evaluate the performance overhead of Deloxide, a series of benchmarks were conducted. These tests compare the performance of standard `parking_lot::Mutex` (Baseline) against Deloxide's `TrackedMutex` with deadlock detection enabled (Detector) and `TrackedMutex` with both detection and asynchronous file logging enabled (Detector Log).
+
+**Test Environment:** All benchmarks were run on a base MacBook M1 Pro with an 8-core CPU (6 performance cores, 2 efficiency cores).
+
+**Key Performance Metrics:**
+* **Baseline Time:** Execution time using standard `parking_lot::Mutex`.
+* **Detector Time/Ratio:** Execution time and overhead factor using Deloxide's `TrackedMutex` (detection only).
+* **Detector Log Time/Ratio:** Execution time and overhead factor using Deloxide's `TrackedMutex` (detection and asynchronous file logging).
+
+---
+
+### 1. Single Mutex Operations
+
+* Scenario: Basic mutex generation, lock, and unlock operations on a single `TrackedMutex` in a tight loop.*
+* Benching: The fundamental, raw overhead of a single `TrackedMutex` generation & lock/release cycle.*
+
+| Metric         | Time (ns)     | Overhead Factor |
+|----------------|---------------|-----------------|
+| Baseline       | 8.2 ± 0.06    | 1.0x            |
+| Detector       | 59.5 ± 0.65   | ~7.27x          |
+| Detector (Log) | 59.8 ± 0.36   | ~7.31x          |
+
+**Observation:** Deloxide introduces approximately 51 ns of overhead per lock/unlock cycle in this best-case, uncontended scenario. The cost of preparing log data for asynchronous writing is negligible (~0.3 ns).
+
+---
+
+### 2. Hierarchical Locking
+
+* Scenario: Multiple threads acquire multiple locks in a strict, deadlock-free order.*
+* Benching: Performance of sequential multi-lock acquisitions/releases as locks and threads scale.*
+
+| Test Case             | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
+|-----------------------|--------------------|----------------|----------------------|
+| 2 Locks, 2 Threads    | 30.3 ± 0.91        | ~1.40x         | ~1.41x               |
+| 4 Locks, 4 Threads    | 57.2 ± 2.01        | ~1.97x         | ~1.99x               |
+| 8 Locks, 8 Threads    | 89.2 ± 3.61        | ~6.48x         | ~6.37x               |
+
+**Observation:** The overhead factor increases with both the number of locks and threads, scaling from ~1.4x to ~6.4x in the tested configurations. Asynchronous logging consistently adds minimal overhead over detection alone.
+
+---
+
+### 3. Producer-Consumer
+
+* Scenario: Multiple "producer" threads add items to a shared buffer (one mutex) and multiple "consumer" threads remove items.*
+* Benching: `TrackedMutex` performance under high contention for a single resource.*
+
+| Test Case             | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
+|-----------------------|--------------------|----------------|----------------------|
+| 1 Prod, 1 Cons        | 30.1 ± 1.19        | ~1.44x         | ~1.44x               |
+| 2 Prod, 2 Cons        | 55.9 ± 2.51        | ~1.27x         | ~1.27x               |
+| 4 Prod, 4 Cons        | 104.0 ± 4.40       | ~1.16x         | ~1.15x               |
+
+**Observation:** Deloxide's overhead factor remains moderate and relatively stable (mostly between ~1.15x and ~1.44x) even with high contention on a single mutex.
+
+---
+
+### 4. Reader-Writer Pattern
+
+* Scenario: Multiple threads access shared data (one mutex), with a configurable ratio of "read" vs. "write" operations.*
+* Benching: `TrackedMutex` performance with mixed read/write access patterns.*
+
+| Test Case                 | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
+|---------------------------|--------------------|----------------|----------------------|
+| 4 Threads, 10% Write      | 55.0 ± 3.34        | ~1.31x         | ~1.29x               |
+| 8 Threads, 10% Write      | 90.0 ± 9.55        | ~1.37x         | ~1.32x               |
+| 16 Threads, 10% Write     | 221.9 ± 12.39      | ~1.04x         | ~1.00x               |
+| 32 Threads, 10% Write     | 425.5 ± 24.79      | ~1.39x         | ~1.22x               |
+
+**Observation:**
+*   With 4-8 threads, overhead is around ~1.3x.
+*   With 16 threads, overhead is very low (~1.0x - 1.06x), indicating efficient operation. In some cases, Detector (Log) even slightly outperforms Detector, likely due to benchmark variance.
+*   With 32 threads, overhead increases to ~1.2x - ~1.6x, with higher variability, suggesting increased contention effects.
 
 ## Examples
 
