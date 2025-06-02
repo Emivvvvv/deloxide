@@ -65,6 +65,11 @@ pub use core::{
     types::{LockId, ThreadId},
 };
 
+#[cfg(feature = "stress-test")]
+pub use core::{
+    StressMode, StressConfig
+};
+
 mod showcase;
 pub use showcase::{process_log_for_url, showcase, showcase_this};
 
