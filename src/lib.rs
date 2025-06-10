@@ -76,7 +76,7 @@ pub use showcase::{process_log_for_url, showcase, showcase_this};
 pub mod ffi;
 
 const BANNER: &str = r#"
-      ▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖      ▄▖  ▗   ▄▖
-      ▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌  ▛▌  ▜   ▛▌
-      ▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘▗ █▌▗ ▟▖▗ █▌
+      ▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖      ▄▖  ▗   ▗
+      ▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌  ▛▌  ▜   ▜
+      ▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘▗ █▌▗ ▟▖▗ ▟▖
 "#;

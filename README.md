@@ -1,4 +1,4 @@
-# <img src='./deloxide_logo_orange.png' height='25'> Deloxide - Cross-Language Deadlock Detector
+# <img src='.images/deloxide_logo_orange.png' height='25'> Deloxide - Cross-Language Deadlock Detector
 
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
@@ -327,80 +327,100 @@ For more detailed documentation:
 - Rust Docs: `https://docs.rs/deloxide`
 - C API: See `include/deloxide.h` and `https://docs.rs/deloxide/latest/deloxide/ffi/index.html`
 
-## Benchmarks
+## Performance & Evaluation
 
-To evaluate the performance overhead of Deloxide, a series of benchmarks were conducted. These tests compare the performance of standard `parking_lot::Mutex` (Baseline) against Deloxide's `TrackedMutex` with deadlock detection enabled (Detector) and `TrackedMutex` with both detection and asynchronous file logging enabled (Detector Log).
+This part outlines the performance, deadlock detection capabilities, and robustness of `Deloxide`. We compare it against standard Rust mutexes (`std::sync::Mutex`), `parking_lot::Mutex` (with its `deadlock_detection` feature), and the `no_deadlocks` library.
 
-**Test Environment:** All benchmarks were run on a base MacBook M1 Pro with an 8-core CPU (6 performance cores, 2 efficiency cores).
+**Key Takeaways (TL;DR):**
+*   **Performance:** `Deloxide` introduces a manageable performance overhead in many common scenarios but can be more significant under heavy lock contention.
+*   **Deadlock Detection:** `Deloxide`'s optional **stress testing** modes are exceptionally effective at uncovering hard-to-find "Heisenbug" deadlocks that are often missed by other detectors.
+*   **Superior Speed:** `Deloxide` detects deadlocks up to **80x faster** than competing libraries, providing an immediate feedback loop for developers.
+*   **Reliability:** `Deloxide` is robust and does **not** produce false alarms in deadlock-free code.
 
-**Key Performance Metrics:**
-* **Baseline Time:** Execution time using standard `parking_lot::Mutex`.
-* **Detector Time/Ratio:** Execution time and overhead factor using Deloxide's `TrackedMutex` (detection only).
-* **Detector Log Time/Ratio:** Execution time and overhead factor using Deloxide's `TrackedMutex` (detection and asynchronous file logging).
+All benchmarks were run on a base M1 MacBook Pro with Rust 1.86.0-nightly.
 
----
+### 1. Performance Overhead
 
-### 1. Single Mutex Operations
+We evaluated overhead using both low-level microbenchmarks and application-level macrobenchmarks.
 
-* Scenario: Basic mutex generation, lock, and unlock operations on a single `TrackedMutex` in a tight loop.*
-* Benching: The fundamental, raw overhead of a single `TrackedMutex` generation & lock/release cycle.*
+#### Microbenchmark Overhead
 
-| Metric         | Time (ns)     | Overhead Factor |
-|----------------|---------------|-----------------|
-| Baseline       | 8.2 ± 0.06    | 1.0x            |
-| Detector       | 59.5 ± 0.65   | ~7.27x          |
-| Detector (Log) | 59.8 ± 0.36   | ~7.31x          |
+These tests measure the raw performance of creating a mutex and performing a single, uncontended lock/unlock cycle.
 
-**Observation:** Deloxide introduces approximately 51 ns of overhead per lock/unlock cycle in this best-case, uncontended scenario. The cost of preparing log data for asynchronous writing is negligible (~0.3 ns).
+| Tested Setup | Mutex Generation Time (ns) | Lock/Unlock Time |
+| :--- | :--- | :--- |
+| **Std** | 17.4 ± 0.16 ns | **8.5 ± 0.07 ns** |
+| **ParkingLot** | **16.4 ± 0.27 ns** | 9.7 ± 0.07 ns |
+| **NoDeadlocks** | 31.6 ± 0.20 ns | 10.6 ± 0.11 µs |
+| **Deloxide (Default)** | 36.2 ± 0.28 ns | 82.1 ± 0.38 ns |
+| `Deloxide+StressRand` | 36.4 ± 0.23 ns | 3.2 ± 1.06 ms |
+| `Deloxide+StressComp` | 36.3 ± 0.27 ns | 241.6 ± 4.08 ns |
 
----
+*(Lower is better)*
 
-### 2. Hierarchical Locking
+`Deloxide`'s mutex creation and lock/unlock operations carry a higher base cost than `std` or `parking_lot` due to the integrated, real-time detection logic that runs on every operation.
 
-* Scenario: Multiple threads acquire multiple locks in a strict, deadlock-free order.*
-* Benching: Performance of sequential multi-lock acquisitions/releases as locks and threads scale.*
+#### Application-Level Overhead
 
-| Test Case             | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
-|-----------------------|--------------------|----------------|----------------------|
-| 2 Locks, 2 Threads    | 30.3 ± 0.91        | ~1.40x         | ~1.41x               |
-| 4 Locks, 4 Threads    | 57.2 ± 2.01        | ~1.97x         | ~1.99x               |
-| 8 Locks, 8 Threads    | 89.2 ± 3.61        | ~6.48x         | ~6.37x               |
+We simulated two common application workloads to measure performance at scale.
 
-**Observation:** The overhead factor increases with both the number of locks and threads, scaling from ~1.4x to ~6.4x in the tested configurations. Asynchronous logging consistently adds minimal overhead over detection alone.
+**A) Hierarchical Locking Benchmark**
 
----
+This benchmark involves multiple threads acquiring a sequence of locks, simulating scenarios with complex, multi-lock dependencies.
 
-### 3. Producer-Consumer
+![Producer Consumer Results Barchart](./images/hierarchical_locking_benchmark.png)
 
-* Scenario: Multiple "producer" threads add items to a shared buffer (one mutex) and multiple "consumer" threads remove items.*
-* Benching: `TrackedMutex` performance under high contention for a single resource.*
+**Analysis:**
+*   In this scenario, `Deloxide`'s baseline overhead is modest. At the 32x32 scale, it is **~1.62x slower** than `std::sync::Mutex` (526.0µs vs 324.2µs).
+*   The stress testing modes (`Deloxide+StressRand`, `Deloxide+StressComp`) perform as expected, trading performance for improved bug detection, hence their significantly higher runtimes.
+*   The `NoDeadlocks` library showed very high execution times and was not run at larger scales.
 
-| Test Case             | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
-|-----------------------|--------------------|----------------|----------------------|
-| 1 Prod, 1 Cons        | 30.1 ± 1.19        | ~1.44x         | ~1.44x               |
-| 2 Prod, 2 Cons        | 55.9 ± 2.51        | ~1.27x         | ~1.27x               |
-| 4 Prod, 4 Cons        | 104.0 ± 4.40       | ~1.16x         | ~1.15x               |
+**B) Producer-Consumer Benchmark**
 
-**Observation:** Deloxide's overhead factor remains moderate and relatively stable (mostly between ~1.15x and ~1.44x) even with high contention on a single mutex.
+This benchmark models a high-contention scenario where multiple producer and consumer threads access a single shared queue protected by a mutex.
 
----
+![Producer Consumer Results Barchart](./images/producer_consumer_results.png)
 
-### 4. Reader-Writer Pattern
+**Analysis:**
+*   Under heavy contention for a single lock, `Deloxide`'s overhead is more pronounced. At the 4x4 scale, it is **~5.4x slower** than `std` (1.7ms vs 309.4µs).
+*   The performance of `Deloxide+StressRand` (28.0s) and `NoDeadlocks` (7.1s) at the 4x4 scale made testing at larger scales impractical.
+*   This benchmark highlights that `Deloxide`'s overhead is most noticeable in applications with a central, highly-contended bottleneck.
 
-* Scenario: Multiple threads access shared data (one mutex), with a configurable ratio of "read" vs. "write" operations.*
-* Benching: `TrackedMutex` performance with mixed read/write access patterns.*
+### 2. Deadlock Detection Capability
 
-| Test Case                 | Baseline Time (µs) | Detector Ratio | Detector (Log) Ratio |
-|---------------------------|--------------------|----------------|----------------------|
-| 4 Threads, 10% Write      | 55.0 ± 3.34        | ~1.31x         | ~1.29x               |
-| 8 Threads, 10% Write      | 90.0 ± 9.55        | ~1.37x         | ~1.32x               |
-| 16 Threads, 10% Write     | 221.9 ± 12.39      | ~1.04x         | ~1.00x               |
-| 32 Threads, 10% Write     | 425.5 ± 24.79      | ~1.39x         | ~1.22x               |
+The primary goal of `Deloxide` is to find deadlocks. We tested its ability to detect "Heisenbugs"—elusive deadlocks that only occur under specific, rare thread interleavings. A superior detector not only finds these bugs but does so **quickly**, providing rapid feedback to the developer.
 
-**Observation:**
-*   With 4-8 threads, overhead is around ~1.3x.
-*   With 16 threads, overhead is very low (~1.0x - 1.06x), indicating efficient operation. In some cases, Detector (Log) even slightly outperforms Detector, likely due to benchmark variance.
-*   With 32 threads, overhead increases to ~1.2x - ~1.6x, with higher variability, suggesting increased contention effects.
+The table below shows the percentage of runs (out of 1000) where a deadlock was successfully detected, alongside the average time it took to find it.
+
+| Tested Setup                  | Two-Lock Scenario  | Two-Lock Scenario  | Three-Lock-Cycle Scenario | Three-Lock-Cycle Scenario |
+|:------------------------------|:------------------:|:------------------:|:-------------------------:|:-------------------------:|
+|                               | **Detection Rate** | **Mean Time (ms)** |    **Detection Rate**     |    **Mean Time (ms)**     |
+| **Deloxide (Default)**        |        5.9%        |        2.7         |           0.2%            |           45.9            |
+| **`Deloxide+StressRand`**     |       51.2%        |        48.8        |           66.9%           |           158.5           |
+| **`Deloxide+StressAggrRand`** |       57.0%        |        56.4        |           75.3%           |           124.4           |
+| **`Deloxide+StressComp`**     |        4.6%        |        15.0        |        **100.0%**         |         **16.8**          |
+| **ParkingLot**                |        3.7%        |        4.9         |           2.9%            |            5.8            |
+| **NoDeadlocks**               |       100.0%       |     **1127.0**     |           98.9%           |        **1370.1**         |
+
+*(Lower time is better)*
+
+**Analysis:**
+- Without stress testing, `Deloxide`'s detection rate for these rare deadlocks is low, similar to `parking_lot`. This is expected, as the deadlock condition rarely manifests naturally.
+-  **Stress testing is the killer feature.** Enabling random preemption (`StressRand`) dramatically increases the detection rate to over 50-75%, while the component-based strategy (`StressComp`) achieved a **perfect 100% detection rate** for the complex three-lock cycle.
+- **Superior Detection Speed:** The most critical finding is the **time to detection**.
+   - `Deloxide+StressComp` found the three-lock deadlock in just **16.8 ms**.
+   - In contrast, `NoDeadlocks` took **1,370 ms (1.4 seconds)** to detect the same bug.
+
+### 3. False Positive Analysis
+
+A deadlock detector must be reliable. We verified that `Deloxide` does not report deadlocks in correctly written, deadlock-free code.
+
+We ran two deadlock-free scenarios 100 times each:
+1.  **Gate Guarded:** Threads lock A then B, or B then A, but use a gate to prevent circular waits.
+2.  **Four Hierarchical:** Locks are always acquired in a globally consistent order (A → B → C → D).
+
+**Result:**
+Across all tests, `Deloxide` (in all configurations), `parking_lot`, and `no_deadlocks` all passed with **zero false positives**.
 
 ## Examples
 
