@@ -1,4 +1,4 @@
-# <img src='.images/deloxide_logo_orange.png' height='25'> Deloxide - Cross-Language Deadlock Detector
+# <img src='images/deloxide_logo_orange.png' height='25'> Deloxide - Cross-Language Deadlock Detector
 
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
