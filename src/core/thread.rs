@@ -73,12 +73,12 @@ where
         let handle = thread::spawn(move || {
             let tid = get_current_thread_id();
             // Register thread spawn with parent information
-            detector::on_thread_spawn(tid, Some(parent_tid));
+            detector::thread::on_thread_spawn(tid, Some(parent_tid));
 
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 
             // Register thread exit
-            detector::on_thread_exit(tid);
+            detector::thread::on_thread_exit(tid);
 
             match result {
                 Ok(val) => val,

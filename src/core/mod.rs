@@ -18,16 +18,17 @@ pub mod graph;
 // Deadlock detector
 pub mod detector;
 #[allow(unused_imports)]
-pub use detector::{
-    init_detector, on_lock_acquired, on_lock_attempt, on_lock_create, on_lock_release,
-    on_thread_exit, on_thread_spawn,
-};
+pub use detector::*;
 
 // Deloxide mutex and thread
 pub mod mutex;
 pub use mutex::Mutex;
+
 pub mod thread;
 pub use thread::Thread;
+
+mod rwlock;
+pub use rwlock::RwLock;
 
 #[cfg(feature = "stress-test")]
 pub mod stress;

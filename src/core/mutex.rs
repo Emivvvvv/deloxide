@@ -80,7 +80,7 @@ impl<T> Mutex<T> {
         let creator_thread_id = get_current_thread_id();
 
         // Register the lock with the detector, including creator thread info
-        detector::on_lock_create(id, Some(creator_thread_id));
+        detector::mutex::on_lock_create(id, Some(creator_thread_id));
 
         Mutex {
             id,
@@ -131,11 +131,11 @@ impl<T> Mutex<T> {
         let thread_id = get_current_thread_id();
 
         // Report lock attempt
-        detector::on_lock_attempt(thread_id, self.id);
+        detector::mutex::on_lock_attempt(thread_id, self.id);
 
         let guard = self.inner.lock();
 
-        detector::on_lock_acquired(thread_id, self.id);
+        detector::mutex::on_lock_acquired(thread_id, self.id);
         Ok(MutexGuard {
             thread_id,
             lock_id: self.id,
@@ -171,10 +171,10 @@ impl<T> Mutex<T> {
         let thread_id = get_current_thread_id();
 
         // Report lock attempt
-        detector::on_lock_attempt(thread_id, self.id);
+        detector::mutex::on_lock_attempt(thread_id, self.id);
 
         if let Some(guard) = self.inner.try_lock() {
-            detector::on_lock_acquired(thread_id, self.id);
+            detector::mutex::on_lock_acquired(thread_id, self.id);
             Some(MutexGuard {
                 thread_id,
                 lock_id: self.id,
@@ -189,7 +189,7 @@ impl<T> Mutex<T> {
 impl<T> Drop for Mutex<T> {
     fn drop(&mut self) {
         // Register the lock destruction with the detector
-        detector::on_lock_destroy(self.id);
+        detector::mutex::on_lock_destroy(self.id);
     }
 }
 
@@ -210,6 +210,6 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
-        detector::on_lock_release(self.thread_id, self.lock_id);
+        detector::mutex::on_lock_release(self.thread_id, self.lock_id);
     }
 }

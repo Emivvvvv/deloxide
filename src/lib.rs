@@ -61,7 +61,7 @@
 
 mod core;
 pub use core::{
-    DeadlockInfo, Deloxide, Mutex, Thread,
+    DeadlockInfo, Deloxide, Mutex, Thread, RwLock,
     types::{LockId, ThreadId},
 };
 
