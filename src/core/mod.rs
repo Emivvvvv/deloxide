@@ -20,18 +20,17 @@ pub mod detector;
 #[allow(unused_imports)]
 pub use detector::*;
 
-// Deloxide mutex and thread
-pub mod mutex;
-pub use mutex::Mutex;
+pub use locks::mutex::Mutex;
 
 pub mod thread;
 pub use thread::Thread;
 
-mod rwlock;
-pub use rwlock::RwLock;
+pub use locks::rwlock::RwLock;
 
+pub(crate) mod locks;
 #[cfg(feature = "stress-test")]
 pub mod stress;
+
 #[cfg(feature = "stress-test")]
 pub use stress::{StressConfig, StressMode};
 

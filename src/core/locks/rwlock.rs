@@ -24,12 +24,14 @@
 //! ```
 
 use crate::core::detector;
+use crate::core::locks::NEXT_LOCK_ID;
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
-use parking_lot::{RwLock as ParkingLotRwLock, RwLockReadGuard as ParkingLotReadGuard, RwLockWriteGuard as ParkingLotWriteGuard};
+use parking_lot::{
+    RwLock as ParkingLotRwLock, RwLockReadGuard as ParkingLotReadGuard,
+    RwLockWriteGuard as ParkingLotWriteGuard,
+};
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-static NEXT_LOCK_ID: AtomicUsize = AtomicUsize::new(1);
+use std::sync::atomic::Ordering;
 
 /// A wrapper around a reader-writer lock that tracks operations for deadlock detection
 ///
@@ -99,9 +101,7 @@ impl<T> RwLock<T> {
     ///
     /// # Returns
     /// A guard which releases the lock when dropped
-    pub fn read(
-        &self,
-    ) -> Result<RwLockReadGuard<'_, T>, ()> {
+    pub fn read(&self) -> Result<RwLockReadGuard<'_, T>, ()> {
         let thread_id = get_current_thread_id();
         detector::rwlock::on_rw_read_attempt(thread_id, self.id);
         let guard = self.inner.read();
@@ -117,9 +117,7 @@ impl<T> RwLock<T> {
     ///
     /// # Returns
     /// A guard which releases the lock when dropped
-    pub fn write(
-        &self,
-    ) -> Result<RwLockWriteGuard<'_, T>, ()> {
+    pub fn write(&self) -> Result<RwLockWriteGuard<'_, T>, ()> {
         let thread_id = get_current_thread_id();
         detector::rwlock::on_rw_write_attempt(thread_id, self.id);
         let guard = self.inner.write();

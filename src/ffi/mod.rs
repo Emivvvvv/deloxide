@@ -1,8 +1,8 @@
-use crate::core::mutex::MutexGuard;
+use crate::core::detector::mutex::on_lock_create;
+use crate::core::detector::thread::{on_thread_exit, on_thread_spawn};
+use crate::core::locks::mutex::MutexGuard;
 use crate::core::types::get_current_thread_id;
 use crate::core::{Mutex, ThreadId};
-use crate::core::detector::mutex::on_lock_create;
-use crate::core::detector::thread::{on_thread_spawn, on_thread_exit};
 /// FFI bindings for Deloxide C API
 ///
 /// This module provides the C API bindings for the Deloxide deadlock detection library.

@@ -1,7 +1,11 @@
-use chrono::Utc;
 use crate::core::detector::{DISPATCHER, GLOBAL_DETECTOR};
+#[cfg(feature = "stress-test")]
+use crate::core::stress::{
+    on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release,
+};
+use crate::core::{Detector, Events, get_current_thread_id};
 use crate::{DeadlockInfo, LockId, ThreadId};
-use crate::core::{get_current_thread_id, Detector, Events};
+use chrono::Utc;
 
 impl Detector {
     /// Register a lock creation
@@ -28,7 +32,7 @@ impl Detector {
     /// * `lock_id` - ID of the lock being destroyed
     pub fn on_lock_destroy(&mut self, lock_id: LockId) {
         // remove ownership
-        self.lock_owners.remove(&lock_id);
+        self.mutex_owners.remove(&lock_id);
         // clear any pending wait-for for this lock
         for attempts in self.thread_waits_for.values_mut() {
             if *attempts == lock_id {
@@ -82,7 +86,7 @@ impl Detector {
             }
         }
 
-        if let Some(&owner) = self.lock_owners.get(&lock_id) {
+        if let Some(&owner) = self.mutex_owners.get(&lock_id) {
             self.thread_waits_for.insert(thread_id, lock_id);
 
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
@@ -133,7 +137,7 @@ impl Detector {
         }
 
         // Update ownership
-        self.lock_owners.insert(lock_id, thread_id);
+        self.mutex_owners.insert(lock_id, thread_id);
         self.thread_waits_for.remove(&thread_id);
 
         // Remove thread from wait graph
@@ -158,8 +162,8 @@ impl Detector {
         if let Some(logger) = &self.logger {
             logger.log_interaction_event(thread_id, lock_id, Events::Released);
         }
-        if self.lock_owners.get(&lock_id) == Some(&thread_id) {
-            self.lock_owners.remove(&lock_id);
+        if self.mutex_owners.get(&lock_id) == Some(&thread_id) {
+            self.mutex_owners.remove(&lock_id);
         }
         // remove from held-locks
         if let Some(holds) = self.thread_holds.get_mut(&thread_id) {

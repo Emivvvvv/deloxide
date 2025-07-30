@@ -1,6 +1,6 @@
-pub mod thread;
 pub mod mutex;
 pub mod rwlock;
+pub mod thread;
 
 #[cfg(feature = "stress-test")]
 use crate::core::StressConfig;
@@ -8,13 +8,9 @@ use crate::core::StressConfig;
 use crate::core::StressMode;
 use crate::core::graph::WaitForGraph;
 use crate::core::logger::EventLogger;
-#[cfg(feature = "stress-test")]
-use crate::core::stress::{
-    on_lock_attempt as stress_on_lock_attempt, on_lock_release as stress_on_lock_release,
-};
-use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId, get_current_thread_id};
+
+use crate::core::types::{DeadlockInfo, LockId, ThreadId};
 use anyhow::Result;
-use chrono::Utc;
 use crossbeam_channel::{Sender, unbounded};
 use fxhash::{FxHashMap, FxHashSet};
 use parking_lot::Mutex;
@@ -87,12 +83,16 @@ impl Dispatcher {
 pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
-    /// Maps locks to the threads that currently own them
-    lock_owners: FxHashMap<LockId, ThreadId>,
     /// Maps threads to the locks they're attempting to acquire
     thread_waits_for: FxHashMap<ThreadId, LockId>,
     /// Tracks, for each thread, which locks it currently holds
     thread_holds: FxHashMap<ThreadId, FxHashSet<LockId>>,
+    /// Maps Mutexes to the threads that currently own them
+    mutex_owners: FxHashMap<LockId, ThreadId>,
+    /// Maps RwLock IDs to the set of readers (shared lock holders)
+    rwlock_readers: FxHashMap<LockId, FxHashSet<ThreadId>>,
+    /// Maps RwLock IDs to the current writer (if any)
+    rwlock_writer: FxHashMap<LockId, ThreadId>,
     /// Event logger for recording lock, thread operations, and interactions (logging is optional)
     logger: Option<EventLogger>,
     #[cfg(feature = "stress-test")]
@@ -114,9 +114,11 @@ impl Detector {
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
+            mutex_owners: FxHashMap::default(),
+            rwlock_readers: FxHashMap::default(),
+            rwlock_writer: FxHashMap::default(),
             logger: None,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
@@ -131,9 +133,11 @@ impl Detector {
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_owners: FxHashMap::default(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
+            mutex_owners: FxHashMap::default(),
+            rwlock_readers: Default::default(),
+            rwlock_writer: Default::default(),
             logger: None,
             stress_mode: mode,
             stress_config: config,

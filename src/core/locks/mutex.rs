@@ -1,11 +1,9 @@
 use crate::core::detector;
+use crate::core::locks::NEXT_LOCK_ID;
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 use parking_lot::{Mutex as ParkingLotMutex, MutexGuard as ParkingLotMutexGuard};
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-// Global counter for generating unique lock IDs
-static NEXT_LOCK_ID: AtomicUsize = AtomicUsize::new(1);
+use std::sync::atomic::Ordering;
 
 /// A wrapper around a mutex that tracks lock operations for deadlock detection
 ///

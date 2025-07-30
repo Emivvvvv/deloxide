@@ -1,6 +1,6 @@
-use crate::core::{Detector, Events};
-use crate::core::detector::GLOBAL_DETECTOR;
 use crate::ThreadId;
+use crate::core::detector::GLOBAL_DETECTOR;
+use crate::core::{Detector, Events};
 
 impl Detector {
     /// Register a thread spawn

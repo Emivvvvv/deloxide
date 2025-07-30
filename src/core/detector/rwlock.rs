@@ -1,9 +1,7 @@
-use crate::{LockId, ThreadId};
 use crate::core::Detector;
+use crate::{LockId, ThreadId};
 
-impl Detector {
-    
-}
+impl Detector {}
 
 /// Called when a thread attempts to acquire a shared (read) lock on a RwLock.
 pub fn on_rw_read_attempt(thread_id: ThreadId, lock_id: LockId) {

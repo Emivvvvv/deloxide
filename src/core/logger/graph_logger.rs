@@ -35,7 +35,7 @@ pub struct GraphState {
 /// independent tracking of different execution contexts.
 pub struct GraphLogger {
     /// Maps locks to the threads that currently own them (runtime ownership)
-    lock_owners: FxHashMap<LockId, ThreadId>,
+    mutex_owners: FxHashMap<LockId, ThreadId>,
 
     /// Maps threads to the locks they're attempting to acquire
     thread_attempts: FxHashMap<ThreadId, FxHashSet<LockId>>,
@@ -66,7 +66,7 @@ impl GraphLogger {
     /// A new GraphLogger with empty tracking structures
     pub fn new() -> Self {
         GraphLogger {
-            lock_owners: FxHashMap::default(),
+            mutex_owners: FxHashMap::default(),
             thread_attempts: FxHashMap::default(),
             lock_creators: FxHashMap::default(),
             thread_parents: FxHashMap::default(),
@@ -118,7 +118,7 @@ impl GraphLogger {
         for lock_id in &locks_to_destroy {
             // Remove from all tracking structures
             self.lock_creators.remove(lock_id);
-            self.lock_owners.remove(lock_id);
+            self.mutex_owners.remove(lock_id);
             self.locks.remove(lock_id);
 
             // Remove from all thread attempts
@@ -129,7 +129,7 @@ impl GraphLogger {
 
         // Find locks owned (but not created) by this thread that should be released
         let mut locks_to_release = Vec::new();
-        for (&lock_id, &owner) in &self.lock_owners {
+        for (&lock_id, &owner) in &self.mutex_owners {
             if owner == thread_id && !locks_to_destroy.contains(&lock_id) {
                 locks_to_release.push(lock_id);
             }
@@ -137,7 +137,7 @@ impl GraphLogger {
 
         // Release locks owned by this thread
         for lock_id in locks_to_release {
-            self.lock_owners.remove(&lock_id);
+            self.mutex_owners.remove(&lock_id);
         }
 
         // Remove thread from attempts
@@ -180,7 +180,7 @@ impl GraphLogger {
     pub fn update_lock_destroy(&mut self, lock_id: LockId) {
         // Remove the lock from all tracking structures
         self.locks.remove(&lock_id);
-        self.lock_owners.remove(&lock_id);
+        self.mutex_owners.remove(&lock_id);
         self.lock_creators.remove(&lock_id);
 
         // Remove from all thread attempts
@@ -219,7 +219,7 @@ impl GraphLogger {
             }
             Events::Acquired => {
                 // Record ownership of the lock
-                self.lock_owners.insert(lock_id, thread_id);
+                self.mutex_owners.insert(lock_id, thread_id);
 
                 // Remove from attempts since it's now acquired
                 if let Some(attempts) = self.thread_attempts.get_mut(&thread_id) {
@@ -232,8 +232,8 @@ impl GraphLogger {
             }
             Events::Released => {
                 // Remove ownership only if this thread owns it
-                if self.lock_owners.get(&lock_id) == Some(&thread_id) {
-                    self.lock_owners.remove(&lock_id);
+                if self.mutex_owners.get(&lock_id) == Some(&thread_id) {
+                    self.mutex_owners.remove(&lock_id);
                 }
             }
             _ => {} // Spawn and Exit are handled separately
@@ -251,7 +251,7 @@ impl GraphLogger {
         let mut links = Vec::new();
 
         // Add links for acquired locks
-        for (&lock_id, &thread_id) in &self.lock_owners {
+        for (&lock_id, &thread_id) in &self.mutex_owners {
             links.push(GraphLink {
                 source: thread_id,
                 target: lock_id,
@@ -388,7 +388,7 @@ mod tests {
         logger.update_lock_event(2, 10, Events::Acquired);
 
         // Verify the lock is owned by thread 2 but created by thread 1
-        assert_eq!(logger.lock_owners.get(&10), Some(&2));
+        assert_eq!(logger.mutex_owners.get(&10), Some(&2));
         assert!(logger.was_lock_created_by(10, 1));
 
         // Thread 2 exits - should release the lock but not destroy it
@@ -397,7 +397,7 @@ mod tests {
         // Thread 2 should be removed, lock should still exist
         assert!(!logger.threads.contains(&2));
         assert!(logger.locks.contains(&10));
-        assert!(logger.lock_owners.get(&10).is_none()); // No owner
+        assert!(logger.mutex_owners.get(&10).is_none()); // No owner
 
         // Thread 1 exits - should now destroy the lock
         logger.update_thread_exit(1);
@@ -437,7 +437,7 @@ mod tests {
 
         // Lock 20 should still exist since it was created by thread 2
         assert!(logger.locks.contains(&20));
-        assert!(logger.lock_owners.get(&20).is_none()); // But no longer owned
+        assert!(logger.mutex_owners.get(&20).is_none()); // But no longer owned
 
         // Thread 2 exits - should clean up lock 20
         logger.update_thread_exit(2);
@@ -464,14 +464,14 @@ mod tests {
         logger.update_lock_event(1, 10, Events::Acquired);
 
         // Verify acquisition is tracked and attempt is removed
-        assert!(logger.lock_owners.get(&10) == Some(&1));
+        assert!(logger.mutex_owners.get(&10) == Some(&1));
         assert!(logger.thread_attempts.get(&1).is_none()); // No more attempts
 
         // Thread releases lock
         logger.update_lock_event(1, 10, Events::Released);
 
         // Verify ownership is removed
-        assert!(logger.lock_owners.get(&10).is_none());
+        assert!(logger.mutex_owners.get(&10).is_none());
     }
 
     #[test]
