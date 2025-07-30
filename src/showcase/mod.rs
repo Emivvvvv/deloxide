@@ -40,7 +40,7 @@ pub fn showcase<P: AsRef<Path>>(log_path: P) -> Result<()> {
         process_log_for_url(&log_path).context("Failed to process log file for URL")?;
 
     // Construct the URL with the encoded log as a parameter
-    let showcase_url = format!("https://deloxide.vercel.app/?logs={}", encoded_log);
+    let showcase_url = format!("https://deloxide.vercel.app/?logs={encoded_log}");
 
     // Open the URL in the default web browser.
     webbrowser::open(&showcase_url).context("Failed to open browser")?;
@@ -94,7 +94,7 @@ pub fn showcase_this() -> Result<()> {
         process_log_for_url(&log_path).context("Failed to process log file for URL")?;
 
     // Construct the URL with the encoded log as a parameter
-    let showcase_url = format!("https://deloxide.vercel.app/?logs={}", encoded_log);
+    let showcase_url = format!("https://deloxide.vercel.app/?logs={encoded_log}");
 
     // Open the URL in the default web browser
     webbrowser::open(&showcase_url).context("Failed to open browser")?;

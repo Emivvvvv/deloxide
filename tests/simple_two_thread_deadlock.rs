@@ -1,5 +1,5 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
-use std::sync::{Arc, Mutex, mpsc};
+use deloxide::{DeadlockInfo, Deloxide, Mutex, Thread};
+use std::sync::{Arc, Mutex as StdMutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -9,8 +9,8 @@ fn test_simple_two_thread_deadlock() {
     let (tx, rx) = mpsc::channel::<DeadlockInfo>();
 
     // Track whether deadlock was detected with an atomic flag
-    let deadlock_detected = Arc::new(Mutex::new(false));
-    let deadlock_info = Arc::new(Mutex::new(None));
+    let deadlock_detected = Arc::new(StdMutex::new(false));
+    let deadlock_info = Arc::new(StdMutex::new(None));
 
     // Clone for the callback
     let deadlock_detected_clone = Arc::clone(&deadlock_detected);
@@ -33,15 +33,15 @@ fn test_simple_two_thread_deadlock() {
         .expect("Failed to initialize detector");
 
     // Create two mutexes
-    let mutex_a = Arc::new(TrackedMutex::new("Resource A"));
-    let mutex_b = Arc::new(TrackedMutex::new("Resource B"));
+    let mutex_a = Arc::new(Mutex::new("Resource A"));
+    let mutex_b = Arc::new(Mutex::new("Resource B"));
 
     // Clone references for the second thread
     let mutex_a_clone = Arc::clone(&mutex_a);
     let mutex_b_clone = Arc::clone(&mutex_b);
 
     // Thread 1: Lock A, then try to lock B
-    let _thread1 = TrackedThread::spawn(move || {
+    let _thread1 = Thread::spawn(move || {
         let _guard_a = mutex_a.lock().unwrap();
 
         // Give thread 2 time to acquire lock B
@@ -55,7 +55,7 @@ fn test_simple_two_thread_deadlock() {
     });
 
     // Thread 2: Lock B, then try to lock A
-    let _thread2 = TrackedThread::spawn(move || {
+    let _thread2 = Thread::spawn(move || {
         let _guard_b = mutex_b_clone.lock().unwrap();
 
         // Give thread 1 time to acquire lock A

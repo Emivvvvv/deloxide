@@ -23,12 +23,11 @@ pub use detector::{
     on_thread_exit, on_thread_spawn,
 };
 
-// Tracked mutex
-pub mod tracked_mutex;
-pub use tracked_mutex::TrackedMutex;
-
-pub mod tracked_thread;
-pub use tracked_thread::TrackedThread;
+// Deloxide mutex and thread
+pub mod mutex;
+pub use mutex::Mutex;
+pub mod thread;
+pub use thread::Thread;
 
 #[cfg(feature = "stress-test")]
 pub mod stress;
@@ -95,7 +94,7 @@ impl Deloxide {
             callback: Box::new(|info: DeadlockInfo| {
                 panic!(
                     "Deadlock detected: {}",
-                    serde_json::to_string_pretty(&info).unwrap_or_else(|_| format!("{:?}", info))
+                    serde_json::to_string_pretty(&info).unwrap_or_else(|_| format!("{info:?}"))
                 );
             }),
             #[cfg(feature = "stress-test")]

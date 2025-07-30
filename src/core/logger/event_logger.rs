@@ -86,10 +86,7 @@ impl EventLogger {
     /// Create a new logger that writes to the default log file
     pub fn new() -> Self {
         Self::with_file(DEFAULT_LOG_PATH).unwrap_or_else(|e| {
-            eprintln!(
-                "Failed to create default logger: {}. Falling back to simple file logger.",
-                e
-            );
+            eprintln!("Failed to create default logger: {e}. Falling back to simple file logger.");
             // If default log creation fails, create a simple logger with basic timestamp
             let fallback_path = format!(
                 "deadlock_detection_{}.log",
@@ -104,10 +101,11 @@ impl EventLogger {
         let path_buf = path.as_ref().to_path_buf();
 
         // Create directory if needed
-        if let Some(parent) = path_buf.parent() {
-            if parent.to_string_lossy() != "" && !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path_buf.parent()
+            && parent.to_string_lossy() != ""
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
 
         // Update the global registry
@@ -142,7 +140,7 @@ impl EventLogger {
     ///
     /// # Arguments
     /// * `path` - Path to the log file. If the filename contains "{timestamp}",
-    ///           it will be replaced with the current timestamp.
+    ///   it will be replaced with the current timestamp.
     ///
     /// # Returns
     /// A Result containing the configured EventLogger or an error if setup fails
@@ -156,10 +154,11 @@ impl EventLogger {
         let path_buf = path.as_ref().to_path_buf();
 
         // Create directory if needed
-        if let Some(parent) = path_buf.parent() {
-            if parent.to_string_lossy() != "" && !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path_buf.parent()
+            && parent.to_string_lossy() != ""
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
 
         // Replace timestamp placeholder if present
@@ -247,7 +246,7 @@ impl EventLogger {
 
         // Non-blocking send to async logger
         if let Err(e) = self.sender.send(LoggerCommand::LogEntry(combined_entry)) {
-            eprintln!("Failed to send log entry: {:?}", e);
+            eprintln!("Failed to send log entry: {e:?}");
         }
     }
 
@@ -369,17 +368,17 @@ fn async_logger_thread(file: File, rx: Receiver<LoggerCommand>, flushing: Arc<At
         match cmd {
             LoggerCommand::LogEntry(entry) => {
                 // Serialize and write immediately, then flush
-                if let Ok(json) = serde_json::to_string(&entry) {
-                    if let Err(e) = writeln!(writer, "{}", json).and_then(|_| writer.flush()) {
-                        eprintln!("Logger write error: {:?}", e);
-                    }
+                if let Ok(json) = serde_json::to_string(&entry)
+                    && let Err(e) = writeln!(writer, "{json}").and_then(|_| writer.flush())
+                {
+                    eprintln!("Logger write error: {e:?}");
                 }
             }
             LoggerCommand::Flush(responder) => {
                 // Signal flushing
                 flushing.store(true, Ordering::Release);
                 if let Err(e) = writer.flush() {
-                    eprintln!("Logger flush error: {:?}", e);
+                    eprintln!("Logger flush error: {e:?}");
                 }
                 flushing.store(false, Ordering::Release);
                 let _ = responder.send(());

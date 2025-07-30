@@ -4,25 +4,25 @@ use std::thread::{self, JoinHandle};
 
 /// A wrapper around std::thread::JoinHandle that logs spawn and exit events
 ///
-/// The TrackedThread provides the same interface as a standard thread, but adds
+/// The Thread provides the same interface as a standard thread, but adds
 /// deadlock detection by tracking thread creation and termination. It's a drop-in
 /// replacement for std::thread that enables deadlock detection for threads.
 ///
-/// When a TrackedThread is spawned, it records the parent-child relationship between
+/// When a Thread is spawned, it records the parent-child relationship between
 /// threads, which is important for proper resource tracking and cleanup. When the
 /// thread exits, it automatically notifies the deadlock detector.
 ///
 /// # Example
 ///
 /// ```rust
-/// use deloxide::TrackedThread;
+/// use deloxide::Thread;
 /// use std::time::Duration;
 /// use std::thread;
 ///
 /// // Initialize detector (not shown here)
 ///
 /// // Spawn a tracked thread
-/// let handle = TrackedThread::spawn(|| {
+/// let handle = Thread::spawn(|| {
 ///     println!("Hello from a tracked thread!");
 ///     thread::sleep(Duration::from_millis(100));
 ///     42 // Return value
@@ -32,9 +32,9 @@ use std::thread::{self, JoinHandle};
 /// let result = handle.join().unwrap();
 /// assert_eq!(result, 42);
 /// ```
-pub struct TrackedThread<T>(JoinHandle<T>);
+pub struct Thread<T>(JoinHandle<T>);
 
-impl<T> TrackedThread<T>
+impl<T> Thread<T>
 where
     T: Send + 'static,
 {
@@ -48,14 +48,14 @@ where
     /// * `f` - The function to run in the new thread
     ///
     /// # Returns
-    /// A TrackedThread handle that can be used to join the thread later
+    /// A Thread handle that can be used to join the thread later
     ///
     /// # Example
     ///
     /// ```rust
-    /// use deloxide::TrackedThread;
+    /// use deloxide::Thread;
     ///
-    /// let handle = TrackedThread::spawn(|| {
+    /// let handle = Thread::spawn(|| {
     ///     // Thread code here
     ///     "Hello from tracked thread"
     /// });
@@ -85,7 +85,7 @@ where
                 Err(payload) => std::panic::resume_unwind(payload),
             }
         });
-        TrackedThread(handle)
+        Thread(handle)
     }
 
     /// Wait for the thread to finish and return its result.
@@ -99,9 +99,9 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use deloxide::TrackedThread;
+    /// use deloxide::Thread;
     ///
-    /// let handle = TrackedThread::spawn(|| 42);
+    /// let handle = Thread::spawn(|| 42);
     /// let result = handle.join().unwrap();
     /// assert_eq!(result, 42);
     /// ```

@@ -23,7 +23,7 @@
 //! ## Usage Example
 //!
 //! ```rust
-//! use deloxide::{Deloxide, TrackedMutex, TrackedThread};
+//! use deloxide::{Deloxide, Mutex, Thread};
 //! use std::sync::Arc;
 //! use std::time::Duration;
 //! use std::thread;
@@ -37,13 +37,13 @@
 //!     .expect("Failed to initialize detector");
 //!
 //! // Create two mutexes
-//! let mutex_a = Arc::new(TrackedMutex::new("Resource A"));
-//! let mutex_b = Arc::new(TrackedMutex::new("Resource B"));
+//! let mutex_a = Arc::new(Mutex::new("Resource A"));
+//! let mutex_b = Arc::new(Mutex::new("Resource B"));
 //!
 //! // First thread: Lock A, then try to lock B
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
-//! let t1 = TrackedThread::spawn(move || {
+//! let t1 = Thread::spawn(move || {
 //!     let _lock_a = a_clone.lock().unwrap();
 //!     thread::sleep(Duration::from_millis(100));
 //!     let _lock_b = b_clone.lock().unwrap();
@@ -52,7 +52,7 @@
 //! // Second thread: Lock B, then try to lock A (potential deadlock)
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
-//! let t2 = TrackedThread::spawn(move || {
+//! let t2 = Thread::spawn(move || {
 //!     let _lock_b = b_clone.lock().unwrap();
 //!     thread::sleep(Duration::from_millis(100));
 //!     let _lock_a = a_clone.lock().unwrap();
@@ -61,22 +61,22 @@
 
 mod core;
 pub use core::{
-    DeadlockInfo, Deloxide, TrackedMutex, TrackedThread,
+    DeadlockInfo, Deloxide, Mutex, Thread,
     types::{LockId, ThreadId},
 };
 
 #[cfg(feature = "stress-test")]
-pub use core::{
-    StressMode, StressConfig
-};
+pub use core::{StressConfig, StressMode};
 
 mod showcase;
 pub use showcase::{process_log_for_url, showcase, showcase_this};
 
 pub mod ffi;
 
+// Font name "miniwi"
 const BANNER: &str = r#"
-      ▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖      ▄▖  ▗   ▗
-      ▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌  ▛▌  ▜   ▜
-      ▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘▗ █▌▗ ▟▖▗ ▟▖
+▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▄▖
+▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌▄▖▛▌▛▘█▌
+▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▙▖▗ █▌  ▙▌▌ ▙▖
+                                ▌
 "#;

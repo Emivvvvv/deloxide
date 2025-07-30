@@ -51,7 +51,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
    - Provides automatic visualization when deadlocks are detected
 
 4. **Cross-Language Support**
-   - Rust API with `TrackedMutex` and `TrackedThread` types
+   - Rust API with `Mutex` and `Thread` types
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
 
@@ -65,7 +65,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 ### Rust
 
 ```rust
-use deloxide::{Deloxide, TrackedMutex, TrackedThread};
+use deloxide::{Deloxide, Mutex, Thread};
 use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
@@ -83,20 +83,20 @@ fn main() {
         .expect("Failed to initialize detector");
 
     // Create two mutexes
-    let mutex_a = Arc::new(TrackedMutex::new("Resource A"));
-    let mutex_b = Arc::new(TrackedMutex::new("Resource B"));
+    let mutex_a = Arc::new(Mutex::new("Resource A"));
+    let mutex_b = Arc::new(Mutex::new("Resource B"));
 
     // Create deadlock between two threads
     let mutex_a_clone = Arc::clone(&mutex_a);
     let mutex_b_clone = Arc::clone(&mutex_b);
 
-    let _t1 = TrackedThread::spawn(move || {
+    let _t1 = Thread::spawn(move || {
         let _a = mutex_a.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _b = mutex_b.lock().unwrap();
     });
 
-    let _t2 = TrackedThread::spawn(move || {
+    let _t2 = Thread::spawn(move || {
         let _b = mutex_b_clone.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _a = mutex_a_clone.lock().unwrap();

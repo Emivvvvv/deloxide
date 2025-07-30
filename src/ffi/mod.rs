@@ -1,6 +1,6 @@
-use crate::core::tracked_mutex::TrackedGuard;
+use crate::core::mutex::MutexGuard;
 use crate::core::types::get_current_thread_id;
-use crate::core::{ThreadId, TrackedMutex, on_lock_create, on_thread_exit, on_thread_spawn};
+use crate::core::{Mutex, ThreadId, on_lock_create, on_thread_exit, on_thread_spawn};
 /// FFI bindings for Deloxide C API
 ///
 /// This module provides the C API bindings for the Deloxide deadlock detection library.
@@ -29,7 +29,7 @@ static mut STRESS_CONFIG: Option<StressConfig> = None;
 // We'll keep each Rust guard alive here until the C code calls unlock.
 thread_local! {
     // Each thread can hold exactly one guard at a time.
-    static FFI_GUARD: RefCell<Option<TrackedGuard<'static, ()>>> = const {RefCell::new(None)};
+    static FFI_GUARD: RefCell<Option<MutexGuard<'static, ()>>> = const {RefCell::new(None)};
 }
 
 // Globals to track initialization state
@@ -218,7 +218,7 @@ pub unsafe extern "C" fn deloxide_is_logging_enabled() -> c_int {
 /// - Any usage from C must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
-    let mutex = Box::new(TrackedMutex::new(()));
+    let mutex = Box::new(Mutex::new(()));
     Box::into_raw(mutex) as *mut c_void
 }
 
@@ -240,7 +240,7 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
 pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
     creator_thread_id: c_ulong,
 ) -> *mut c_void {
-    let mutex = Box::new(TrackedMutex::new(()));
+    let mutex = Box::new(Mutex::new(()));
 
     // Register the specified thread as the creator
     on_lock_create(mutex.id(), Some(creator_thread_id as ThreadId));
@@ -263,7 +263,7 @@ pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
 pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
     if !mutex.is_null() {
         unsafe {
-            drop(Box::from_raw(mutex as *mut TrackedMutex<()>));
+            drop(Box::from_raw(mutex as *mut Mutex<()>));
         }
     }
 }
@@ -281,7 +281,7 @@ pub unsafe extern "C" fn deloxide_destroy_mutex(mutex: *mut c_void) {
 /// * `-1` if the mutex pointer is NULL
 ///
 /// # Safety
-/// - The caller must pass a valid pointer to a `TrackedMutex<()>`.
+/// - The caller must pass a valid pointer to a `Mutex<()>`.
 /// - The lock is re-entrant in the sense of C code, but you must not call `deloxide_lock` twice on the same mutex from the same thread without calling `deloxide_unlock`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
@@ -290,7 +290,7 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
     }
 
     unsafe {
-        let mutex_ref = &*(mutex as *const TrackedMutex<()>);
+        let mutex_ref = &*(mutex as *const Mutex<()>);
         let guard = mutex_ref.lock();
 
         #[allow(clippy::missing_transmute_annotations)]
@@ -312,7 +312,7 @@ pub unsafe extern "C" fn deloxide_lock(mutex: *mut c_void) -> c_int {
 /// * `-1` if the mutex pointer is NULL
 ///
 /// # Safety
-/// - The pointer must be valid (i.e., a previously created `TrackedMutex<()>`).
+/// - The pointer must be valid (i.e., a previously created `Mutex<()>`).
 /// - The mutex must have been previously locked by the current thread.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_unlock(mutex: *mut c_void) -> c_int {
@@ -403,7 +403,7 @@ pub unsafe extern "C" fn deloxide_get_thread_id() -> c_ulong {
 /// * Thread ID of the creator thread, or 0 if the mutex is NULL
 ///
 /// # Safety
-/// - The caller must pass a valid pointer to a `TrackedMutex<()>`.
+/// - The caller must pass a valid pointer to a `Mutex<()>`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulong {
     if mutex.is_null() {
@@ -411,7 +411,7 @@ pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulo
     }
 
     unsafe {
-        let mutex_ref = &*(mutex as *const TrackedMutex<()>);
+        let mutex_ref = &*(mutex as *const Mutex<()>);
         mutex_ref.creator_thread_id() as c_ulong
     }
 }
@@ -432,7 +432,7 @@ pub unsafe extern "C" fn deloxide_flush_logs() -> c_int {
     match detector::flush_global_detector_logs() {
         Ok(_) => 0,
         Err(e) => {
-            eprintln!("Failed to flush logs: {:#}", e);
+            eprintln!("Failed to flush logs: {e:#}");
             -1
         }
     }
@@ -471,7 +471,7 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
 
     // First flush all logs
     if let Err(e) = detector::flush_global_detector_logs() {
-        eprintln!("Failed to flush logs: {:#}", e);
+        eprintln!("Failed to flush logs: {e:#}");
         return -3;
     }
 
@@ -479,7 +479,7 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
     match crate::showcase(path_str) {
         Ok(_) => 0,
         Err(e) => {
-            eprintln!("Showcase error: {:#}", e);
+            eprintln!("Showcase error: {e:#}");
             -2
         }
     }
@@ -502,7 +502,7 @@ pub unsafe extern "C" fn deloxide_showcase(log_path: *const c_char) -> c_int {
 pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
     // First flush all logs
     if let Err(e) = detector::flush_global_detector_logs() {
-        eprintln!("Failed to flush logs: {:#}", e);
+        eprintln!("Failed to flush logs: {e:#}");
         return -3;
     }
 
@@ -512,7 +512,7 @@ pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
             if e.to_string().contains("No active log file") {
                 -1
             } else {
-                eprintln!("Showcase error: {:#}", e);
+                eprintln!("Showcase error: {e:#}");
                 -2
             }
         }

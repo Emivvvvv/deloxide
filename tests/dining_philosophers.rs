@@ -1,5 +1,5 @@
-use deloxide::{DeadlockInfo, Deloxide, TrackedMutex, TrackedThread};
-use std::sync::{Arc, Mutex, mpsc};
+use deloxide::{DeadlockInfo, Deloxide, Mutex, Thread};
+use std::sync::{Arc, Mutex as StdMutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -9,8 +9,8 @@ fn test_dining_philosophers_deadlock() {
     let (tx, rx) = mpsc::channel::<DeadlockInfo>();
 
     // Track whether deadlock was detected
-    let deadlock_detected = Arc::new(Mutex::new(false));
-    let deadlock_info = Arc::new(Mutex::new(None));
+    let deadlock_detected = Arc::new(StdMutex::new(false));
+    let deadlock_info = Arc::new(StdMutex::new(None));
 
     // Clone for the callback
     let deadlock_detected_clone = Arc::clone(&deadlock_detected);
@@ -37,8 +37,8 @@ fn test_dining_philosophers_deadlock() {
     let num_philosophers = 5;
 
     // Create the forks (shared resources)
-    let forks: Vec<Arc<TrackedMutex<String>>> = (0..num_philosophers)
-        .map(|i| Arc::new(TrackedMutex::new(format!("Fork {}", i))))
+    let forks: Vec<Arc<Mutex<String>>> = (0..num_philosophers)
+        .map(|i| Arc::new(Mutex::new(format!("Fork {}", i))))
         .collect();
 
     // Create philosophers (threads)
@@ -50,7 +50,7 @@ fn test_dining_philosophers_deadlock() {
         let right_fork = Arc::clone(&forks[(i + 1) % num_philosophers]);
 
         // Philosopher thread
-        let handle = TrackedThread::spawn(move || {
+        let handle = Thread::spawn(move || {
             // Try to take the left fork first
             println!("Philosopher {} is trying to take left fork", i);
             let _left = left_fork.lock().unwrap();

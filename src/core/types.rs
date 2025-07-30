@@ -25,7 +25,7 @@ pub fn get_current_thread_id() -> ThreadId {
 
 /// Lock identifier type
 ///
-/// Uniquely identifies a mutex/lock in the application. Each TrackedMutex
+/// Uniquely identifies a mutex/lock in the application. Each Mutex
 /// is assigned a unique ID when created.
 pub type LockId = usize;
 

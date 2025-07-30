@@ -84,10 +84,10 @@ impl WaitForGraph {
     /// adding an edge from `from` to `to` would create a cycle.
     fn would_create_cycle(&self, from: ThreadId, to: ThreadId) -> bool {
         // If 'to' can reach 'from', adding this edge would create a cycle
-        if let Some(reachable) = self.reachability.get(&to) {
-            if reachable.contains(&from) {
-                return true;
-            }
+        if let Some(reachable) = self.reachability.get(&to)
+            && reachable.contains(&from)
+        {
+            return true;
         }
 
         // Check if both nodes are already in a cycle
@@ -191,12 +191,11 @@ impl WaitForGraph {
     /// Check if two nodes are in the same cycle
     fn are_in_same_cycle(&self, node1: ThreadId, node2: ThreadId) -> bool {
         // Simple check - if both can reach each other, they're in the same cycle
-        if let Some(reachable1) = self.reachability.get(&node1) {
-            if reachable1.contains(&node2) {
-                if let Some(reachable2) = self.reachability.get(&node2) {
-                    return reachable2.contains(&node1);
-                }
-            }
+        if let Some(reachable1) = self.reachability.get(&node1)
+            && reachable1.contains(&node2)
+            && let Some(reachable2) = self.reachability.get(&node2)
+        {
+            return reachable2.contains(&node1);
         }
         false
     }
