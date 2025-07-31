@@ -54,11 +54,11 @@ fn test_random_ring_deadlock() {
 
             // Random jitter before first lock
             thread::sleep(Duration::from_millis(rng.random_range(0..50)));
-            let _a = first.lock().unwrap();
+            let _a = first.lock();
 
             // Random jitter before second lock
             thread::sleep(Duration::from_millis(rng.random_range(50..100)));
-            let _b = second.lock().unwrap();
+            let _b = second.lock();
 
             // If there were no deadlock, we'd proceed:
             thread::sleep(Duration::from_millis(200));

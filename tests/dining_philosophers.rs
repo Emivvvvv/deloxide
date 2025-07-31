@@ -53,7 +53,7 @@ fn test_dining_philosophers_deadlock() {
         let handle = Thread::spawn(move || {
             // Try to take the left fork first
             println!("Philosopher {} is trying to take left fork", i);
-            let _left = left_fork.lock().unwrap();
+            let _left = left_fork.lock();
             println!("Philosopher {} acquired left fork", i);
 
             // Small delay to increase chance of deadlock
@@ -61,7 +61,7 @@ fn test_dining_philosophers_deadlock() {
 
             // Then try to take the right fork
             println!("Philosopher {} is trying to take right fork", i);
-            let _right = right_fork.lock().unwrap();
+            let _right = right_fork.lock();
             println!("Philosopher {} acquired right fork and is eating", i);
 
             // Eat for a while

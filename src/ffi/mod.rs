@@ -1,4 +1,4 @@
-use crate::core::detector::mutex::on_lock_create;
+use crate::core::detector::mutex::on_mutex_create;
 use crate::core::detector::thread::{on_thread_exit, on_thread_spawn};
 use crate::core::locks::mutex::MutexGuard;
 use crate::core::types::get_current_thread_id;
@@ -48,12 +48,12 @@ static mut DEADLOCK_CALLBACK: Option<extern "C" fn(*const c_char)> = None;
 /// callback functionality. It must be called before any other Deloxide functions.
 ///
 /// # Arguments
-/// * `log_path` - Path to log file as a null-terminated C string, or NULL to disable logging.
+/// * `log_path` - Path to a log file as a null-terminated C string, or NULL to disable logging.
 /// * `callback` - Function pointer to call when a deadlock is detected, or NULL for no callback.
 ///
 /// # Returns
 /// * `0` on success
-/// * `1` if detector is already initialized
+/// * `1` if the detector is already initialized
 /// * `-1` if the log path contains invalid UTF-8
 /// * `-2` if the logger failed to initialize
 ///
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn deloxide_init(
 
         #[cfg(feature = "stress-test")]
         {
-            // Get stress settings if feature is enabled
+            // Get stress settings if the feature is enabled
             let stress_mode = match STRESS_MODE.load(Ordering::SeqCst) {
                 1 => StressMode::RandomPreemption,
                 2 => StressMode::ComponentBased,
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn deloxide_init(
 /// * `0` if no deadlock has been detected
 ///
 /// # Safety
-/// This function reads from a mutable global static (`DEADLOCK_DETECTED`).
+/// This function reads from mutable global static (`DEADLOCK_DETECTED`).
 ///  - The caller must ensure no data races occur when multiple threads call this function simultaneously.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_is_deadlock_detected() -> c_int {
@@ -179,7 +179,7 @@ pub unsafe extern "C" fn deloxide_is_deadlock_detected() -> c_int {
 /// continue monitoring for additional deadlocks.
 ///
 /// # Safety
-/// This function writes to a mutable global static (`DEADLOCK_DETECTED`).
+/// This function writes to mutable global static (`DEADLOCK_DETECTED`).
 ///  - The caller must ensure no data races occur when multiple threads call this function simultaneously.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_reset_deadlock_flag() {
@@ -245,7 +245,7 @@ pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
     let mutex = Box::new(Mutex::new(()));
 
     // Register the specified thread as the creator
-    on_lock_create(mutex.id(), Some(creator_thread_id as ThreadId));
+    on_mutex_create(mutex.id(), Some(creator_thread_id as ThreadId));
 
     Box::into_raw(mutex) as *mut c_void
 }
@@ -523,7 +523,7 @@ pub unsafe extern "C" fn deloxide_showcase_current() -> c_int {
 
 /// Enable random preemption stress testing (only with "stress-test" feature)
 ///
-/// This function enables stress testing with random preemptions before lock
+/// This function enables stress testing with random preemption before lock
 /// acquisitions to increase deadlock probability.
 ///
 /// # Arguments

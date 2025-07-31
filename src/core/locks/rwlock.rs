@@ -1,12 +1,12 @@
 //! A tracked reader-writer lock for deadlock detection
 //!
-//! This RwLock provides the same interface as a standard reader-writer lock,
+//! This RwLock provides the same interface as a standard reader-writer lock
 //! but augments all lock/unlock operations with tracking for deadlock detection.
 //! It is a drop-in replacement for std::sync::RwLock that enables advanced deadlock analysis.
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```rust
 //! use deloxide::RwLock;
 //! use std::sync::Arc;
 //! use std::thread;
@@ -15,11 +15,11 @@
 //! let lock_clone = Arc::clone(&lock);
 //!
 //! thread::spawn(move || {
-//!     let data = lock_clone.read().unwrap();
+//!     let data = lock_clone.read();
 //!     println!("Read: {}", *data);
 //! });
 //!
-//! let mut data = lock.write().unwrap();
+//! let mut data = lock.write();
 //! *data += 1;
 //! ```
 
@@ -35,7 +35,7 @@ use std::sync::atomic::Ordering;
 
 /// A wrapper around a reader-writer lock that tracks operations for deadlock detection
 ///
-/// The RwLock provides the same API as a standard reader-writer lock,
+/// The RwLock provides the same API as a standard reader-writer lock
 /// but also notifies the detector on lock/unlock operations.
 ///
 pub struct RwLock<T> {
@@ -72,7 +72,7 @@ impl<T> RwLock<T> {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```rust
     /// use deloxide::RwLock;
     /// let lock = RwLock::new(42);
     /// ```
@@ -101,32 +101,32 @@ impl<T> RwLock<T> {
     ///
     /// # Returns
     /// A guard which releases the lock when dropped
-    pub fn read(&self) -> Result<RwLockReadGuard<'_, T>, ()> {
+    pub fn read(&self) -> RwLockReadGuard<'_, T> {
         let thread_id = get_current_thread_id();
         detector::rwlock::on_rw_read_attempt(thread_id, self.id);
         let guard = self.inner.read();
         detector::rwlock::on_rw_read_acquired(thread_id, self.id);
-        Ok(RwLockReadGuard {
+        RwLockReadGuard {
             thread_id,
             lock_id: self.id,
             guard,
-        })
+        }
     }
 
     /// Acquire an exclusive (write) lock, tracking the attempt and acquisition
     ///
     /// # Returns
     /// A guard which releases the lock when dropped
-    pub fn write(&self) -> Result<RwLockWriteGuard<'_, T>, ()> {
+    pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         let thread_id = get_current_thread_id();
         detector::rwlock::on_rw_write_attempt(thread_id, self.id);
         let guard = self.inner.write();
         detector::rwlock::on_rw_write_acquired(thread_id, self.id);
-        Ok(RwLockWriteGuard {
+        RwLockWriteGuard {
             thread_id,
             lock_id: self.id,
             guard,
-        })
+        }
     }
 
     /// Try to acquire a shared (read) lock, tracking the attempt

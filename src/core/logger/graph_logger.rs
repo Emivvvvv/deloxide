@@ -36,19 +36,18 @@ pub struct GraphState {
 pub struct GraphLogger {
     /// Maps locks to the threads that currently own them (runtime ownership)
     mutex_owners: FxHashMap<LockId, ThreadId>,
-
+    /// Maps RwLocks to the threads that currently hold read locks on them
+    rwlock_readers: FxHashMap<LockId, FxHashSet<ThreadId>>,
+    /// Maps RwLocks to the thread that currently holds the write lock on them
+    rwlock_writer: FxHashMap<LockId, ThreadId>,
     /// Maps threads to the locks they're attempting to acquire
     thread_attempts: FxHashMap<ThreadId, FxHashSet<LockId>>,
-
     /// Maps locks to the threads that created them (creation ownership)
     lock_creators: FxHashMap<LockId, ThreadId>,
-
     /// Maps threads to their parent threads (if any)
     thread_parents: FxHashMap<ThreadId, ThreadId>,
-
     /// Set of all threads that have been seen
     threads: FxHashSet<ThreadId>,
-
     /// Set of all locks that have been seen
     locks: FxHashSet<LockId>,
 }
@@ -67,6 +66,8 @@ impl GraphLogger {
     pub fn new() -> Self {
         GraphLogger {
             mutex_owners: FxHashMap::default(),
+            rwlock_readers: FxHashMap::default(),
+            rwlock_writer: FxHashMap::default(),
             thread_attempts: FxHashMap::default(),
             lock_creators: FxHashMap::default(),
             thread_parents: FxHashMap::default(),
@@ -210,33 +211,53 @@ impl GraphLogger {
         }
 
         match event {
-            Events::Attempt => {
-                // Add this attempt to the thread's attempts set
-                self.thread_attempts
-                    .entry(thread_id)
-                    .or_default()
-                    .insert(lock_id);
+            // Any attempt (mutex, rwlock, condvar) goes here:
+            Events::MutexAttempt | Events::RwReadAttempt | Events::RwWriteAttempt /* | Events::CondvarWaitAttempt */ => {
+                self.thread_attempts.entry(thread_id).or_default().insert(lock_id);
             }
-            Events::Acquired => {
-                // Record ownership of the lock
-                self.mutex_owners.insert(lock_id, thread_id);
 
-                // Remove from attempts since it's now acquired
+            // Any successful acquisition (mutex, rwlock read, rwlock write):
+            Events::MutexAcquired | Events::RwReadAcquired | Events::RwWriteAcquired => {
+                // Remove attempt
                 if let Some(attempts) = self.thread_attempts.get_mut(&thread_id) {
                     attempts.remove(&lock_id);
-                    // If thread has no more attempts, clean up
-                    if attempts.is_empty() {
-                        self.thread_attempts.remove(&thread_id);
+                    if attempts.is_empty() { self.thread_attempts.remove(&thread_id); }
+                }
+                // Record actual ownership in the right map:
+                match event {
+                    Events::MutexAcquired => { self.mutex_owners.insert(lock_id, thread_id); }
+                    Events::RwReadAcquired => {
+                        self.rwlock_readers.entry(lock_id).or_default().insert(thread_id);
                     }
+                    Events::RwWriteAcquired => {
+                        self.rwlock_writer.insert(lock_id, thread_id);
+                    }
+                    _ => {}
                 }
             }
-            Events::Released => {
-                // Remove ownership only if this thread owns it
+
+            // Release for any lock type
+            Events::MutexReleased => {
+                // Remove mutex ownership if this thread owns the lock
                 if self.mutex_owners.get(&lock_id) == Some(&thread_id) {
                     self.mutex_owners.remove(&lock_id);
                 }
             }
-            _ => {} // Spawn and Exit are handled separately
+            Events::RwReadReleased => {
+                if let Some(readers) = self.rwlock_readers.get_mut(&lock_id) {
+                    readers.remove(&thread_id);
+                    if readers.is_empty() { self.rwlock_readers.remove(&lock_id); }
+                }
+            }
+            Events::RwWriteReleased => {
+                if self.rwlock_writer.get(&lock_id) == Some(&thread_id) {
+                    self.rwlock_writer.remove(&lock_id);
+                }
+            }
+
+            // Handle future Condvar etc. similarly
+
+            _ => {}
         }
     }
 
@@ -250,7 +271,7 @@ impl GraphLogger {
     pub fn get_current_state(&self) -> GraphState {
         let mut links = Vec::new();
 
-        // Add links for acquired locks
+        // Mutex ownership
         for (&lock_id, &thread_id) in &self.mutex_owners {
             links.push(GraphLink {
                 source: thread_id,
@@ -259,7 +280,27 @@ impl GraphLogger {
             });
         }
 
-        // Add links for attempted locks
+        // RwLock read ownership
+        for (&lock_id, readers) in &self.rwlock_readers {
+            for &thread_id in readers {
+                links.push(GraphLink {
+                    source: thread_id,
+                    target: lock_id,
+                    link_type: "Read".to_string(),
+                });
+            }
+        }
+
+        // RwLock write ownership
+        for (&lock_id, &thread_id) in &self.rwlock_writer {
+            links.push(GraphLink {
+                source: thread_id,
+                target: lock_id,
+                link_type: "Write".to_string(),
+            });
+        }
+
+        // Attempts for any lock type
         for (&thread_id, attempts) in &self.thread_attempts {
             for &lock_id in attempts {
                 links.push(GraphLink {
@@ -385,7 +426,7 @@ mod tests {
         logger.update_lock_create(10, 1);
 
         // Thread 2 acquires the lock
-        logger.update_lock_event(2, 10, Events::Acquired);
+        logger.update_lock_event(2, 10, Events::MutexAcquired);
 
         // Verify the lock is owned by thread 2 but created by thread 1
         assert_eq!(logger.mutex_owners.get(&10), Some(&2));
@@ -423,10 +464,10 @@ mod tests {
         logger.update_lock_create(20, 2);
 
         // Thread 1 acquires lock 20 (owned by 1, created by 2)
-        logger.update_lock_event(1, 20, Events::Acquired);
+        logger.update_lock_event(1, 20, Events::MutexAcquired);
 
         // Thread 2 acquires lock 10 (owned by 2, created by 1)
-        logger.update_lock_event(2, 10, Events::Acquired);
+        logger.update_lock_event(2, 10, Events::MutexAcquired);
 
         // Thread 1 exits - should clean up locks 10, 11 (created) and release lock 20
         logger.update_thread_exit(1);
@@ -455,20 +496,20 @@ mod tests {
         logger.update_lock_create(10, 1);
 
         // Thread attempts to acquire lock
-        logger.update_lock_event(1, 10, Events::Attempt);
+        logger.update_lock_event(1, 10, Events::MutexAttempt);
 
         // Verify attempt is tracked
         assert!(logger.thread_attempts.get(&1).unwrap().contains(&10));
 
         // Thread acquires lock
-        logger.update_lock_event(1, 10, Events::Acquired);
+        logger.update_lock_event(1, 10, Events::MutexAcquired);
 
         // Verify acquisition is tracked and attempt is removed
         assert!(logger.mutex_owners.get(&10) == Some(&1));
         assert!(logger.thread_attempts.get(&1).is_none()); // No more attempts
 
         // Thread releases lock
-        logger.update_lock_event(1, 10, Events::Released);
+        logger.update_lock_event(1, 10, Events::MutexReleased);
 
         // Verify ownership is removed
         assert!(logger.mutex_owners.get(&10).is_none());
@@ -485,8 +526,8 @@ mod tests {
         logger.update_lock_create(20, 2);
 
         // Create various relationships
-        logger.update_lock_event(1, 20, Events::Attempt);
-        logger.update_lock_event(2, 10, Events::Acquired);
+        logger.update_lock_event(1, 20, Events::MutexAttempt);
+        logger.update_lock_event(2, 10, Events::MutexAcquired);
 
         // Get graph state
         let state = logger.get_current_state();

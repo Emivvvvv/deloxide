@@ -12,7 +12,7 @@ static THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 // Thread-local storage for each thread's assigned ID
 thread_local! {
     static THREAD_ID: ThreadId = {
-        // Each thread gets a unique ID once, when this is first accessed
+        // Each thread gets a unique ID once when this is first accessed
         THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
     };
 }
@@ -39,15 +39,29 @@ pub enum Events {
     Spawn,
     /// The Thread/Lock is exited/dropped
     Exit,
-    /// Thread is attempting to acquire a lock
-    Attempt,
-    /// Thread successfully acquired a lock
-    Acquired,
-    /// Thread released a lock
-    Released,
+
+    /// Thread is attempting to acquire a mutex
+    MutexAttempt,
+    /// Thread successfully acquired a mutex
+    MutexAcquired,
+    /// Thread released a mutex
+    MutexReleased,
+
+    /// Thread is attempting to read a RwLock
+    RwReadAttempt,
+    /// Thread successfully acquired read RwLock
+    RwReadAcquired,
+    /// Thread released a RwLock (read access)
+    RwReadReleased,
+    /// Thread is attempting to write access on a RwLock
+    RwWriteAttempt,
+    /// Thread successfully acquired an RwLock (write access)
+    RwWriteAcquired,
+    /// Thread released a RwLock (write access)
+    RwWriteReleased,
 }
 
-/// Represents the result of a deadlock detection
+/// Represents the result of deadlock detection
 ///
 /// This structure contains detailed information about a detected deadlock,
 /// including which threads are involved in the cycle and which locks they are
@@ -70,7 +84,7 @@ pub struct DeadlockInfo {
 
     /// Timestamp when the deadlock was detected
     ///
-    /// ISO-8601 formatted timestamp indicating when the deadlock was detected.
+    /// ISO-8601 formatted a timestamp indicating when the deadlock was detected.
     pub timestamp: String,
 }
 
@@ -101,7 +115,7 @@ mod tests {
         handle.join().unwrap();
 
         // Verify the thread kept the same ID throughout its lifetime
-        println!("Thread ID: {}", thread_id);
+        println!("Thread ID: {thread_id}");
     }
 
     #[test]

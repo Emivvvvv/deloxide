@@ -7,7 +7,7 @@ use std::sync::atomic::Ordering;
 
 /// A wrapper around a mutex that tracks lock operations for deadlock detection
 ///
-/// The Mutex provides the same interface as a standard mutex, but adds
+/// The Mutex provides the same interface as a standard mutex but adds
 /// deadlock detection by tracking lock acquisition and release operations. It's
 /// a drop-in replacement for std::sync::Mutex that enables deadlock detection.
 ///
@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 /// use std::sync::Arc;
 /// use std::thread;
 ///
-/// // Initialize detector (not shown here)
+/// // Initialize detectors (not shown here)
 ///
 /// // Create a tracked mutex
 /// let mutex = Arc::new(Mutex::new(42));
@@ -26,12 +26,12 @@ use std::sync::atomic::Ordering;
 ///
 /// // Use it just like a regular mutex
 /// thread::spawn(move || {
-///     let mut data = mutex.lock().unwrap();
+///     let mut data = mutex.lock();
 ///     *data += 1;
 /// });
 ///
 /// // In another thread
-/// let mut data = mutex_clone.lock().unwrap();
+/// let mut data = mutex_clone.lock();
 /// *data += 10;
 /// ```
 pub struct Mutex<T> {
@@ -47,7 +47,7 @@ pub struct Mutex<T> {
 ///
 /// The MutexGuard provides the same interface as a standard mutex guard, but
 /// additionally reports lock release to the deadlock detector when dropped. This
-/// ensures that the detector's state is kept up-to-date with actual lock states.
+/// ensures that the detector's state is kept up to date with actual lock states.
 pub struct MutexGuard<'a, T> {
     /// Thread that owns this guard
     thread_id: ThreadId,
@@ -78,7 +78,7 @@ impl<T> Mutex<T> {
         let creator_thread_id = get_current_thread_id();
 
         // Register the lock with the detector, including creator thread info
-        detector::mutex::on_lock_create(id, Some(creator_thread_id));
+        detector::mutex::on_mutex_create(id, Some(creator_thread_id));
 
         Mutex {
             id,
@@ -106,7 +106,7 @@ impl<T> Mutex<T> {
     /// Attempt to acquire the lock, tracking the attempt for deadlock detection
     ///
     /// This method records the lock attempt with the deadlock detector before
-    /// trying to acquire the lock. If a deadlock would occur, the detector can
+    /// trying to acquire the lock. If a deadlock occurs, the detector can
     /// identify it before the lock is actually acquired.
     ///
     /// # Returns
@@ -119,26 +119,24 @@ impl<T> Mutex<T> {
     ///
     /// let mutex = Mutex::new(42);
     /// {
-    ///     let guard = mutex.lock().unwrap();
+    ///     let guard = mutex.lock();
     ///     assert_eq!(*guard, 42);
     /// } // lock is automatically released when guard goes out of scope
     /// ```
-    pub fn lock(
-        &self,
-    ) -> Result<MutexGuard<'_, T>, std::sync::PoisonError<ParkingLotMutexGuard<'_, T>>> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
         let thread_id = get_current_thread_id();
 
         // Report lock attempt
-        detector::mutex::on_lock_attempt(thread_id, self.id);
+        detector::mutex::on_mutex_attempt(thread_id, self.id);
 
         let guard = self.inner.lock();
 
-        detector::mutex::on_lock_acquired(thread_id, self.id);
-        Ok(MutexGuard {
+        detector::mutex::on_mutex_acquired(thread_id, self.id);
+        MutexGuard {
             thread_id,
             lock_id: self.id,
             guard,
-        })
+        }
     }
 
     /// Try to acquire the lock without blocking
@@ -169,10 +167,10 @@ impl<T> Mutex<T> {
         let thread_id = get_current_thread_id();
 
         // Report lock attempt
-        detector::mutex::on_lock_attempt(thread_id, self.id);
+        detector::mutex::on_mutex_attempt(thread_id, self.id);
 
         if let Some(guard) = self.inner.try_lock() {
-            detector::mutex::on_lock_acquired(thread_id, self.id);
+            detector::mutex::on_mutex_acquired(thread_id, self.id);
             Some(MutexGuard {
                 thread_id,
                 lock_id: self.id,
@@ -187,7 +185,7 @@ impl<T> Mutex<T> {
 impl<T> Drop for Mutex<T> {
     fn drop(&mut self) {
         // Register the lock destruction with the detector
-        detector::mutex::on_lock_destroy(self.id);
+        detector::mutex::on_mutex_destroy(self.id);
     }
 }
 
@@ -208,6 +206,6 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
-        detector::mutex::on_lock_release(self.thread_id, self.lock_id);
+        detector::mutex::on_mutex_release(self.thread_id, self.lock_id);
     }
 }

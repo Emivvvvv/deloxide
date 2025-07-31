@@ -414,9 +414,9 @@ mod tests {
 
         // Log some events
         logger.log_event(1, 0, Events::Spawn, None);
-        logger.log_event(1, 10, Events::Attempt, None);
-        logger.log_event(1, 10, Events::Acquired, None);
-        logger.log_event(1, 10, Events::Released, None);
+        logger.log_event(1, 10, Events::MutexAttempt, None);
+        logger.log_event(1, 10, Events::MutexAcquired, None);
+        logger.log_event(1, 10, Events::MutexReleased, None);
         logger.log_event(1, 0, Events::Exit, None);
 
         // Flush to ensure writes complete

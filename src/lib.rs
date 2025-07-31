@@ -44,18 +44,18 @@
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
 //! let t1 = Thread::spawn(move || {
-//!     let _lock_a = a_clone.lock().unwrap();
+//!     let lock_a = a_clone.lock();
 //!     thread::sleep(Duration::from_millis(100));
-//!     let _lock_b = b_clone.lock().unwrap();
+//!     let lock_b = b_clone.lock();
 //! });
 //!
 //! // Second thread: Lock B, then try to lock A (potential deadlock)
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
 //! let t2 = Thread::spawn(move || {
-//!     let _lock_b = b_clone.lock().unwrap();
+//!     let lock_b = b_clone.lock();
 //!     thread::sleep(Duration::from_millis(100));
-//!     let _lock_a = a_clone.lock().unwrap();
+//!     let lock_a = a_clone.lock();
 //! });
 //! ```
 

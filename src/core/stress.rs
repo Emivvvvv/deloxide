@@ -12,20 +12,15 @@ use std::time::Duration;
 use rand::{Rng, rng};
 
 /// Stress testing modes available in Deloxide
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StressMode {
     /// No stress testing (default)
+    #[default]
     None,
     /// Random preemption at lock acquisition points
     RandomPreemption,
     /// Component-based delays using lock acquisition patterns
     ComponentBased,
-}
-
-impl Default for StressMode {
-    fn default() -> Self {
-        StressMode::None
-    }
 }
 
 /// Configuration options for stress testing
