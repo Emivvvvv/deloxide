@@ -12,7 +12,7 @@
  * Quick start:
  * 1. Call deloxide_init() to initialize the library
  * 2. Use deloxide_create_mutex() to create tracked mutexes
- * 3. Use the LOCK() and UNLOCK() macros to operate on mutexes
+ * 3. Use the LOCK_MUTEX() and UNLOCK_MUTEX() macros to operate on mutexes
  * 4. Create threads with CREATE_TRACKED_THREAD() macro for proper tracking
  * 5. If a deadlock is detected, your callback function will be invoked
  *
@@ -24,9 +24,9 @@
  *
  * void* worker(void* arg) {
  *     void* mutex = (void*)arg;
- *     LOCK(mutex);
+ *     LOCK_MUTEX(mutex);
  *     // Critical section
- *     UNLOCK(mutex);
+ *     UNLOCK_MUTEX(mutex);
  *     return NULL;
  * }
  *
@@ -61,9 +61,9 @@
  *    - Example usage:
  *
  *        void* worker(void* unused) {
- *            LOCK(mutex);
+ *            LOCK_MUTEX(mutex);
  *            // do work
- *            UNLOCK(mutex);
+ *            UNLOCK_MUTEX(mutex);
  *            return NULL;
  *        }
  *
@@ -77,9 +77,9 @@
  *    - Always uses correct thread ID internally.
  *    - Example:
  *
- *        LOCK(mutex);
+ *        LOCK_MUTEX(mutex);
  *        ... critical section ...
- *        UNLOCK(mutex);
+ *        UNLOCK_MUTEX(mutex);
  */
 
 #include <pthread.h>
@@ -145,19 +145,19 @@
  * @brief Lock a tracked mutex with automatic thread ID
  *
  * This macro locks a mutex while ensuring the operation is tracked by the deadlock detector.
- * Always use this instead of directly calling deloxide_lock().
+ * Always use this instead of directly calling deloxide_lock_mutex().
  *
  * @param mutex_ptr Pointer to the mutex to lock
  *
  * @example
  * ```c
- * LOCK(mutex);
+ * LOCK_MUTEX(mutex);
  * // Critical section
- * UNLOCK(mutex);
+ * UNLOCK_MUTEX(mutex);
  * ```
  */
-#define LOCK(mutex_ptr) do { \
-    if (deloxide_lock((mutex_ptr)) != 0) { \
+#define LOCK_MUTEX(mutex_ptr) do { \
+    if (deloxide_lock_mutex((mutex_ptr)) != 0) { \
         fprintf(stderr, "Failed to lock mutex\n"); \
         exit(1); \
     } \
@@ -167,20 +167,80 @@
  * @brief Unlock a tracked mutex with automatic thread ID
  *
  * This macro unlocks a mutex while ensuring the operation is tracked by the deadlock detector.
- * Always use this instead of directly calling deloxide_unlock().
+ * Always use this instead of directly calling deloxide_unlock_mutex().
  *
  * @param mutex_ptr Pointer to the mutex to unlock
  *
  * @example
  * ```c
- * LOCK(mutex);
+ * LOCK_MUTEX(mutex);
  * // Critical section
- * UNLOCK(mutex);
+ * UNLOCK_MUTEX(mutex);
  * ```
  */
-#define UNLOCK(mutex_ptr) do { \
-    if (deloxide_unlock((mutex_ptr)) != 0) { \
+#define UNLOCK_MUTEX(mutex_ptr) do { \
+    if (deloxide_unlock_mutex((mutex_ptr)) != 0) { \
         fprintf(stderr, "Failed to unlock mutex\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Lock a tracked RwLock for reading.
+ *
+ * This macro locks an RwLock in read mode while ensuring the operation is tracked by the deadlock detector.
+ * Always use this instead of directly calling deloxide_rw_lock_read().
+ *
+ * @param rwlock_ptr Pointer to the RwLock to lock for reading
+ */
+#define RWLOCK_READ(rwlock_ptr) do { \
+    if (deloxide_rw_lock_read((rwlock_ptr)) != 0) { \
+        fprintf(stderr, "Failed to acquire RwLock read lock\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Unlock a tracked RwLock from read mode.
+ *
+ * This macro unlocks an RwLock previously locked for reading.
+ * Always use this instead of directly calling deloxide_rw_unlock_read().
+ *
+ * @param rwlock_ptr Pointer to the RwLock to unlock from reading
+ */
+#define RWUNLOCK_READ(rwlock_ptr) do { \
+    if (deloxide_rw_unlock_read((rwlock_ptr)) != 0) { \
+        fprintf(stderr, "Failed to release RwLock read lock\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Lock a tracked RwLock for writing.
+ *
+ * This macro locks an RwLock in write mode while ensuring the operation is tracked by the deadlock detector.
+ * Always use this instead of directly calling deloxide_rw_lock_write().
+ *
+ * @param rwlock_ptr Pointer to the RwLock to lock for writing
+ */
+#define RWLOCK_WRITE(rwlock_ptr) do { \
+    if (deloxide_rw_lock_write((rwlock_ptr)) != 0) { \
+        fprintf(stderr, "Failed to acquire RwLock write lock\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Unlock a tracked RwLock from write mode.
+ *
+ * This macro unlocks an RwLock previously locked for writing.
+ * Always use this instead of directly calling deloxide_rw_unlock_write().
+ *
+ * @param rwlock_ptr Pointer to the RwLock to unlock from writing
+ */
+#define RWUNLOCK_WRITE(rwlock_ptr) do { \
+    if (deloxide_rw_unlock_write((rwlock_ptr)) != 0) { \
+        fprintf(stderr, "Failed to release RwLock write lock\n"); \
         exit(1); \
     } \
 } while(0)
@@ -290,7 +350,7 @@ void deloxide_destroy_mutex(void* mutex);
  * @return  0 on success
  *         -1 if mutex is NULL
  */
-int deloxide_lock(void* mutex);
+int deloxide_lock_mutex(void* mutex);
 
 /**
  * @brief Unlock a tracked mutex.
@@ -302,7 +362,7 @@ int deloxide_lock(void* mutex);
  * @return  0 on success
  *         -1 if mutex is NULL
  */
-int deloxide_unlock(void* mutex);
+int deloxide_unlock_mutex(void* mutex);
 
 /**
  * @brief Register a thread spawn with the deadlock detector.
@@ -444,5 +504,81 @@ int deloxide_enable_component_stress(unsigned long min_delay_ms, unsigned long m
  * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
  */
 int deloxide_disable_stress();
+
+/**
+ * @brief Create a new tracked RwLock.
+ *
+ * Creates a RwLock that will be tracked by the deadlock detector.
+ * The current thread will be registered as the creator of this RwLock.
+ *
+ * @return Opaque pointer to the RwLock, or NULL on allocation failure.
+ */
+void* deloxide_create_rwlock();
+
+/**
+ * @brief Create a new tracked RwLock with a specified creator thread.
+ *
+ * Allows specifying which thread should be considered the "owner" for resource tracking.
+ *
+ * @param creator_thread_id ID of the thread to register as the creator.
+ * @return Opaque pointer to the RwLock, or NULL on allocation failure.
+ */
+void* deloxide_create_rwlock_with_creator(unsigned long creator_thread_id);
+
+/**
+ * @brief Destroy a tracked RwLock.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @note After calling this function, the RwLock pointer must not be used again.
+ */
+void deloxide_destroy_rwlock(void* rwlock);
+
+/**
+ * @brief Lock a tracked RwLock for reading.
+ *
+ * Attempts to acquire a shared (read) lock on a RwLock for deadlock detection.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @return  0 on success, -1 if rwlock is NULL
+ */
+int deloxide_rw_lock_read(void* rwlock);
+
+/**
+ * @brief Unlock a tracked RwLock from reading.
+ *
+ * Releases a shared (read) lock previously acquired on a RwLock.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @return  0 on success, -1 if rwlock is NULL
+ */
+int deloxide_rw_unlock_read(void* rwlock);
+
+/**
+ * @brief Lock a tracked RwLock for writing.
+ *
+ * Attempts to acquire an exclusive (write) lock on a RwLock for deadlock detection.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @return  0 on success, -1 if rwlock is NULL
+ */
+int deloxide_rw_lock_write(void* rwlock);
+
+/**
+ * @brief Unlock a tracked RwLock from writing.
+ *
+ * Releases an exclusive (write) lock previously acquired on a RwLock.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @return  0 on success, -1 if rwlock is NULL
+ */
+int deloxide_rw_unlock_write(void* rwlock);
+
+/**
+ * @brief Get the creator thread ID of a RwLock.
+ *
+ * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
+ * @return The thread ID of the creator thread, or 0 if the RwLock is NULL.
+ */
+unsigned long deloxide_get_rwlock_creator(void* rwlock);
 
 #endif /* DELOXIDE_H */

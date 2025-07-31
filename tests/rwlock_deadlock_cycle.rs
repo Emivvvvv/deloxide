@@ -1,5 +1,9 @@
 use deloxide::{DeadlockInfo, Deloxide, RwLock, Thread};
-use std::sync::{Arc, Barrier, Mutex as StdMutex, mpsc};
+use std::sync::{
+    Arc, Mutex as StdMutex,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
 use std::time::Duration;
 
 #[test]
@@ -22,7 +26,7 @@ fn test_guaranteed_three_thread_rwlock_deadlock() {
     let lock1 = Arc::new(RwLock::new(0));
     let lock2 = Arc::new(RwLock::new(0));
     let lock3 = Arc::new(RwLock::new(0));
-    let barrier = Arc::new(Barrier::new(3));
+    let ready_count = Arc::new(AtomicUsize::new(0));
 
     let locks = [lock1, lock2, lock3];
 
@@ -30,11 +34,15 @@ fn test_guaranteed_three_thread_rwlock_deadlock() {
 
     for i in 0..3 {
         let locks = locks.clone();
-        let barrier = Arc::clone(&barrier);
+        let ready = Arc::clone(&ready_count);
         handles.push(Thread::spawn(move || {
             // Each thread grabs read on i
             let _ri = locks[i].read();
-            barrier.wait();
+            // Signal ready and wait for all threads
+            ready.fetch_add(1, Ordering::SeqCst);
+            while ready.load(Ordering::SeqCst) < 3 {
+                std::thread::yield_now();
+            }
             // Each tries to upgrade to write on (i+1)%3 (held for read by next thread)
             let _wi_next = locks[(i + 1) % 3].write();
             // Never proceeds

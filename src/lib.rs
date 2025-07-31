@@ -8,19 +8,22 @@
 //!
 //! ## Overview
 //!
-//! Deadlocks are a common concurrency issue that can be difficult to debug and reproduce.
-//! Deloxide helps by tracking mutex interactions between threads and detecting potential
-//! deadlock scenarios in real-time before they cause your application to hang.
+//! Deadlocks are a common concurrency issue that can be challenging to debug and reproduce.
+//! Deloxide helps by tracking mutex and reader-writer lock interactions between threads
+//! and detecting potential deadlock scenarios in real-time before they cause your application to hang.
 //!
 //! ## Features
 //!
 //! - **Real-time deadlock detection**: Monitors thread-lock interactions to detect deadlocks as they happen
+//! - **Multiple lock types**: Supports both `Mutex` and `RwLock` (reader-writer locks) for comprehensive deadlock detection
 //! - **Lock operation logging**: Records all lock operations for later analysis
 //! - **Web-based visualization**: Visualize thread-lock relationships to understand deadlock patterns
 //! - **Cross-language support**: Core implementation in Rust with C FFI bindings
 //! - **Custom deadlock callbacks**: Execute custom actions when deadlocks are detected
 //!
-//! ## Usage Example
+//! ## Usage Examples
+//!
+//! ### Mutex Example
 //!
 //! ```rust
 //! use deloxide::{Deloxide, Mutex, Thread};
@@ -58,6 +61,47 @@
 //!     let lock_a = a_clone.lock();
 //! });
 //! ```
+//!
+//! ### RwLock Example
+//!
+//! ```rust
+//! use deloxide::{Deloxide, RwLock, Thread};
+//! use std::sync::Arc;
+//! use std::time::Duration;
+//! use std::thread;
+//!
+//! // Initialize the detector with a deadlock callback
+//! Deloxide::new()
+//!     .callback(|info| {
+//!         println!("Deadlock detected! Cycle: {:?}", info.thread_cycle);
+//!     })
+//!     .start()
+//!     .expect("Failed to initialize detector");
+//!
+//! // Create an RwLock
+//! let rwlock = Arc::new(RwLock::new("Shared Resource"));
+//!
+//! // Multiple reader threads
+//! for i in 0..3 {
+//!     let rwlock_clone = Arc::clone(&rwlock);
+//!     Thread::spawn(move || {
+//!         let read_guard = rwlock_clone.read();
+//!         println!("Reader {} acquired read lock", i);
+//!         thread::sleep(Duration::from_millis(50));
+//!         // Read lock is automatically released when guard is dropped
+//!     });
+//! }
+//!
+//! // Writer thread that tries to upgrade (potential deadlock with readers)
+//! let rwlock_clone = Arc::clone(&rwlock);
+//! Thread::spawn(move || {
+//!     let read_guard = rwlock_clone.read();
+//!     println!("Writer acquired read lock, attempting to upgrade...");
+//!     thread::sleep(Duration::from_millis(25));
+//!     let write_guard = rwlock_clone.write(); // This will deadlock!
+//!     println!("Writer acquired write lock");
+//! });
+//! ```
 
 mod core;
 pub use core::{
@@ -73,7 +117,7 @@ pub use showcase::{process_log_for_url, showcase, showcase_this};
 
 pub mod ffi;
 
-// Font name "miniwi"
+// Ascii art font name "miniwi"
 const BANNER: &str = r#"
 ▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▄▖
 ▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌▄▖▛▌▛▘█▌

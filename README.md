@@ -3,13 +3,16 @@
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
 
-Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
+> [!IMPORTANT]
+> Deloxide is currently under active development. We recently released version 0.2.0-pre (up from v0.1.1), introducing RwLock support and making several API changes. At this time, RwLock is fully supported except for visualization. If you require visualization for RwLock, please wait for the next major release.
+
+Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex and reader-writer lock operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
 
 ## Features
 
 - **Real-time deadlock detection** - Detects deadlocks as they happen
 - **Cross-language support** - Core implementation in Rust with C bindings
-- **Thread & lock tracking** - Monitors relationships between threads and locks
+- **Thread & lock tracking** - Monitors relationships between threads and locks (Mutex and RwLock)
 - **Visualization** - Web-based visualization of thread-lock relationships
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C/C++
@@ -21,7 +24,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 1. **Initialization**: The application initializes Deloxide with optional logging and callback settings.
 
-2. **Resource Creation**: When threads and mutexes are created, they're registered with the deadlock detector.
+2. **Resource Creation**: When threads, mutexes, and reader-writer locks are created, they're registered with the deadlock detector.
 
 3. **Lock Operations**: When a thread attempts to acquire a lock:
    - The attempt is recorded by the detector
@@ -51,7 +54,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
    - Provides automatic visualization when deadlocks are detected
 
 4. **Cross-Language Support**
-   - Rust API with `Mutex` and `Thread` types
+   - Rust API with `Mutex`, `RwLock`, and `Thread` types
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
 
@@ -100,6 +103,53 @@ fn main() {
         let _b = mutex_b_clone.lock().unwrap();
         thread::sleep(Duration::from_millis(100));
         let _a = mutex_a_clone.lock().unwrap();
+    });
+
+    thread::sleep(Duration::from_secs(1));
+}
+```
+
+### RwLock Example
+
+```rust
+use deloxide::{Deloxide, RwLock, Thread};
+use std::sync::Arc;
+use std::time::Duration;
+use std::thread;
+
+fn main() {
+    // Initialize the detector with a deadlock callback
+    Deloxide::new()
+        .with_log("deadlock.log")
+        .callback(|info| {
+            eprintln!("Deadlock detected! Cycle: {:?}", info.thread_cycle);
+            deloxide::showcase_this().expect("Failed to launch visualization");
+        })
+        .start()
+        .expect("Failed to initialize detector");
+
+    // Create an RwLock
+    let rwlock = Arc::new(RwLock::new("Shared Resource"));
+
+    // Multiple reader threads
+    for i in 0..3 {
+        let rwlock_clone = Arc::clone(&rwlock);
+        Thread::spawn(move || {
+            let read_guard = rwlock_clone.read();
+            println!("Reader {} acquired read lock", i);
+            thread::sleep(Duration::from_millis(100));
+            // Read lock is automatically released when guard is dropped
+        });
+    }
+
+    // Writer thread that tries to upgrade (potential deadlock)
+    let rwlock_clone = Arc::clone(&rwlock);
+    Thread::spawn(move || {
+        let read_guard = rwlock_clone.read();
+        println!("Writer acquired read lock, attempting to upgrade...");
+        thread::sleep(Duration::from_millis(50));
+        let write_guard = rwlock_clone.write(); // This will deadlock!
+        println!("Writer acquired write lock");
     });
 
     thread::sleep(Duration::from_secs(1));
@@ -176,6 +226,71 @@ int main() {
 }
 ```
 
+### C RwLock Example
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include "deloxide.h"
+
+void deadlock_callback(const char* json_info) {
+    printf("Deadlock detected! Details:\n%s\n", json_info);
+    deloxide_showcase_current();
+}
+
+void* reader_worker(void* arg) {
+    void* rwlock = (void*)arg;
+    
+    RWLOCK_READ(rwlock);
+    printf("Reader acquired read lock\n");
+    usleep(100000);  // 100 ms
+    RWLOCK_UNLOCK_READ(rwlock);
+    printf("Reader released read lock\n");
+    
+    return NULL;
+}
+
+void* writer_worker(void* arg) {
+    void* rwlock = (void*)arg;
+    
+    RWLOCK_READ(rwlock);
+    printf("Writer acquired read lock, attempting to upgrade...\n");
+    usleep(50000);  // 50 ms
+    RWLOCK_WRITE(rwlock);  // This will deadlock!
+    printf("Writer acquired write lock\n");
+    RWLOCK_UNLOCK_WRITE(rwlock);
+    RWLOCK_UNLOCK_READ(rwlock);
+    
+    return NULL;
+}
+
+DEFINE_TRACKED_THREAD(reader_worker)
+DEFINE_TRACKED_THREAD(writer_worker)
+
+int main() {
+    // Initialize with deadlock callback
+    deloxide_init("deadlock.log", deadlock_callback);
+    
+    // Create RwLock
+    void* rwlock = deloxide_create_rwlock();
+    
+    // Create multiple reader threads
+    pthread_t readers[3];
+    for (int i = 0; i < 3; ++i) {
+        CREATE_TRACKED_THREAD(readers[i], reader_worker, rwlock);
+    }
+    
+    // Create writer thread
+    pthread_t writer;
+    CREATE_TRACKED_THREAD(writer, writer_worker, rwlock);
+    
+    sleep(1);
+    
+    return 0;
+}
+```
+
 ## Stress Testing
 
 Deloxide includes an optional stress testing feature to increase the probability of deadlock manifestation during testing. This feature helps expose potential deadlocks by strategically delaying threads at critical points.
@@ -188,7 +303,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.1.0", features = ["stress-test"] }
+deloxide = { version = "0.2.0-pre", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -248,14 +363,14 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 
 ```toml
 [dependencies]
-deloxide = "0.1.0"
+deloxide = "0.2.0-pre"
 ```
 
 With stress testing:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.1.0", features = ["stress-test"] }
+deloxide = { version = "0.2.0-pre", features = ["stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:
@@ -318,6 +433,96 @@ You can also automatically launch the visualization when a deadlock is detected 
 Additionally, you can manually upload a log file to visualize deadlocks through the web interface:
 
 [Deloxide Showcase](https://deloxide.vercel.app/)
+
+## API Reference
+
+### Rust API
+
+#### Mutex
+```rust
+use deloxide::Mutex;
+
+let mutex = Mutex::new(data);
+let guard = mutex.lock();  // Acquire lock
+// Use guard to access data
+// Lock is automatically released when guard is dropped
+```
+
+#### RwLock
+```rust
+use deloxide::RwLock;
+
+let rwlock = RwLock::new(data);
+
+// Read operations (shared access)
+let read_guard = rwlock.read();
+// Multiple readers can access simultaneously
+// Lock is automatically released when guard is dropped
+
+// Write operations (exclusive access)
+let write_guard = rwlock.write();
+// Only one writer can access at a time
+// Lock is automatically released when guard is dropped
+
+// Try operations (non-blocking)
+if let Some(read_guard) = rwlock.try_read() {
+    // Read lock acquired immediately
+}
+
+if let Some(write_guard) = rwlock.try_write() {
+    // Write lock acquired immediately
+}
+```
+
+### C API
+
+#### Mutex Functions
+```c
+// Create and destroy
+void* mutex = deloxide_create_mutex();
+deloxide_destroy_mutex(mutex);
+
+// Lock and unlock
+deloxide_lock_mutex(mutex);
+deloxide_unlock_mutex(mutex);
+
+// Convenience macros
+LOCK_MUTEX(mutex);
+UNLOCK_MUTEX(mutex);
+```
+
+#### RwLock Functions
+```c
+// Create and destroy
+void* rwlock = deloxide_create_rwlock();
+deloxide_destroy_rwlock(rwlock);
+
+// Read operations
+deloxide_rw_lock_read(rwlock);
+deloxide_rw_unlock_read(rwlock);
+
+// Write operations
+deloxide_rw_lock_write(rwlock);
+deloxide_rw_unlock_write(rwlock);
+
+// Convenience macros
+RWLOCK_READ(rwlock);
+RWLOCK_UNLOCK_READ(rwlock);
+RWLOCK_WRITE(rwlock);
+RWLOCK_UNLOCK_WRITE(rwlock);
+```
+
+## Common Deadlock Scenarios
+
+### Mutex Deadlocks
+1. **Circular Wait**: Thread A holds lock 1 and waits for lock 2, while Thread B holds lock 2 and waits for lock 1
+2. **Resource Ordering**: Locks acquired in different orders by different threads
+3. **Nested Locks**: Complex scenarios with multiple levels of lock nesting
+
+### RwLock Deadlocks
+1. **Upgrade Deadlock**: A thread holds a read lock and tries to upgrade to a write lock while other readers are active
+2. **Writer Starvation**: Multiple readers prevent a writer from acquiring the lock
+3. **Mixed Lock Scenarios**: Combinations of RwLock and Mutex that create circular dependencies
 
 ## Documentation
 
@@ -426,11 +631,18 @@ Across all tests, `Deloxide` (in all configurations), `parking_lot`, and `no_dea
 
 Example programs are provided in both Rust and C to demonstrate various deadlock scenarios and detection capabilities:
 
+### Mutex Examples
 - **Two Thread Deadlock**: Simple deadlock between two threads
 - **Dining Philosophers**: Classic deadlock scenario
 - **Random Ring**: Deadlock in a ring of threads
 
-See examples in /tests or /c_tests
+### RwLock Examples
+- **RwLock Upgrade Deadlock**: Deadlock when a thread tries to upgrade from read to write lock
+- **Multiple Readers No Deadlock**: Demonstrates that multiple readers can coexist without deadlock
+- **Writer Waits for Readers**: Shows proper behavior when a writer waits for readers to finish
+- **Three Thread RwLock Cycle**: Complex deadlock involving three threads and multiple RwLocks
+
+See examples in `/tests` or `/c_tests`
 
 ## License
 

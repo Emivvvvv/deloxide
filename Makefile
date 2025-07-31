@@ -17,7 +17,11 @@ rustlib:
 c_tests: \
 	bin/dining_philosophers_deadlock \
 	bin/two_thread_deadlock \
-	bin/random_ring_deadlock
+	bin/random_ring_deadlock \
+	bin/rwlock_multiple_readers_no_deadlock \
+	bin/rwlock_upgrade_deadlock \
+	bin/rwlock_writer_waits_for_readers_no_deadlock \
+	bin/three_thread_rwlock_deadlock
 
 bin/%: c_tests/%.c include/deloxide.h $(DEL_LIB)
 	mkdir -p bin
@@ -25,9 +29,13 @@ bin/%: c_tests/%.c include/deloxide.h $(DEL_LIB)
 
 test: all
 	@echo "\n--- Running C deadlock tests ---"
-	- bin/dining_philosophers_deadlock || exit 1
-	- bin/two_thread_deadlock          || exit 1
-	- bin/random_ring_deadlock         || exit 1
+	- bin/dining_philosophers_deadlock              || exit 1
+	- bin/two_thread_deadlock                       || exit 1
+	- bin/random_ring_deadlock                      || exit 1
+	- bin/rwlock_multiple_readers_no_deadlock       || exit 1
+	- bin/rwlock_upgrade_deadlock                   || exit 1
+	- bin/rwlock_writer_waits_for_readers_no_deadlock || exit 1
+	- bin/three_thread_rwlock_deadlock              || exit 1
 	@echo "\nAll C tests passed!"
 
 clean:

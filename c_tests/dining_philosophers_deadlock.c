@@ -27,9 +27,9 @@ void* philosopher(void* arg) {
     void* left  = a->forks[a->index];
     void* right = a->forks[(a->index + 1) % N];
 
-    LOCK(left);
+    LOCK_MUTEX(left);
     usleep(100000);  // 100 ms
-    LOCK(right);
+    LOCK_MUTEX(right);
 
     usleep(500000);  // eating
     return NULL;

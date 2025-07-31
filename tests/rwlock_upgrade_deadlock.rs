@@ -1,5 +1,9 @@
 use deloxide::{DeadlockInfo, Deloxide, RwLock, Thread};
-use std::sync::{Arc, Barrier, Mutex as StdMutex, mpsc};
+use std::sync::{
+    Arc, Mutex as StdMutex,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
 use std::time::Duration;
 
 #[test]
@@ -20,15 +24,19 @@ fn test_rwlock_upgrade_deadlock() {
         .expect("Failed to initialize detector");
 
     let lock = Arc::new(RwLock::new(0));
-    let barrier = Arc::new(Barrier::new(2));
+    let ready_count = Arc::new(AtomicUsize::new(0));
     let mut handles = Vec::new();
 
     for _ in 0..2 {
         let lock = Arc::clone(&lock);
-        let barrier = Arc::clone(&barrier);
+        let ready = Arc::clone(&ready_count);
         handles.push(Thread::spawn(move || {
             let _r = lock.read();
-            barrier.wait();
+            // Signal ready and wait for all threads
+            ready.fetch_add(1, Ordering::SeqCst);
+            while ready.load(Ordering::SeqCst) < 2 {
+                std::thread::yield_now();
+            }
             // Both threads attempt to upgrade at the same time: classic cycle!
             let _w = lock.write();
             // Never proceeds past here

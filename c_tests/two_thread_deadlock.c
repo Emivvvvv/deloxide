@@ -22,9 +22,9 @@ struct two_args {
 
 void* cross_lock(void* arg) {
     struct two_args* a = arg;
-    LOCK(a->lock_a);
+    LOCK_MUTEX(a->lock_a);
     usleep(100000);  // 100 ms
-    LOCK(a->lock_b);
+    LOCK_MUTEX(a->lock_b);
     return NULL;
 }
 

@@ -29,9 +29,9 @@ void* ring_worker(void* arg) {
     void* second = a->locks[(i + 1) % a->n];
 
     usleep((rand_r(&seed) % 50) * 1000);
-    LOCK(first);
+    LOCK_MUTEX(first);
     usleep(((rand_r(&seed) % 50) + 50) * 1000);
-    LOCK(second);
+    LOCK_MUTEX(second);
 
     return NULL;
 }
