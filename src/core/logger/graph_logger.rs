@@ -42,6 +42,8 @@ pub struct GraphLogger {
     rwlock_writer: FxHashMap<LockId, ThreadId>,
     /// Maps threads to the locks they're attempting to acquire
     thread_attempts: FxHashMap<ThreadId, FxHashSet<LockId>>,
+    /// Maps threads to the condvars they're waiting on
+    condvar_waiters: FxHashMap<ThreadId, LockId>,
     /// Maps locks to the threads that created them (creation ownership)
     lock_creators: FxHashMap<LockId, ThreadId>,
     /// Maps threads to their parent threads (if any)
@@ -69,6 +71,7 @@ impl GraphLogger {
             rwlock_readers: FxHashMap::default(),
             rwlock_writer: FxHashMap::default(),
             thread_attempts: FxHashMap::default(),
+            condvar_waiters: FxHashMap::default(),
             lock_creators: FxHashMap::default(),
             thread_parents: FxHashMap::default(),
             threads: FxHashSet::default(),
@@ -255,7 +258,18 @@ impl GraphLogger {
                 }
             }
 
-            // Handle future Condvar etc. similarly
+            // Condvar events
+            Events::CondvarWaitBegin => {
+                self.condvar_waiters.insert(thread_id, lock_id);
+            }
+            Events::CondvarWaitEnd => {
+                self.condvar_waiters.remove(&thread_id);
+            }
+
+            // Condvar notifications don't affect thread-condvar relationships in the graph
+            Events::CondvarNotifyOne | Events::CondvarNotifyAll => {
+                // These are logged but don't change the graph state
+            }
 
             _ => {}
         }
@@ -309,6 +323,15 @@ impl GraphLogger {
                     link_type: "Attempt".to_string(),
                 });
             }
+        }
+
+        // Condvar waits
+        for (&thread_id, &condvar_id) in &self.condvar_waiters {
+            links.push(GraphLink {
+                source: thread_id,
+                target: condvar_id,
+                link_type: "Wait".to_string(),
+            });
         }
 
         GraphState {

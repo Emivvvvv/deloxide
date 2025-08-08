@@ -194,6 +194,9 @@ fn parse_log_entry(entry: LogEntry) -> Result<(Event, Graph)> {
             "Attempt" | "attempt" => 0u8,
             "Acquired" | "acquired" => 1u8,
             "Created" | "created" => 2u8,
+            "Read" | "read" => 3u8,
+            "Write" | "write" => 4u8,
+            "Wait" | "wait" => 5u8,
             _ => anyhow::bail!("Invalid link type: {}", link.link_type),
         };
 
