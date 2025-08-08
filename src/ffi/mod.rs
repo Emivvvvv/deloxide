@@ -6,6 +6,7 @@
 ///
 /// The FFI interface provides all the functionality needed to use Deloxide from C or C++,
 /// including initialization, mutex tracking, thread tracking, and deadlock detection.
+mod condvar;
 mod core;
 mod mutex;
 mod rwlock;
@@ -15,13 +16,15 @@ mod thread;
 
 use crate::core::locks::mutex::MutexGuard;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::sync::atomic::AtomicBool;
 
 // We'll keep each Rust guard alive here until the C code calls unlock.
 thread_local! {
-    // Each thread can hold exactly one guard at a time.
-    static FFI_GUARD: RefCell<Option<MutexGuard<'static, ()>>> = const {RefCell::new(None)};
+    // Each thread can hold multiple mutex guards at a time, keyed by the raw mutex pointer
+    static FFI_GUARD: RefCell<HashMap<*mut c_void, MutexGuard<'static, ()>>> = RefCell::new(HashMap::new());
 }
 
 // Globals to track initialization state

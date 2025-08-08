@@ -93,7 +93,10 @@ pub unsafe extern "C" fn deloxide_lock_mutex(mutex: *mut c_void) -> c_int {
         let guard = mutex_ref.lock();
 
         #[allow(clippy::missing_transmute_annotations)]
-        FFI_GUARD.with(|slot| *slot.borrow_mut() = Some(std::mem::transmute(guard)));
+        FFI_GUARD.with(|map| {
+            map.borrow_mut()
+                .insert(mutex, std::mem::transmute(guard));
+        });
     }
 
     0
@@ -120,8 +123,8 @@ pub unsafe extern "C" fn deloxide_unlock_mutex(mutex: *mut c_void) -> c_int {
     }
 
     // Drop the guard we stashed above; this actually unlocks the Mutex
-    FFI_GUARD.with(|slot| {
-        let _ = slot.borrow_mut().take();
+    FFI_GUARD.with(|map| {
+        map.borrow_mut().remove(&mutex);
     });
 
     0
