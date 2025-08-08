@@ -203,6 +203,30 @@ impl<T> DerefMut for MutexGuard<'_, T> {
     }
 }
 
+impl<'a, T> MutexGuard<'a, T> {
+    /// Get the inner parking_lot MutexGuard for condvar operations
+    /// 
+    /// This method is used internally by Condvar to access the underlying
+    /// parking_lot guard for wait operations.
+    pub(crate) fn inner_guard(&mut self) -> &mut ParkingLotMutexGuard<'a, T> {
+        &mut self.guard
+    }
+
+    /// Get the lock ID associated with this guard
+    ///
+    /// Returns the unique identifier of the mutex this guard protects.
+    pub(crate) fn lock_id(&self) -> LockId {
+        self.lock_id
+    }
+
+    /// Get the thread ID that owns this guard
+    ///
+    /// Returns the unique identifier of the thread that holds this guard.
+    pub(crate) fn thread_id(&self) -> ThreadId {
+        self.thread_id
+    }
+}
+
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
