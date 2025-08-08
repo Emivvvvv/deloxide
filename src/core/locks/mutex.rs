@@ -218,13 +218,6 @@ impl<'a, T> MutexGuard<'a, T> {
     pub(crate) fn lock_id(&self) -> LockId {
         self.lock_id
     }
-
-    /// Get the thread ID that owns this guard
-    ///
-    /// Returns the unique identifier of the thread that holds this guard.
-    pub(crate) fn thread_id(&self) -> ThreadId {
-        self.thread_id
-    }
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
