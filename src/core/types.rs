@@ -29,6 +29,13 @@ pub fn get_current_thread_id() -> ThreadId {
 /// is assigned a unique ID when created.
 pub type LockId = usize;
 
+/// Condvar identifier type
+///
+/// Uniquely identifies a condition variable in the application. Each Condvar
+/// is assigned a unique ID when created. Uses the same ID space as locks for
+/// simplicity in logging systems.
+pub type CondvarId = LockId;
+
 /// Represents the type of thread/lock event that occurred
 ///
 /// These events are used to track the lifecycle of threads and locks
@@ -59,6 +66,27 @@ pub enum Events {
     RwWriteAcquired,
     /// Thread released a RwLock (write access)
     RwWriteReleased,
+
+    /// Thread is beginning to wait on a condition variable
+    CondvarWaitBegin,
+    /// Thread finished waiting on a condition variable (mutex reacquired)
+    CondvarWaitEnd,
+    /// A condition variable notified one waiter
+    CondvarNotifyOne,
+    /// A condition variable notified all waiters
+    CondvarNotifyAll,
+}
+
+/// Represents the type of notification sent to a condition variable
+///
+/// Used to track whether a condition variable notification was for one
+/// or all waiting threads.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum NotifyKind {
+    /// Notify only one waiting thread
+    One,
+    /// Notify all waiting threads
+    All,
 }
 
 /// Represents the result of deadlock detection

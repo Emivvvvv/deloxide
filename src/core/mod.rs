@@ -20,12 +20,12 @@ pub mod detector;
 #[allow(unused_imports)]
 pub use detector::*;
 
+pub use locks::condvar::Condvar;
 pub use locks::mutex::Mutex;
+pub use locks::rwlock::RwLock;
 
 pub mod thread;
 pub use thread::Thread;
-
-pub use locks::rwlock::RwLock;
 
 pub(crate) mod locks;
 #[cfg(feature = "stress-test")]
