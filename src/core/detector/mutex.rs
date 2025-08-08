@@ -102,10 +102,14 @@ impl Detector {
 
         // Update ownership
         self.mutex_owners.insert(lock_id, thread_id);
-        self.thread_waits_for.remove(&thread_id);
-
-        // Remove thread from wait graph
-        self.wait_for_graph.remove_thread(thread_id);
+        
+        // For synthetic attempts (condvar woken threads), don't remove wait-for edges immediately
+        // This allows deadlock detection to see the full cycle
+        if !self.cv_woken.contains(&thread_id) {
+            self.thread_waits_for.remove(&thread_id);
+            // Remove thread from wait graph
+            self.wait_for_graph.remove_thread(thread_id);
+        }
 
         // Record held lock
         self.thread_holds

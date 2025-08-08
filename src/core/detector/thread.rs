@@ -37,6 +37,10 @@ impl Detector {
         self.wait_for_graph.remove_thread(thread_id);
         // no more held locks
         self.thread_holds.remove(&thread_id);
+        
+        // Note: We don't clean up cv_woken, thread_wait_cv, or thread_waits_for here
+        // because these might be needed for deadlock detection even after thread exit.
+        // This is a design choice - we prioritize correctness over immediate cleanup.
     }
 }
 
