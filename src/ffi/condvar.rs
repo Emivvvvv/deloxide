@@ -1,5 +1,4 @@
 use crate::core::locks::condvar::Condvar;
-use crate::core::locks::mutex::MutexGuard;
 use crate::core::detector::condvar::on_condvar_create;
 use crate::ffi::FFI_GUARD;
 use std::cell::RefCell;
@@ -8,7 +7,7 @@ use std::time::Duration;
 
 // Each thread can hold condition variable wait state
 thread_local! {
-    static FFI_CONDVAR_WAIT_STATE: RefCell<Option<(*mut c_void, *mut c_void)>> = const {RefCell::new(None)};
+    static FFI_CONDVAR_WAIT_STATE: RefCell<Option<(*mut c_void, *mut c_void)>> = RefCell::new(None);
 }
 
 /// Create a new tracked condition variable.

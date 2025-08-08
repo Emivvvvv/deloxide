@@ -15,7 +15,7 @@
 //! ## Features
 //!
 //! - **Real-time deadlock detection**: Monitors thread-lock interactions to detect deadlocks as they happen
-//! - **Multiple lock types**: Supports both `Mutex` and `RwLock` (reader-writer locks) for comprehensive deadlock detection
+//! - **Multiple sync primitives**: Supports `Mutex`, `RwLock`, and `Condvar` for comprehensive deadlock detection
 //! - **Lock operation logging**: Records all lock operations for later analysis
 //! - **Web-based visualization**: Visualize thread-lock relationships to understand deadlock patterns
 //! - **Cross-language support**: Core implementation in Rust with C FFI bindings
@@ -101,6 +101,42 @@
 //!     let write_guard = rwlock_clone.write(); // This will deadlock!
 //!     println!("Writer acquired write lock");
 //! });
+//! ```
+//!
+//! ### Condvar Example
+//!
+//! ```rust,no_run
+//! use deloxide::{Deloxide, Mutex, Condvar, Thread};
+//! use std::sync::Arc;
+//! use std::time::Duration;
+//! use std::thread;
+//!
+//! // Initialize the detector (omitted callback for brevity)
+//! let _ = Deloxide::new().start();
+//!
+//! let pair = Arc::new((Mutex::new(false), Condvar::new()));
+//! let pair2 = pair.clone();
+//!
+//! // Thread waiting on condition
+//! Thread::spawn(move || {
+//!     let (mutex, condvar) = (&pair2.0, &pair2.1);
+//!     let mut ready = mutex.lock();
+//!     while !*ready {
+//!         condvar.wait(&mut ready);
+//!     }
+//! });
+//!
+//! // Notifier thread
+//! let pair3 = pair.clone();
+//! Thread::spawn(move || {
+//!     thread::sleep(Duration::from_millis(50));
+//!     let (mutex, condvar) = (&pair3.0, &pair3.1);
+//!     let mut ready = mutex.lock();
+//!     *ready = true;
+//!     condvar.notify_one();
+//! });
+//!
+//! thread::sleep(Duration::from_millis(150));
 //! ```
 
 mod core;

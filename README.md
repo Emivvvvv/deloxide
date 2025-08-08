@@ -4,7 +4,7 @@
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
 
 > [!IMPORTANT]
-> Deloxide is currently under active development. We recently released version 0.2.0-pre (up from v0.1.1), introducing RwLock support and making several API changes. At this time, RwLock is fully supported except for visualization. If you require visualization for RwLock, please wait for the next major release.
+> Deloxide is currently under active development. We recently released version 0.2.0-pre (up from v0.1.1), introducing RwLock support and making several API changes. As of this release, Condvar is also supported in both Rust and C APIs, including visualization of wait relationships.
 
 Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex and reader-writer lock operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
 
@@ -12,7 +12,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 - **Real-time deadlock detection** - Detects deadlocks as they happen
 - **Cross-language support** - Core implementation in Rust with C bindings
-- **Thread & lock tracking** - Monitors relationships between threads and locks (Mutex and RwLock)
+- **Thread & lock tracking** - Monitors relationships between threads and sync primitives (Mutex, RwLock, Condvar)
 - **Visualization** - Web-based visualization of thread-lock relationships
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C/C++
@@ -227,6 +227,81 @@ int main() {
 ```
 
 ### C RwLock Example
+### Condvar Example (Rust)
+
+```rust
+use deloxide::{Deloxide, Mutex, Condvar, Thread};
+use std::sync::Arc;
+use std::time::Duration;
+use std::thread;
+
+fn main() {
+    Deloxide::new().callback(|_| {}).start().unwrap();
+
+    let pair = Arc::new((Mutex::new(false), Condvar::new()));
+    let pair2 = pair.clone();
+
+    Thread::spawn(move || {
+        let (mutex, condvar) = (&pair2.0, &pair2.1);
+        let mut ready = mutex.lock();
+        while !*ready {
+            condvar.wait(&mut ready);
+        }
+    });
+
+    let pair3 = pair.clone();
+    Thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        let (mutex, condvar) = (&pair3.0, &pair3.1);
+        let mut ready = mutex.lock();
+        *ready = true;
+        condvar.notify_one();
+    });
+
+    thread::sleep(Duration::from_millis(150));
+}
+```
+
+### Condvar Example (C)
+
+```c
+#include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
+#include "deloxide.h"
+
+void* waiter(void* arg) {
+    void** pair = (void**)arg; // pair[0]=mutex, pair[1]=condvar
+    LOCK(pair[0]);
+    int ready = 0;
+    while (!ready) {
+        CONDVAR_WAIT(pair[1], pair[0]);
+        // In a real program, 'ready' would be in shared state; for brevity omitted
+        ready = 1; // simulate condition met
+    }
+    UNLOCK(pair[0]);
+    return NULL;
+}
+
+int main() {
+    deloxide_init("deadlock.log", NULL);
+    void* mutex = deloxide_create_mutex();
+    void* condvar = deloxide_create_condvar();
+
+    pthread_t t;
+    void* pair[2] = {mutex, condvar};
+    CREATE_TRACKED_THREAD(t, waiter, pair);
+
+    usleep(50000);
+    LOCK(mutex);
+    CONDVAR_NOTIFY_ONE(condvar);
+    UNLOCK(mutex);
+
+    usleep(100000);
+    return 0;
+}
+```
+
 
 ```c
 #include <stdio.h>
@@ -474,6 +549,17 @@ if let Some(write_guard) = rwlock.try_write() {
 }
 ```
 
+#### Condvar
+```rust
+use deloxide::{Mutex, Condvar};
+
+let condvar = Condvar::new();
+let mut guard = mutex.lock();
+condvar.wait(&mut guard);        // Wait until notified; releases and re-acquires mutex around wait
+condvar.notify_one();            // Wake a single waiter
+condvar.notify_all();            // Wake all waiters
+```
+
 ### C API
 
 #### Mutex Functions
@@ -492,6 +578,24 @@ UNLOCK_MUTEX(mutex);
 ```
 
 #### RwLock Functions
+#### Condvar Functions
+```c
+// Create and destroy
+void* condvar = deloxide_create_condvar();
+deloxide_destroy_condvar(condvar);
+
+// Wait and notify
+deloxide_condvar_wait(condvar, mutex);
+deloxide_condvar_wait_timeout(condvar, mutex, 100 /* ms */);
+deloxide_condvar_notify_one(condvar);
+deloxide_condvar_notify_all(condvar);
+
+// Convenience macros
+CONDVAR_WAIT(condvar, mutex);
+CONDVAR_WAIT_TIMEOUT(condvar, mutex, 100);
+CONDVAR_NOTIFY_ONE(condvar);
+CONDVAR_NOTIFY_ALL(condvar);
+```
 ```c
 // Create and destroy
 void* rwlock = deloxide_create_rwlock();

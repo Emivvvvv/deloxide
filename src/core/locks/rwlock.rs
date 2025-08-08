@@ -3,7 +3,6 @@
 //! This RwLock provides the same interface as a standard reader-writer lock
 //! but augments all lock/unlock operations with tracking for deadlock detection.
 //! It is a drop-in replacement for std::sync::RwLock that enables advanced deadlock analysis.
-car//!
 //! # Example
 //!
 //! ```rust
