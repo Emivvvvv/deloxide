@@ -2,7 +2,7 @@ use deloxide::{
     Condvar, DeadlockInfo, Deloxide, Mutex as DMutex, RwLock as DRwLock, Thread,
 };
 use std::sync::{
-    Arc, Barrier,
+    Arc,
     mpsc, Mutex as StdMutex,
 };
 use std::time::Duration;
@@ -29,17 +29,14 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
     let shared_data = Arc::new(DRwLock::new(vec![1, 2, 3, 4, 5]));  // Data that can be read/written
     let processor_mutex = Arc::new(DMutex::new(String::from("idle"))); // Processing state
     let data_ready_cv = Arc::new(Condvar::new());                   // Signals when data is ready
-    let barrier = Arc::new(Barrier::new(3)); // main + reader + writer
 
     /* Reader thread: reads data, waits for processing completion, then needs processor access */
     {
         let shared_data = Arc::clone(&shared_data);
         let processor_mutex = Arc::clone(&processor_mutex);
         let data_ready_cv = Arc::clone(&data_ready_cv);
-        let barrier = Arc::clone(&barrier);
         
         Thread::spawn(move || {
-            barrier.wait(); // Synchronize startup
             
             // Reader gets read access to shared data
             let data_guard = shared_data.read();
@@ -73,10 +70,8 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
         let shared_data = Arc::clone(&shared_data);
         let processor_mutex = Arc::clone(&processor_mutex);
         let data_ready_cv = Arc::clone(&data_ready_cv);
-        let barrier = Arc::clone(&barrier);
         
         Thread::spawn(move || {
-            barrier.wait(); // Synchronize startup
             
             // Small delay to let reader get the read lock first
             std::thread::sleep(Duration::from_millis(10));
@@ -103,9 +98,6 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
             // This code is never reached due to deadlock
         });
     }
-
-    // Wait for both threads to start
-    barrier.wait();
 
     let info = rx
         .recv_timeout(Duration::from_secs(3))

@@ -2,7 +2,7 @@ use deloxide::{
     Condvar, DeadlockInfo, Deloxide, Mutex as DMutex, Thread,
 };
 use std::sync::{
-    Arc, Barrier,
+    Arc,
     mpsc, Mutex as StdMutex,
 };
 use std::time::Duration;
@@ -29,17 +29,14 @@ fn test_condvar_producer_consumer_deadlock() {
     let buffer_mutex = Arc::new(DMutex::new(Vec::<i32>::new()));     // shared buffer
     let consumer_mutex = Arc::new(DMutex::new(()));                  // consumer resource
     let producer_cv = Arc::new(Condvar::new());                     // producer waits for space
-    let barrier = Arc::new(Barrier::new(3)); // main + producer + consumer
 
     /* Producer thread: produces data, waits for buffer space, needs consumer resource */
     {
         let buffer_mutex = Arc::clone(&buffer_mutex);
         let consumer_mutex = Arc::clone(&consumer_mutex);
         let producer_cv = Arc::clone(&producer_cv);
-        let barrier = Arc::clone(&barrier);
         
         Thread::spawn(move || {
-            barrier.wait(); // Synchronize startup
             
             // Producer holds buffer mutex
             let mut buffer = buffer_mutex.lock();
@@ -74,10 +71,8 @@ fn test_condvar_producer_consumer_deadlock() {
         let buffer_mutex = Arc::clone(&buffer_mutex);
         let consumer_mutex = Arc::clone(&consumer_mutex);
         let producer_cv = Arc::clone(&producer_cv);
-        let barrier = Arc::clone(&barrier);
         
         Thread::spawn(move || {
-            barrier.wait(); // Synchronize startup
             
             // Small delay to let producer start waiting
             std::thread::sleep(Duration::from_millis(50));
@@ -111,9 +106,6 @@ fn test_condvar_producer_consumer_deadlock() {
             println!("Consumer: Got buffer mutex");
         });
     }
-
-    // Wait for both threads to start
-    barrier.wait();
 
     let info = rx
         .recv_timeout(Duration::from_secs(3))

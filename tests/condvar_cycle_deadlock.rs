@@ -2,7 +2,7 @@ use deloxide::{
     Condvar, DeadlockInfo, Deloxide, Mutex as DMutex, Thread,
 };
 use std::sync::{
-    Arc, Barrier,
+    Arc,
     atomic::{AtomicBool, Ordering},
     mpsc, Mutex as StdMutex,
 };
@@ -32,7 +32,6 @@ fn test_condvar_cycle_deadlock() {
     let m_b = Arc::new(DMutex::new(()));
     let cv   = Arc::new(Condvar::new());
     let ready = Arc::new(AtomicBool::new(false));
-    let barrier = Arc::new(Barrier::new(3)); // main + 2 worker threads
 
     /* thread 1 : waits, then needs B ------------------------------------ */
     {
@@ -40,9 +39,7 @@ fn test_condvar_cycle_deadlock() {
         let m_b = Arc::clone(&m_b);
         let cv  = Arc::clone(&cv);
         let ready = ready.clone();
-        let barrier = Arc::clone(&barrier);
         Thread::spawn(move || {
-            barrier.wait(); // Synchronize thread startup
             let mut guard_a = m_a.lock();
             while !*guard_a {
                 cv.wait(&mut guard_a);          // releases A while asleep
@@ -58,10 +55,7 @@ fn test_condvar_cycle_deadlock() {
         let m_a = Arc::clone(&m_a);
         let m_b = Arc::clone(&m_b);
         let cv  = Arc::clone(&cv);
-        let barrier = Arc::clone(&barrier);
         move || {
-            barrier.wait(); // Synchronize thread startup
-            
             // Small delay to ensure thread 1 gets to wait first
             std::thread::sleep(Duration::from_millis(10));
             
@@ -80,9 +74,6 @@ fn test_condvar_cycle_deadlock() {
             let _guard_a2 = m_a.lock();
         }
     });
-
-    // Wait for both threads to start
-    barrier.wait();
 
     let info = rx
         .recv_timeout(Duration::from_secs(3))
