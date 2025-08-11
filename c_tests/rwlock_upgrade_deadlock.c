@@ -6,14 +6,9 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-}
+// Use shared test util globals/callback
 
 struct upgrade_args {
     void* rwlock;
@@ -36,7 +31,7 @@ void* upgrade_worker(void* arg) {
 DEFINE_TRACKED_THREAD(upgrade_worker)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     void* rwlock = deloxide_create_rwlock();
 
@@ -51,11 +46,10 @@ int main() {
     }
 
     // Wait up to 2s for deadlock
-    for (int i = 0; i < 20 && !deadlock_detected; ++i)
-        usleep(100000);
+    wait_for_deadlock_ms(2000, 100);
 
-    if (deadlock_detected) {
-        printf("✔ Detected RwLock upgrade deadlock!\n%s\n", deadlock_info_json);
+    if (DEADLOCK_FLAG) {
+        printf("✔ Detected RwLock upgrade deadlock!\n%s\n", DEADLOCK_INFO);
         return 0;
     } else {
         fprintf(stderr, "No deadlock detected in upgrade deadlock test\n");

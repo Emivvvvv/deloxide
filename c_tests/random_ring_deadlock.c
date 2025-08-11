@@ -7,14 +7,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-}
+// Use shared test util globals/callback
 
 struct ring_args {
     int index, n;
@@ -40,7 +35,7 @@ DEFINE_TRACKED_THREAD(ring_worker)
 
 int main() {
     srand((unsigned)time(NULL));
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     int n = (rand() % 6) + 3;  // 3..8
     printf("→ testing a ring of %d threads\n", n);
@@ -58,12 +53,10 @@ int main() {
     }
 
     // Wait up to 5 s
-    for (int i = 0; i < 50 && !deadlock_detected; i++) {
-        usleep(100000);
-    }
+    wait_for_deadlock_ms(5000, 100);
 
-    if (deadlock_detected) {
-        printf("Deadlock detected (ring of %d)! Info:\n%s\n", n, deadlock_info_json);
+    if (DEADLOCK_FLAG) {
+        printf("Deadlock detected (ring of %d)! Info:\n%s\n", n, DEADLOCK_INFO);
         return 0;
     } else {
         fprintf(stderr, "No deadlock in ring test\n");

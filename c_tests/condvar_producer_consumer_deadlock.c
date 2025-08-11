@@ -9,17 +9,11 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include "deloxide.h"
+#include "test_util.h"
 
 #define BUFFER_SIZE 5
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-    printf("✔️  Producer-Consumer deadlock detected!\n");
-}
+// Use shared test util globals/callback
 
 struct shared_state {
     void* buffer_mutex;
@@ -116,7 +110,7 @@ DEFINE_TRACKED_THREAD(producer_thread)
 DEFINE_TRACKED_THREAD(consumer_thread)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     // Create shared state
     struct shared_state state;
@@ -130,20 +124,18 @@ int main() {
     CREATE_TRACKED_THREAD(consumer, consumer_thread, &state);
 
     // Wait up to 3 seconds for deadlock detection
-    for (int i = 0; i < 30 && !deadlock_detected; i++) {
-        usleep(100000); // 100ms
-    }
+    wait_for_deadlock_ms(3000, 100);
 
-    if (deadlock_detected) {
+    if (DEADLOCK_FLAG) {
         printf("✅ Producer-Consumer condvar deadlock test passed\n");
-        printf("Deadlock info: %s\n", deadlock_info_json);
+        printf("Deadlock info: %s\n", DEADLOCK_INFO);
         
         // Cleanup
         deloxide_destroy_condvar(state.producer_cv);
         deloxide_destroy_mutex(state.buffer_mutex);
         deloxide_destroy_mutex(state.consumer_mutex);
 
-        free(deadlock_info_json);
+        free(DEADLOCK_INFO);
         
         return 0;
     } else {

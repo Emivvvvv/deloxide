@@ -9,15 +9,9 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-    printf("✔️  Condvar cycle detected!\n");
-}
+// Use shared test util globals/callback
 
 struct thread_args {
     void* mutex_a;
@@ -90,7 +84,7 @@ DEFINE_TRACKED_THREAD(thread1_wait_then_lock)
 DEFINE_TRACKED_THREAD(thread2_signal_then_lock)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     // Create shared resources
     void* mutex_a = deloxide_create_mutex();
@@ -110,20 +104,18 @@ int main() {
     CREATE_TRACKED_THREAD(t2, thread2_signal_then_lock, &args);
 
     // Wait up to 3 seconds for deadlock detection
-    for (int i = 0; i < 30 && !deadlock_detected; i++) {
-        usleep(100000); // 100ms
-    }
+    wait_for_deadlock_ms(3000, 100);
 
-    if (deadlock_detected) {
+    if (DEADLOCK_FLAG) {
         printf("✅ Condvar cycle deadlock test passed\n");
-        printf("Deadlock info: %s\n", deadlock_info_json);
+        printf("Deadlock info: %s\n", DEADLOCK_INFO);
         
         // Cleanup
         deloxide_destroy_condvar(condvar);
         deloxide_destroy_mutex(mutex_a);
         deloxide_destroy_mutex(mutex_b);
 
-        free(deadlock_info_json);
+        free(DEADLOCK_INFO);
         
         return 0;
     } else {

@@ -6,16 +6,11 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "deloxide.h"
+#include "test_util.h"
 
 #define N 5
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-}
+// Use shared test util globals/callback
 
 struct phil_args {
     void* forks[N];
@@ -38,7 +33,7 @@ void* philosopher(void* arg) {
 DEFINE_TRACKED_THREAD(philosopher)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     // Create forks
     void* forks[N];
@@ -56,12 +51,10 @@ int main() {
     }
 
     // Wait up to 3 s for deadlock
-    for (int i = 0; i < 30 && !deadlock_detected; i++) {
-        usleep(100000);
-    }
+    wait_for_deadlock_ms(3000, 100);
 
-    if (deadlock_detected) {
-        printf("Deadlock detected (Dining Philosophers)! Info:\n%s\n", deadlock_info_json);
+    if (DEADLOCK_FLAG) {
+        printf("Deadlock detected (Dining Philosophers)! Info:\n%s\n", DEADLOCK_INFO);
         return 0;
     } else {
         fprintf(stderr, "No deadlock detected in Dining Philosophers test\n");

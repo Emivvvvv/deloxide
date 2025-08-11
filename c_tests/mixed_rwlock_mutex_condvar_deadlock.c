@@ -9,15 +9,9 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-    printf("✔️  Mixed RwLock+Mutex+Condvar deadlock detected!\n");
-}
+// Use shared test util globals/callback
 
 struct shared_resources {
     void* shared_data_rwlock;     // Data that can be read/written
@@ -112,7 +106,7 @@ DEFINE_TRACKED_THREAD(reader_thread)
 DEFINE_TRACKED_THREAD(writer_thread)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     // Create shared resources - simulating a data processing system
     struct shared_resources res;
@@ -131,20 +125,18 @@ int main() {
     CREATE_TRACKED_THREAD(writer, writer_thread, &res);
 
     // Wait up to 3 seconds for deadlock detection
-    for (int i = 0; i < 30 && !deadlock_detected; i++) {
-        usleep(100000); // 100ms
-    }
+    wait_for_deadlock_ms(3000, 100);
 
-    if (deadlock_detected) {
+    if (DEADLOCK_FLAG) {
         printf("✅ Mixed RwLock+Mutex+Condvar deadlock test passed\n");
-        printf("Deadlock info: %s\n", deadlock_info_json);
+        printf("Deadlock info: %s\n", DEADLOCK_INFO);
         
         // Cleanup
         deloxide_destroy_condvar(res.data_ready_cv);
         deloxide_destroy_mutex(res.processor_mutex);
         deloxide_destroy_rwlock(res.shared_data_rwlock);
 
-        free(deadlock_info_json);
+        free(DEADLOCK_INFO);
         
         return 0;
     } else {
