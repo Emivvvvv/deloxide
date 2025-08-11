@@ -1,6 +1,6 @@
 [package]
 name = "deloxide"
-version = "0.2.0-pre"
+version = "0.2.1-pre"
 authors = ["Emirhan Tala <tala.emirhan@gmail.com>", "Ulaş Can Demirbağ <ulascandemirbag@gmail.com>"]
 edition = "2024"
 description = "Deloxide scrubs your threads clean by detecting deadlocks in real time—keeping your system smooth, safe, and corrosion-free. 🦀🧼🔒"

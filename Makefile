@@ -24,7 +24,9 @@ c_tests: \
 	bin/three_thread_rwlock_deadlock \
 	bin/condvar_cycle_deadlock \
 	bin/condvar_producer_consumer_deadlock \
-	bin/mixed_rwlock_mutex_condvar_deadlock
+	bin/mixed_rwlock_mutex_condvar_deadlock \
+	bin/mixed_three_thread_deadlock \
+	bin/condvar_spurious_wakeup
 
 bin/%: c_tests/%.c include/deloxide.h $(DEL_LIB)
 	mkdir -p bin
@@ -43,6 +45,8 @@ test: all
 	- bin/condvar_cycle_deadlock                    || exit 1
 	- bin/condvar_producer_consumer_deadlock        || exit 1
 	- bin/mixed_rwlock_mutex_condvar_deadlock       || exit 1
+	- bin/mixed_three_thread_deadlock               || exit 1
+	- bin/condvar_spurious_wakeup                   || exit 1
 	@echo "\nAll C tests passed!"
 
 clean:
