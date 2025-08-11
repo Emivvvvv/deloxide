@@ -1,5 +1,5 @@
 use crate::core::detector;
-use crate::core::locks::{mutex::MutexGuard, NEXT_LOCK_ID};
+use crate::core::locks::{NEXT_LOCK_ID, mutex::MutexGuard};
 use crate::core::types::{CondvarId, get_current_thread_id};
 use parking_lot::Condvar as ParkingLotCondvar;
 use std::sync::atomic::Ordering;
@@ -108,7 +108,7 @@ impl Condvar {
 
         // Report wait begin - this logs the condvar wait and simulates mutex release
         detector::condvar::on_wait_begin(thread_id, self.id, mutex_id);
-        
+
         // Explicitly report mutex release since parking_lot will unlock it internally
         detector::mutex::on_mutex_release(thread_id, mutex_id);
 
@@ -156,7 +156,7 @@ impl Condvar {
 
         // Report wait begin - this logs the condvar wait and simulates mutex release
         detector::condvar::on_wait_begin(thread_id, self.id, mutex_id);
-        
+
         // Explicitly report mutex release since parking_lot will unlock it internally
         detector::mutex::on_mutex_release(thread_id, mutex_id);
 
@@ -194,12 +194,10 @@ impl Condvar {
     /// ```
     pub fn notify_one(&self) {
         let thread_id = get_current_thread_id();
-        
+
         // Report the notify operation to the detector first (for synthetic mutex attempts)
         detector::condvar::on_notify_one(self.id, thread_id);
-        
 
-        
         // Perform the actual notification
         self.inner.notify_one();
     }
@@ -227,10 +225,10 @@ impl Condvar {
     /// ```
     pub fn notify_all(&self) {
         let thread_id = get_current_thread_id();
-        
+
         // Report the notify operation to the detector first (for synthetic mutex attempts)
         detector::condvar::on_notify_all(self.id, thread_id);
-        
+
         // Perform the actual notification
         self.inner.notify_all();
     }

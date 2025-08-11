@@ -205,7 +205,7 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 
 impl<'a, T> MutexGuard<'a, T> {
     /// Get the inner parking_lot MutexGuard for condvar operations
-    /// 
+    ///
     /// This method is used internally by Condvar to access the underlying
     /// parking_lot guard for wait operations.
     pub(crate) fn inner_guard(&mut self) -> &mut ParkingLotMutexGuard<'a, T> {

@@ -12,7 +12,7 @@ use crate::core::StressMode;
 use crate::core::graph::WaitForGraph;
 use crate::core::logger::EventLogger;
 
-use crate::core::types::{DeadlockInfo, LockId, ThreadId, CondvarId};
+use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
 use anyhow::Result;
 use crossbeam_channel::{Sender, unbounded};
 use fxhash::{FxHashMap, FxHashSet};

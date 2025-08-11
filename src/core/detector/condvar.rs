@@ -5,8 +5,8 @@
 //! condvar operations with mutex operations to ensure correct cycle detection.
 
 use crate::core::detector::GLOBAL_DETECTOR;
-use crate::core::{Detector, Events, get_current_thread_id};
 use crate::core::types::{CondvarId, LockId, ThreadId};
+use crate::core::{Detector, Events, get_current_thread_id};
 use std::collections::VecDeque;
 
 impl Detector {
@@ -20,7 +20,7 @@ impl Detector {
     pub fn on_condvar_create(&mut self, condvar_id: CondvarId) {
         // Initialize the wait queue for this condvar
         self.cv_waiters.insert(condvar_id, VecDeque::new());
-        
+
         self.log_if_enabled(|logger| {
             logger.log_lock_event(condvar_id, Some(get_current_thread_id()), Events::Spawn);
         });
@@ -36,10 +36,11 @@ impl Detector {
     pub fn on_condvar_destroy(&mut self, condvar_id: CondvarId) {
         // Clear wait queue
         self.cv_waiters.remove(&condvar_id);
-        
+
         // Clear any thread wait mappings for this condvar
-        self.thread_wait_cv.retain(|_, &mut (cv_id, _)| cv_id != condvar_id);
-        
+        self.thread_wait_cv
+            .retain(|_, &mut (cv_id, _)| cv_id != condvar_id);
+
         if let Some(logger) = &self.logger {
             logger.log_lock_event(condvar_id, None, Events::Exit);
         }
@@ -55,17 +56,24 @@ impl Detector {
     /// * `thread_id` - ID of the thread beginning to wait
     /// * `condvar_id` - ID of the condition variable being waited on
     /// * `mutex_id` - ID of the mutex that will be reacquired after the wait
-    pub fn on_condvar_wait_begin(&mut self, thread_id: ThreadId, condvar_id: CondvarId, mutex_id: LockId) {
+    pub fn on_condvar_wait_begin(
+        &mut self,
+        thread_id: ThreadId,
+        condvar_id: CondvarId,
+        mutex_id: LockId,
+    ) {
         // Add thread to the wait queue for this condvar
         if let Some(queue) = self.cv_waiters.get_mut(&condvar_id) {
             queue.push_back((thread_id, mutex_id));
         } else {
-            self.cv_waiters.insert(condvar_id, VecDeque::from([(thread_id, mutex_id)]));
+            self.cv_waiters
+                .insert(condvar_id, VecDeque::from([(thread_id, mutex_id)]));
         }
-        
+
         // Track what this thread is waiting for
-        self.thread_wait_cv.insert(thread_id, (condvar_id, mutex_id));
-        
+        self.thread_wait_cv
+            .insert(thread_id, (condvar_id, mutex_id));
+
         if let Some(logger) = &self.logger {
             logger.log_interaction_event(thread_id, condvar_id, Events::CondvarWaitBegin);
         }
@@ -83,17 +91,17 @@ impl Detector {
         if let Some(logger) = &self.logger {
             logger.log_interaction_event(notifier_id, condvar_id, Events::CondvarNotifyOne);
         }
-        
+
         // Wake one waiter if any exist
-        if let Some(queue) = self.cv_waiters.get_mut(&condvar_id) {
-            if let Some((waiter_thread, mutex_id)) = queue.pop_front() {
-                // Mark as woken (for diagnostics)
-                self.cv_woken.insert(waiter_thread);
-                
-                // Synthesize a mutex attempt for the woken thread
-                // This creates the necessary wait-for graph edge while they compete to reacquire
-                self.on_mutex_attempt_synthetic(waiter_thread, mutex_id);
-            }
+        if let Some(queue) = self.cv_waiters.get_mut(&condvar_id)
+            && let Some((waiter_thread, mutex_id)) = queue.pop_front()
+        {
+            // Mark as woken (for diagnostics)
+            self.cv_woken.insert(waiter_thread);
+
+            // Synthesize a mutex attempt for the woken thread
+            // This creates the necessary wait-for graph edge while they compete to reacquire
+            self.on_mutex_attempt_synthetic(waiter_thread, mutex_id);
         }
     }
 
@@ -109,19 +117,20 @@ impl Detector {
         if let Some(logger) = &self.logger {
             logger.log_interaction_event(notifier_id, condvar_id, Events::CondvarNotifyAll);
         }
-        
+
         // Wake all waiters
-        let waiters_to_wake: Vec<(ThreadId, LockId)> = if let Some(queue) = self.cv_waiters.get_mut(&condvar_id) {
-            queue.drain(..).collect()
-        } else {
-            Vec::new()
-        };
-        
+        let waiters_to_wake: Vec<(ThreadId, LockId)> =
+            if let Some(queue) = self.cv_waiters.get_mut(&condvar_id) {
+                queue.drain(..).collect()
+            } else {
+                Vec::new()
+            };
+
         // Process each woken waiter
         for (waiter_thread, mutex_id) in waiters_to_wake {
             // Mark as woken (for diagnostics)
             self.cv_woken.insert(waiter_thread);
-            
+
             // Synthesize a mutex attempt for each woken thread
             // This creates the necessary wait-for graph edges while they compete to reacquire
             self.on_mutex_attempt_synthetic(waiter_thread, mutex_id);
@@ -137,13 +146,18 @@ impl Detector {
     /// * `thread_id` - ID of the thread whose wait is ending
     /// * `condvar_id` - ID of the condition variable that was waited on
     /// * `mutex_id` - ID of the mutex that was reacquired
-    pub fn on_condvar_wait_end(&mut self, thread_id: ThreadId, condvar_id: CondvarId, _mutex_id: LockId) {
+    pub fn on_condvar_wait_end(
+        &mut self,
+        thread_id: ThreadId,
+        condvar_id: CondvarId,
+        _mutex_id: LockId,
+    ) {
         // Remove from thread wait tracking
         self.thread_wait_cv.remove(&thread_id);
-        
+
         // Remove from woken set if present
         self.cv_woken.remove(&thread_id);
-        
+
         if let Some(logger) = &self.logger {
             logger.log_interaction_event(thread_id, condvar_id, Events::CondvarWaitEnd);
         }
@@ -161,7 +175,7 @@ impl Detector {
     fn on_mutex_attempt_synthetic(&mut self, thread_id: ThreadId, lock_id: LockId) {
         // Mark this as a synthetic attempt so it doesn't get removed prematurely
         self.cv_woken.insert(thread_id);
-        
+
         // Call the same logic as normal mutex attempt but mark it as synthetic
         self.on_mutex_attempt(thread_id, lock_id);
     }
