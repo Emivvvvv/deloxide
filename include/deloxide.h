@@ -82,10 +82,13 @@
  *        UNLOCK_MUTEX(mutex);
  */
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#if !defined(_WIN32)
+#include <pthread.h>
+#endif
 
 /**
  * @brief Define a tracked thread function
@@ -108,14 +111,20 @@
  * DEFINE_TRACKED_THREAD(worker)
  * ```
  */
+#if !defined(_WIN32)
+typedef struct {
+    uintptr_t parent_tid;
+    void* user_arg;
+} deloxide_thread_arg_t;
+
 #define DEFINE_TRACKED_THREAD(fn_name) \
-    void* fn_name##_tracked(void* arg) { \
-        unsigned long parent_tid = (uintptr_t)arg; \
-        unsigned long tid = deloxide_get_thread_id(); \
-        deloxide_register_thread_spawn(tid, parent_tid); \
+    void* fn_name##_tracked(void* _arg) { \
+        deloxide_thread_arg_t a = *(deloxide_thread_arg_t*)_arg; \
+        free(_arg); \
+        uintptr_t tid = deloxide_get_thread_id(); \
+        deloxide_register_thread_spawn(tid, a.parent_tid); \
         extern void* fn_name(void*); /* forward declare user function */ \
-        void* real_arg = (void*)(uintptr_t)parent_tid; /* unwrap real argument */ \
-        void* ret = fn_name(real_arg); \
+        void* ret = fn_name(a.user_arg); \
         deloxide_register_thread_exit(tid); \
         return ret; \
     }
@@ -137,8 +146,15 @@
  * ```
  */
 #define CREATE_TRACKED_THREAD(thread_var, original_fn, real_arg) do { \
-    pthread_create(&(thread_var), NULL, original_fn##_tracked, (void*)(uintptr_t)(real_arg)); \
+    deloxide_thread_arg_t* a = (deloxide_thread_arg_t*)malloc(sizeof(deloxide_thread_arg_t)); \
+    a->parent_tid = deloxide_get_thread_id(); \
+    a->user_arg = (void*)(real_arg); \
+    pthread_create(&(thread_var), NULL, original_fn##_tracked, (void*)a); \
 } while(0)
+#else
+#define DEFINE_TRACKED_THREAD(fn_name) /* not available on Windows */
+#define CREATE_TRACKED_THREAD(thread_var, original_fn, real_arg) /* not available on Windows */
+#endif
 
 
 /**
@@ -328,7 +344,7 @@ void* deloxide_create_mutex();
  *
  * @return Opaque pointer to the mutex, or NULL on allocation failure.
  */
-void* deloxide_create_mutex_with_creator(unsigned long creator_thread_id);
+void* deloxide_create_mutex_with_creator(uintptr_t creator_thread_id);
 
 /**
  * @brief Destroy a tracked mutex.
@@ -377,7 +393,7 @@ int deloxide_unlock_mutex(void* mutex);
  *
  * @return 0 on success.
  */
-int deloxide_register_thread_spawn(unsigned long thread_id, unsigned long parent_id);
+int deloxide_register_thread_spawn(uintptr_t thread_id, uintptr_t parent_id);
 
 /**
  * @brief Register a thread exit with the deadlock detector.
@@ -391,7 +407,7 @@ int deloxide_register_thread_spawn(unsigned long thread_id, unsigned long parent
  *
  * @return 0 on success.
  */
-int deloxide_register_thread_exit(unsigned long thread_id);
+int deloxide_register_thread_exit(uintptr_t thread_id);
 
 /**
  * @brief Get a unique identifier for the current thread.
@@ -400,7 +416,7 @@ int deloxide_register_thread_exit(unsigned long thread_id);
  *
  * @return A unique thread ID as an unsigned long.
  */
-unsigned long deloxide_get_thread_id();
+uintptr_t deloxide_get_thread_id();
 
 /**
  * @brief Get the creator thread ID of a mutex.
@@ -409,7 +425,7 @@ unsigned long deloxide_get_thread_id();
  *
  * @return The thread ID of the creator thread, or 0 if the mutex is NULL.
  */
-unsigned long deloxide_get_mutex_creator(void* mutex);
+uintptr_t deloxide_get_mutex_creator(void* mutex);
 
 /**
  * @brief Flush all pending log entries to disk.
@@ -523,7 +539,7 @@ void* deloxide_create_rwlock();
  * @param creator_thread_id ID of the thread to register as the creator.
  * @return Opaque pointer to the RwLock, or NULL on allocation failure.
  */
-void* deloxide_create_rwlock_with_creator(unsigned long creator_thread_id);
+void* deloxide_create_rwlock_with_creator(uintptr_t creator_thread_id);
 
 /**
  * @brief Destroy a tracked RwLock.
@@ -579,7 +595,7 @@ int deloxide_rw_unlock_write(void* rwlock);
  * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
  * @return The thread ID of the creator thread, or 0 if the RwLock is NULL.
  */
-unsigned long deloxide_get_rwlock_creator(void* rwlock);
+uintptr_t deloxide_get_rwlock_creator(void* rwlock);
 
 /**
  * @brief Create a new tracked condition variable.
@@ -599,7 +615,7 @@ void* deloxide_create_condvar();
  * @param creator_thread_id ID of the thread to register as the creator.
  * @return Opaque pointer to the condition variable, or NULL on allocation failure.
  */
-void* deloxide_create_condvar_with_creator(unsigned long creator_thread_id);
+void* deloxide_create_condvar_with_creator(uintptr_t creator_thread_id);
 
 /**
  * @brief Destroy a tracked condition variable.

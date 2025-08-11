@@ -1,5 +1,5 @@
-use crate::core::locks::condvar::Condvar;
 use crate::core::detector::condvar::on_condvar_create;
+use crate::core::locks::condvar::Condvar;
 use crate::ffi::FFI_GUARD;
 use std::cell::RefCell;
 use std::ffi::{c_int, c_ulong, c_void};
@@ -7,7 +7,7 @@ use std::time::Duration;
 
 // Each thread can hold condition variable wait state
 thread_local! {
-    static FFI_CONDVAR_WAIT_STATE: RefCell<Option<(*mut c_void, *mut c_void)>> = RefCell::new(None);
+    static FFI_CONDVAR_WAIT_STATE: RefCell<Option<(*mut c_void, *mut c_void)>> = const { RefCell::new(None) };
 }
 
 /// Create a new tracked condition variable.
@@ -43,12 +43,11 @@ pub unsafe extern "C" fn deloxide_create_condvar() -> *mut c_void {
 /// - Any usage from C must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_condvar_with_creator(
-    _creator_thread_id: c_ulong,
+    _creator_thread_id: usize,
 ) -> *mut c_void {
     let condvar = Box::new(Condvar::new());
 
     // Register the specified thread as the creator
-    // Note: The condvar detector doesn't currently support custom creator threads
     // so we just create the condvar normally
     on_condvar_create(condvar.id());
 
@@ -93,10 +92,7 @@ pub unsafe extern "C" fn deloxide_destroy_condvar(condvar: *mut c_void) {
 /// - The mutex must be currently locked by the calling thread.
 /// - The mutex will be automatically unlocked during wait and re-locked on return.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_condvar_wait(
-    condvar: *mut c_void,
-    mutex: *mut c_void,
-) -> c_int {
+pub unsafe extern "C" fn deloxide_condvar_wait(condvar: *mut c_void, mutex: *mut c_void) -> c_int {
     if condvar.is_null() {
         return -1;
     }
@@ -182,7 +178,7 @@ pub unsafe extern "C" fn deloxide_condvar_wait_timeout(
     });
 
     // Perform the wait operation with timeout
-    let timeout = Duration::from_millis(timeout_ms as u64);
+    let timeout = Duration::from_millis(timeout_ms);
     let timed_out = condvar_ref.wait_timeout(&mut guard, timeout);
 
     // Store the guard back in thread-local storage for this mutex

@@ -4,7 +4,7 @@
 /// It maps C function calls to their Rust implementations, handling memory management,
 /// thread tracking, and callback mechanisms to bridge the language boundary.
 ///
-/// The FFI interface provides all the functionality needed to use Deloxide from C or C++,
+/// The FFI interface provides all the functionality needed to use Deloxide from C
 /// including initialization, mutex tracking, thread tracking, and deadlock detection.
 mod condvar;
 mod core;

@@ -2,7 +2,7 @@ use crate::core::RwLock;
 use crate::core::detector::rwlock::on_rwlock_create;
 use crate::core::types::ThreadId;
 use std::cell::RefCell;
-use std::ffi::{c_int, c_ulong, c_void};
+use std::ffi::{c_int, c_void};
 
 // Each thread can hold one read and one write guard at a time (per-thread tracking)
 thread_local! {
@@ -35,7 +35,7 @@ pub unsafe extern "C" fn deloxide_create_rwlock() -> *mut c_void {
 /// - The pointer must be freed using `deloxide_destroy_rwlock`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_rwlock_with_creator(
-    creator_thread_id: c_ulong,
+    creator_thread_id: usize,
 ) -> *mut c_void {
     let rwlock = Box::new(RwLock::new(()));
     on_rwlock_create(rwlock.id(), Some(creator_thread_id as ThreadId));
@@ -166,10 +166,10 @@ pub unsafe extern "C" fn deloxide_rw_unlock_write(rwlock: *mut c_void) -> c_int 
 /// # Returns
 /// * Creator thread ID, or 0 if `rwlock` is NULL
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_get_rwlock_creator(rwlock: *mut c_void) -> c_ulong {
+pub unsafe extern "C" fn deloxide_get_rwlock_creator(rwlock: *mut c_void) -> usize {
     if rwlock.is_null() {
         return 0;
     }
     let rwlock_ref = unsafe { &*(rwlock as *const RwLock<()>) };
-    rwlock_ref.creator_thread_id() as c_ulong
+    rwlock_ref.creator_thread_id()
 }
