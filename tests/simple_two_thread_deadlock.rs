@@ -1,36 +1,13 @@
-use deloxide::{DeadlockInfo, Deloxide, Mutex, Thread};
-use std::sync::{Arc, Mutex as StdMutex, mpsc};
+use deloxide::{Mutex, Thread};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+mod common;
+use common::{DEADLOCK_TIMEOUT, expect_deadlock, start_detector};
 
 #[test]
 fn test_simple_two_thread_deadlock() {
-    // Create a channel to communicate deadlock detection
-    let (tx, rx) = mpsc::channel::<DeadlockInfo>();
-
-    // Track whether deadlock was detected with an atomic flag
-    let deadlock_detected = Arc::new(StdMutex::new(false));
-    let deadlock_info = Arc::new(StdMutex::new(None));
-
-    // Clone for the callback
-    let deadlock_detected_clone = Arc::clone(&deadlock_detected);
-    let deadlock_info_clone = Arc::clone(&deadlock_info);
-
-    Deloxide::new()
-        .callback(move |detected_info| {
-            // Set the flag indicating deadlock was detected
-            let mut detected = deadlock_detected_clone.lock().unwrap();
-            *detected = true;
-
-            // Store deadlock info for later verification
-            let mut info = deadlock_info_clone.lock().unwrap();
-            *info = Some(detected_info.clone());
-
-            // Also send through channel
-            let _ = tx.send(detected_info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let harness = start_detector();
 
     // Create two mutexes
     let mutex_a = Arc::new(Mutex::new("Resource A"));
@@ -69,33 +46,7 @@ fn test_simple_two_thread_deadlock() {
     });
 
     // Wait for a reasonable time to allow deadlock to be detected
-    let timeout = Duration::from_secs(2);
-    match rx.recv_timeout(timeout) {
-        Ok(info) => {
-            // Verify deadlock was detected
-            assert!(
-                *deadlock_detected.lock().unwrap(),
-                "Deadlock flag should be set"
-            );
-
-            // Verify cycle has exactly 2 threads (our specific case)
-            assert_eq!(
-                info.thread_cycle.len(),
-                2,
-                "Deadlock should involve exactly 2 threads"
-            );
-
-            // Verify there are 2 thread-lock waiting relationships
-            assert_eq!(
-                info.thread_waiting_for_locks.len(),
-                2,
-                "There should be exactly 2 thread-lock waiting relationships"
-            );
-
-            // Test passed
-        }
-        Err(_) => {
-            panic!("No deadlock detected within timeout period!");
-        }
-    }
+    let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
+    assert_eq!(info.thread_cycle.len(), 2);
+    assert_eq!(info.thread_waiting_for_locks.len(), 2);
 }

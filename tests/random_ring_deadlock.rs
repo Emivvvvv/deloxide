@@ -1,35 +1,19 @@
-use deloxide::{DeadlockInfo, Deloxide, Mutex, Thread};
+use deloxide::{Mutex, Thread};
 use rand::Rng;
 use std::{
     sync::{
-        Arc, Mutex as StdMutex,
+        Arc,
         atomic::{AtomicUsize, Ordering},
-        mpsc,
     },
     thread,
     time::Duration,
 };
+mod common;
+use common::{expect_deadlock, start_detector};
 
 #[test]
 fn test_random_ring_deadlock() {
-    // Channel to receive the deadlock info
-    let (tx, rx) = mpsc::channel::<DeadlockInfo>();
-
-    // Shared flag & slot for assertions
-    let detected = Arc::new(StdMutex::new(false));
-    let info_slot = Arc::new(StdMutex::new(None));
-
-    // Initialize Deloxide with our callback
-    let flag = detected.clone();
-    let slot = info_slot.clone();
-    Deloxide::new()
-        .callback(move |info| {
-            *flag.lock().unwrap() = true;
-            *slot.lock().unwrap() = Some(info.clone());
-            let _ = tx.send(info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let harness = start_detector();
 
     // Pick a random ring size between 3 and 8
     let mut rng = rand::rng();
@@ -73,13 +57,9 @@ fn test_random_ring_deadlock() {
     }
 
     // Wait up to 5s for the callback
-    let timeout = Duration::from_secs(5);
-    let info = rx
-        .recv_timeout(timeout)
-        .expect(&format!("No deadlock detected within {:?}", timeout));
+    let info = expect_deadlock(&harness, Duration::from_secs(5));
 
     // Verify
-    assert!(*detected.lock().unwrap(), "Deadlock flag not set");
     assert_eq!(
         info.thread_cycle.len(),
         n,
