@@ -4,7 +4,7 @@
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
 
 > [!IMPORTANT]
-> Deloxide is currently under active development. We recently released version 0.2.0-pre (up from v0.1.1), introducing RwLock support and making several API changes. As of this release, Condvar is also supported in both Rust and C APIs, including visualization of wait relationships.
+>  Deloxide is under active development. We've recently added RwLock and Condvar support, but visualization features are not yet available. It will be available in next major update. Stay tuned for updates!
 
 Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex and reader-writer lock operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
 
@@ -17,6 +17,9 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C/C++
 - **Stress testing** - Optional feature to increase deadlock manifestation during testing
+
+> [!NOTE]
+> Cross-platform support: Rust API works on Windows, macOS, and Linux. The C API is POSIX-first and ships with pthread-based convenience macros for macOS/Linux; on Windows those macros are disabled (see below) but the core C functions are fully usable.
 
 ## Project Architecture
 
@@ -67,304 +70,438 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 ### Rust
 
+Deloxide provides drop-in replacements for standard synchronization primitives with deadlock detection capabilities. All primitives wrap parking_lot implementations and add unique identifiers for tracking and visualization.
+
+#### Deloxide::Thread
+
+A wrapper around `std::thread::JoinHandle` that automatically tracks thread lifecycle events:
+
 ```rust
-use deloxide::{Deloxide, Mutex, Thread};
-use std::sync::Arc;
-use std::time::Duration;
-use std::thread;
+pub struct Thread<T>(JoinHandle<T>);
 
-fn main() {
-    // Initialize the detector with a deadlock callback
-    Deloxide::new()
-        .with_log("deadlock.log")
-        .callback(|info| {
-            eprintln!("Deadlock detected! Cycle: {:?}", info.thread_cycle);
-            // Automatically show visualization in browser
-            deloxide::showcase_this().expect("Failed to launch visualization");
-        })
-        .start()
-        .expect("Failed to initialize detector");
-
-    // Create two mutexes
-    let mutex_a = Arc::new(Mutex::new("Resource A"));
-    let mutex_b = Arc::new(Mutex::new("Resource B"));
-
-    // Create deadlock between two threads
-    let mutex_a_clone = Arc::clone(&mutex_a);
-    let mutex_b_clone = Arc::clone(&mutex_b);
-
-    let _t1 = Thread::spawn(move || {
-        let _a = mutex_a.lock().unwrap();
-        thread::sleep(Duration::from_millis(100));
-        let _b = mutex_b.lock().unwrap();
-    });
-
-    let _t2 = Thread::spawn(move || {
-        let _b = mutex_b_clone.lock().unwrap();
-        thread::sleep(Duration::from_millis(100));
-        let _a = mutex_a_clone.lock().unwrap();
-    });
-
-    thread::sleep(Duration::from_secs(1));
+impl<T> Thread<T> where T: Send + 'static {
+    pub fn spawn<F>(f: F) -> Self where F: FnOnce() -> T + Send + 'static;
+    pub fn join(self) -> thread::Result<T>;
 }
 ```
 
-### RwLock Example
+Creating tracked threads is identical to standard threads:
 
 ```rust
-use deloxide::{Deloxide, RwLock, Thread};
+use deloxide::Thread;
+
+// Spawn a tracked thread - just like std::thread::spawn
+let handle = Thread::spawn(|| {
+    println!("Hello from tracked thread!");
+    42
+});
+
+// Join works the same way
+let result = handle.join().unwrap();
+assert_eq!(result, 42);
+```
+
+It additionally generates a thread ID for deadlock detection, visualization and debugging purposes.
+
+#### Deloxide::Mutex
+
+A wrapper around `parking_lot::Mutex` that tracks lock operations:
+
+```rust
+pub struct Mutex<T> {
+    id: LockId,
+    inner: ParkingLotMutex<T>,
+    creator_thread_id: ThreadId,
+}
+
+impl<T> Mutex<T> {
+    pub fn new(data: T) -> Self;
+    pub fn lock(&self) -> MutexGuard<'_, T>;
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>>;
+    pub fn id(&self) -> LockId;
+}
+```
+
+#### Deloxide::RwLock
+
+A wrapper around `parking_lot::RwLock` supporting both read and write operations:
+
+```rust
+pub struct RwLock<T> {
+    id: LockId,
+    inner: ParkingLotRwLock<T>,
+    creator_thread_id: ThreadId,
+}
+
+impl<T> RwLock<T> {
+    pub fn new(data: T) -> Self;
+    pub fn read(&self) -> RwLockReadGuard<'_, T>;
+    pub fn write(&self) -> RwLockWriteGuard<'_, T>;
+    pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>>;
+    pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>>;
+    pub fn id(&self) -> LockId;
+}
+```
+
+#### Deloxide::Condvar
+
+A wrapper around `parking_lot::Condvar` for condition-based synchronization:
+
+```rust
+pub struct Condvar {
+    id: CondvarId,
+    inner: ParkingLotCondvar,
+}
+
+impl Condvar {
+    pub fn new() -> Self;
+    pub fn wait<T>(&self, guard: &mut MutexGuard<'_, T>);
+    pub fn wait_timeout<T>(&self, guard: &mut MutexGuard<'_, T>, timeout: Duration) -> bool;
+    pub fn notify_one(&self);
+    pub fn notify_all(&self);
+    pub fn id(&self) -> CondvarId;
+}
+```
+
+#### Complete Usage Example
+
+Here's a comprehensive example demonstrating all Deloxide primitives in a single scenario:
+
+```rust
+use deloxide::{Deloxide, Mutex, RwLock, Condvar, Thread};
 use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 
 fn main() {
-    // Initialize the detector with a deadlock callback
+    // Initialize the detector with logging and visualization
     Deloxide::new()
-        .with_log("deadlock.log")
+        .with_log("deadlock_{timestamp}.json")
         .callback(|info| {
-            eprintln!("Deadlock detected! Cycle: {:?}", info.thread_cycle);
+            eprintln!("Deadlock detected! Threads: {:?}", info.thread_cycle);
             deloxide::showcase_this().expect("Failed to launch visualization");
         })
         .start()
         .expect("Failed to initialize detector");
 
-    // Create an RwLock
-    let rwlock = Arc::new(RwLock::new("Shared Resource"));
+    // Create synchronization primitives
+    let counter = Arc::new(Mutex::new(0));
+    let shared_data = Arc::new(RwLock::new(vec![1, 2, 3, 4, 5]));
+    let condition_pair = Arc::new((Mutex::new(false), Condvar::new()));
+
+    // Example 1: Mutex operations with potential deadlock
+    let counter_clone1 = Arc::clone(&counter);
+    let counter_clone2 = Arc::clone(&counter);
+    let mutex_b = Arc::new(Mutex::new("Resource B"));
+    let mutex_b_clone = Arc::clone(&mutex_b);
+
+    // Thread 1: Lock counter, then mutex_b (deadlock scenario)
+    Thread::spawn(move || {
+        let _count = counter_clone1.lock();
+        thread::sleep(Duration::from_millis(100));
+        let _b = mutex_b.lock();
+    });
+
+    // Thread 2: Lock mutex_b, then counter (deadlock scenario) 
+    Thread::spawn(move || {
+        let _b = mutex_b_clone.lock();
+        thread::sleep(Duration::from_millis(100));
+        let _count = counter_clone2.lock();
+    });
+
+    // Example 2: RwLock with multiple readers and upgrade deadlock
+    let shared_clone1 = Arc::clone(&shared_data);
+    let shared_clone2 = Arc::clone(&shared_data);
 
     // Multiple reader threads
     for i in 0..3 {
-        let rwlock_clone = Arc::clone(&rwlock);
+        let shared_clone = Arc::clone(&shared_data);
         Thread::spawn(move || {
-            let read_guard = rwlock_clone.read();
-            println!("Reader {} acquired read lock", i);
-            thread::sleep(Duration::from_millis(100));
-            // Read lock is automatically released when guard is dropped
+            let data = shared_clone.read();
+            println!("Reader {}: {:?}", i, *data);
+            thread::sleep(Duration::from_millis(50));
         });
     }
 
-    // Writer thread that tries to upgrade (potential deadlock)
-    let rwlock_clone = Arc::clone(&rwlock);
+    // Writer thread attempting upgrade (potential deadlock)
     Thread::spawn(move || {
-        let read_guard = rwlock_clone.read();
-        println!("Writer acquired read lock, attempting to upgrade...");
-        thread::sleep(Duration::from_millis(50));
-        let write_guard = rwlock_clone.write(); // This will deadlock!
+        let _read_guard = shared_clone1.read();
+        println!("Writer acquired read lock, attempting upgrade...");
+        thread::sleep(Duration::from_millis(25));
+        let _write_guard = shared_clone2.write(); // This will deadlock!
         println!("Writer acquired write lock");
     });
 
-    thread::sleep(Duration::from_secs(1));
+    // Example 3: Condvar usage
+    let pair_clone = Arc::clone(&condition_pair);
+    
+    // Waiter thread
+    Thread::spawn(move || {
+        let (mutex, condvar) = (&pair_clone.0, &pair_clone.1);
+        let mut ready = mutex.lock();
+        while !*ready {
+            condvar.wait(&mut ready);
+        }
+        println!("Condition met, thread proceeding");
+    });
+
+    // Notifier thread
+    let pair_clone2 = Arc::clone(&condition_pair);
+    Thread::spawn(move || {
+        thread::sleep(Duration::from_millis(200));
+        let (mutex, condvar) = (&pair_clone2.0, &pair_clone2.1);
+        let mut ready = mutex.lock();
+        *ready = true;
+        condvar.notify_one();
+        println!("Condition signaled");
+    });
+
+    // Let threads run and potentially detect deadlocks
+    thread::sleep(Duration::from_secs(2));
+    println!("Program completed");
 }
 ```
 
 ### C
 
-find `deloxide.h` in `include/deloxide.h`
+The C API provides a complete interface to Deloxide through `include/deloxide.h`. It uses opaque pointers and helper macros to simplify integration with existing C codebases.
+
+#### Core C API Functions
+
+```c
+// Initialization and cleanup
+int deloxide_init(const char* log_file, void (*callback)(const char*));
+void deloxide_cleanup(void);
+
+// Mutex operations
+void* deloxide_create_mutex(void);
+void deloxide_destroy_mutex(void* mutex);
+void deloxide_mutex_lock(void* mutex);
+void deloxide_mutex_unlock(void* mutex);
+int deloxide_mutex_try_lock(void* mutex);
+
+// RwLock operations  
+void* deloxide_create_rwlock(void);
+void deloxide_destroy_rwlock(void* rwlock);
+void deloxide_rwlock_read(void* rwlock);
+void deloxide_rwlock_write(void* rwlock);
+void deloxide_rwlock_unlock_read(void* rwlock);
+void deloxide_rwlock_unlock_write(void* rwlock);
+
+// Condvar operations
+void* deloxide_create_condvar(void);
+void deloxide_destroy_condvar(void* condvar);
+void deloxide_condvar_wait(void* condvar, void* mutex);
+void deloxide_condvar_notify_one(void* condvar);
+void deloxide_condvar_notify_all(void* condvar);
+
+// Thread tracking
+void deloxide_thread_spawn(void);
+void deloxide_thread_exit(void);
+```
+
+#### Helper Macros
+
+Deloxide provides convenient macros for easier usage:
+
+```c
+// Thread tracking macros
+DEFINE_TRACKED_THREAD(fn_name)     // Define a tracked thread wrapper
+CREATE_TRACKED_THREAD(thread, fn, arg)  // Create and start tracked thread
+
+// Mutex macros
+LOCK_MUTEX(mutex)                  // Lock with automatic tracking
+UNLOCK_MUTEX(mutex)                // Unlock with automatic tracking
+
+// RwLock macros
+RWLOCK_READ(rwlock)                // Acquire read lock
+RWLOCK_WRITE(rwlock)               // Acquire write lock  
+RWUNLOCK_READ(rwlock)              // Release read lock
+RWUNLOCK_WRITE(rwlock)             // Release write lock
+
+// Condvar macros
+CONDVAR_WAIT(condvar, mutex)       // Wait on condition variable
+CONDVAR_NOTIFY_ONE(condvar)        // Signal one waiting thread
+CONDVAR_NOTIFY_ALL(condvar)        // Signal all waiting threads
+```
+
+#### Complete C Usage Example
+
+Here's a comprehensive example demonstrating all C API features in one program:
 
 ```c
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include "deloxide.h"
-
-void deadlock_callback(const char* json_info) {
-    printf("Deadlock detected! Details:\n%s\n", json_info);
-    // Automatically show visualization in browser
-    deloxide_showcase_current();
-}
-
-void* worker1(void* arg) {
-    void* mutex_a = ((void**)arg)[0];
-    void* mutex_b = ((void**)arg)[1];
-    
-    LOCK(mutex_a);
-    printf("Thread 1 acquired lock A\n");
-    usleep(100000);  // 100 ms
-    
-    LOCK(mutex_b);
-    printf("Thread 1 acquired lock B\n");
-    
-    return NULL;
-}
-
-void* worker2(void* arg) {
-    void* mutex_a = ((void**)arg)[0];
-    void* mutex_b = ((void**)arg)[1];
-    
-    LOCK(mutex_b);
-    printf("Thread 2 acquired lock B\n");
-    usleep(100000);  // 100 ms
-    
-    LOCK(mutex_a);
-    printf("Thread 2 acquired lock A\n");
-    
-    return NULL;
-}
-
-DEFINE_TRACKED_THREAD(worker1)
-DEFINE_TRACKED_THREAD(worker2)
-
-int main() {
-    // Initialize with deadlock callback
-    deloxide_init("deadlock.log", deadlock_callback);
-    
-    // Create mutexes
-    void* mutex_a = deloxide_create_mutex();
-    void* mutex_b = deloxide_create_mutex();
-    
-    // Set up thread arguments
-    void* thread1_args[2] = {mutex_a, mutex_b};
-    void* thread2_args[2] = {mutex_a, mutex_b};
-    
-    // Create threads
-    pthread_t t1, t2;
-    CREATE_TRACKED_THREAD(t1, worker1, thread1_args);
-    CREATE_TRACKED_THREAD(t2, worker2, thread2_args);
-    
-    sleep(1);
-    
-    return 0;
-}
-```
-
-### C RwLock Example
-### Condvar Example (Rust)
-
-```rust
-use deloxide::{Deloxide, Mutex, Condvar, Thread};
-use std::sync::Arc;
-use std::time::Duration;
-use std::thread;
-
-fn main() {
-    Deloxide::new().callback(|_| {}).start().unwrap();
-
-    let pair = Arc::new((Mutex::new(false), Condvar::new()));
-    let pair2 = pair.clone();
-
-    Thread::spawn(move || {
-        let (mutex, condvar) = (&pair2.0, &pair2.1);
-        let mut ready = mutex.lock();
-        while !*ready {
-            condvar.wait(&mut ready);
-        }
-    });
-
-    let pair3 = pair.clone();
-    Thread::spawn(move || {
-        thread::sleep(Duration::from_millis(50));
-        let (mutex, condvar) = (&pair3.0, &pair3.1);
-        let mut ready = mutex.lock();
-        *ready = true;
-        condvar.notify_one();
-    });
-
-    thread::sleep(Duration::from_millis(150));
-}
-```
-
-### Condvar Example (C)
-
-```c
-#include <pthread.h>
-#include <stdio.h>
 #include <unistd.h>
 #include "deloxide.h"
 
-void* waiter(void* arg) {
-    void** pair = (void**)arg; // pair[0]=mutex, pair[1]=condvar
-    LOCK(pair[0]);
-    int ready = 0;
-    while (!ready) {
-        CONDVAR_WAIT(pair[1], pair[0]);
-        // In a real program, 'ready' would be in shared state; for brevity omitted
-        ready = 1; // simulate condition met
-    }
-    UNLOCK(pair[0]);
-    return NULL;
-}
-
-int main() {
-    deloxide_init("deadlock.log", NULL);
-    void* mutex = deloxide_create_mutex();
-    void* condvar = deloxide_create_condvar();
-
-    pthread_t t;
-    void* pair[2] = {mutex, condvar};
-    CREATE_TRACKED_THREAD(t, waiter, pair);
-
-    usleep(50000);
-    LOCK(mutex);
-    CONDVAR_NOTIFY_ONE(condvar);
-    UNLOCK(mutex);
-
-    usleep(100000);
-    return 0;
-}
-```
-
-
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include "deloxide.h"
+// Global synchronization primitives
+void* counter_mutex;
+void* shared_rwlock;
+void* condition_mutex;
+void* condition_var;
+int shared_counter = 0;
+int condition_ready = 0;
 
 void deadlock_callback(const char* json_info) {
-    printf("Deadlock detected! Details:\n%s\n", json_info);
+    printf("=== DEADLOCK DETECTED ===\n%s\n", json_info);
     deloxide_showcase_current();
 }
 
+// Example 1: Mutex deadlock scenario
+void* mutex_worker1(void* arg) {
+    void** mutexes = (void**)arg;
+    void* mutex_a = mutexes[0];
+    void* mutex_b = mutexes[1];
+    
+    printf("Thread 1: Locking mutex A\n");
+    LOCK_MUTEX(mutex_a);
+    usleep(100000);  // 100ms delay
+    
+    printf("Thread 1: Trying to lock mutex B\n");
+    LOCK_MUTEX(mutex_b);  // Potential deadlock here
+    
+    printf("Thread 1: Got both locks, doing work\n");
+    UNLOCK_MUTEX(mutex_b);
+    UNLOCK_MUTEX(mutex_a);
+    return NULL;
+}
+
+void* mutex_worker2(void* arg) {
+    void** mutexes = (void**)arg;
+    void* mutex_a = mutexes[0];
+    void* mutex_b = mutexes[1];
+    
+    printf("Thread 2: Locking mutex B\n");
+    LOCK_MUTEX(mutex_b);
+    usleep(100000);  // 100ms delay
+    
+    printf("Thread 2: Trying to lock mutex A\n");
+    LOCK_MUTEX(mutex_a);  // Potential deadlock here
+    
+    printf("Thread 2: Got both locks, doing work\n");
+    UNLOCK_MUTEX(mutex_a);
+    UNLOCK_MUTEX(mutex_b);
+    return NULL;
+}
+
+// Example 2: RwLock usage
 void* reader_worker(void* arg) {
-    void* rwlock = (void*)arg;
+    int reader_id = *(int*)arg;
     
-    RWLOCK_READ(rwlock);
-    printf("Reader acquired read lock\n");
-    usleep(100000);  // 100 ms
-    RWLOCK_UNLOCK_READ(rwlock);
-    printf("Reader released read lock\n");
+    printf("Reader %d: Acquiring read lock\n", reader_id);
+    RWLOCK_READ(shared_rwlock);
     
+    printf("Reader %d: Reading shared data: %d\n", reader_id, shared_counter);
+    usleep(50000);  // 50ms
+    
+    RWUNLOCK_READ(shared_rwlock);
+    printf("Reader %d: Released read lock\n", reader_id);
     return NULL;
 }
 
 void* writer_worker(void* arg) {
-    void* rwlock = (void*)arg;
+    printf("Writer: Acquiring read lock first\n");
+    RWLOCK_READ(shared_rwlock);
     
-    RWLOCK_READ(rwlock);
-    printf("Writer acquired read lock, attempting to upgrade...\n");
-    usleep(50000);  // 50 ms
-    RWLOCK_WRITE(rwlock);  // This will deadlock!
-    printf("Writer acquired write lock\n");
-    RWLOCK_UNLOCK_WRITE(rwlock);
-    RWLOCK_UNLOCK_READ(rwlock);
+    printf("Writer: Attempting to upgrade to write lock\n");
+    usleep(25000);  // 25ms
+    RWLOCK_WRITE(shared_rwlock);  // This will deadlock!
     
+    printf("Writer: Writing to shared data\n");
+    shared_counter++;
+    
+    RWUNLOCK_WRITE(shared_rwlock);
     return NULL;
 }
 
-DEFINE_TRACKED_THREAD(reader_worker)
-DEFINE_TRACKED_THREAD(writer_worker)
-
-int main() {
-    // Initialize with deadlock callback
-    deloxide_init("deadlock.log", deadlock_callback);
+// Example 3: Condvar usage
+void* condvar_waiter(void* arg) {
+    printf("Waiter: Waiting for condition\n");
+    LOCK_MUTEX(condition_mutex);
     
-    // Create RwLock
-    void* rwlock = deloxide_create_rwlock();
-    
-    // Create multiple reader threads
-    pthread_t readers[3];
-    for (int i = 0; i < 3; ++i) {
-        CREATE_TRACKED_THREAD(readers[i], reader_worker, rwlock);
+    while (!condition_ready) {
+        CONDVAR_WAIT(condition_var, condition_mutex);
     }
     
-    // Create writer thread
-    pthread_t writer;
-    CREATE_TRACKED_THREAD(writer, writer_worker, rwlock);
+    printf("Waiter: Condition met, proceeding\n");
+    UNLOCK_MUTEX(condition_mutex);
+    return NULL;
+}
+
+void* condvar_notifier(void* arg) {
+    usleep(200000);  // 200ms delay
     
-    sleep(1);
+    printf("Notifier: Setting condition and signaling\n");
+    LOCK_MUTEX(condition_mutex);
+    condition_ready = 1;
+    CONDVAR_NOTIFY_ONE(condition_var);
+    UNLOCK_MUTEX(condition_mutex);
+    return NULL;
+}
+
+// Define tracked thread wrappers
+DEFINE_TRACKED_THREAD(mutex_worker1)
+DEFINE_TRACKED_THREAD(mutex_worker2)
+DEFINE_TRACKED_THREAD(reader_worker)
+DEFINE_TRACKED_THREAD(writer_worker)
+DEFINE_TRACKED_THREAD(condvar_waiter)
+DEFINE_TRACKED_THREAD(condvar_notifier)
+
+int main() {
+    printf("Initializing Deloxide with deadlock detection\n");
+    deloxide_init("c_deadlock_test.json", deadlock_callback);
     
+    // Create synchronization primitives
+    void* mutex_a = deloxide_create_mutex();
+    void* mutex_b = deloxide_create_mutex();
+    counter_mutex = deloxide_create_mutex();
+    shared_rwlock = deloxide_create_rwlock();
+    condition_mutex = deloxide_create_mutex();
+    condition_var = deloxide_create_condvar();
+    
+    // Example 1: Mutex deadlock test
+    printf("\n=== Testing Mutex Deadlock Scenario ===\n");
+    void* mutex_args1[2] = {mutex_a, mutex_b};
+    void* mutex_args2[2] = {mutex_a, mutex_b};
+    
+    pthread_t mutex_threads[2];
+    CREATE_TRACKED_THREAD(mutex_threads[0], mutex_worker1, mutex_args1);
+    CREATE_TRACKED_THREAD(mutex_threads[1], mutex_worker2, mutex_args2);
+    
+    // Example 2: RwLock upgrade deadlock test
+    printf("\n=== Testing RwLock Upgrade Deadlock ===\n");
+    pthread_t reader_threads[3];
+    int reader_ids[3] = {1, 2, 3};
+    
+    for (int i = 0; i < 3; i++) {
+        CREATE_TRACKED_THREAD(reader_threads[i], reader_worker, &reader_ids[i]);
+    }
+    
+    pthread_t writer_thread;
+    CREATE_TRACKED_THREAD(writer_thread, writer_worker, NULL);
+    
+    // Example 3: Condvar test (should work without deadlock)
+    printf("\n=== Testing Condvar Synchronization ===\n");
+    pthread_t condvar_threads[2];
+    CREATE_TRACKED_THREAD(condvar_threads[0], condvar_waiter, NULL);
+    CREATE_TRACKED_THREAD(condvar_threads[1], condvar_notifier, NULL);
+    
+    // Let all threads run and potentially detect deadlocks
+    printf("\nWaiting for threads to complete or deadlock...\n");
+    sleep(3);
+    
+    printf("Program completed - cleaning up\n");
+    deloxide_cleanup();
     return 0;
 }
 ```
+
+#### C API Portability Notes
+
+- **Linux/macOS**: Full pthread support, all features available
+- **Windows**: Requires pthread-compatible library. Refer to [C API portability notes]
 
 ## Stress Testing
 
@@ -378,7 +515,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.0-pre", features = ["stress-test"] }
+deloxide = { version = "0.2.1-pre", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -430,6 +567,9 @@ deloxide_init("deadlock.log", deadlock_callback);
 - **Random Preemption**: Randomly delays threads before lock acquisitions with configurable probability
 - **Component-Based**: Analyzes lock acquisition patterns and intelligently targets delays to increase deadlock probability
 
+> [!NOTE]
+> Condvar wake-ups (notify_one/notify_all) trigger a synthesized mutex attempt for the woken thread to model the required mutex re-acquisition. Stress injection occurs on this synthetic mutex attempt (and on normal lock attempts), not directly on the condvar wait/notify operations.
+
 ## Building and Installation
 
 ### Rust
@@ -438,14 +578,14 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 
 ```toml
 [dependencies]
-deloxide = "0.2.0-pre"
+deloxide = "0.2.1-pre"
 ```
 
 With stress testing:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.0-pre", features = ["stress-test"] }
+deloxide = { version = "0.2.1-pre", features = ["stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:
@@ -483,6 +623,33 @@ gcc -Iinclude your_program.c -Ltarget/release -ldeloxide -lpthread -o your_progr
 A Makefile is included in the repository to simplify building and testing with C programs.
 It handles building the Rust library and compiling the C test programs automatically.
 
+### C API portability notes
+
+- Thread ID size across FFI
+  - The C header uses `uintptr_t` for all thread IDs; the Rust side uses `usize`. This ensures correct sizes on LP64 (Linux/macOS) and LLP64 (Windows).
+
+- pthread-based helpers are POSIX-only
+  - The convenience macros `DEFINE_TRACKED_THREAD` and `CREATE_TRACKED_THREAD` depend on `pthread.h` and are available only on non-Windows platforms.
+  - On Windows, these macros are disabled at compile time. You can still use the full C API by manually registering thread lifecycle events.
+
+- Manual thread registration (Windows or custom runtimes)
+  1. Create your thread using your platform's API.
+  2. In the thread entry, call `deloxide_register_thread_spawn(child_tid, parent_tid)` once. On the thread, get IDs from `deloxide_get_thread_id()`.
+  3. Before the thread returns, call `deloxide_register_thread_exit(current_tid)`.
+
+  Minimal example sketch (pseudo-C):
+
+  ```c
+  // In parent, capture parent thread id
+  uintptr_t parent_tid = deloxide_get_thread_id();
+  // Create thread with OS API (e.g., _beginthreadex / CreateThread)
+  // In child thread entry:
+  uintptr_t child_tid = deloxide_get_thread_id();
+  deloxide_register_thread_spawn(child_tid, parent_tid);
+  // ... user work ...
+  deloxide_register_thread_exit(child_tid);
+  ```
+
 ## Visualization
 
 Deloxide includes a web-based visualization tool. After detecting a deadlock, use the showcase feature to view it in your browser:
@@ -509,125 +676,6 @@ Additionally, you can manually upload a log file to visualize deadlocks through 
 
 [Deloxide Showcase](https://deloxide.vercel.app/)
 
-## API Reference
-
-### Rust API
-
-#### Mutex
-```rust
-use deloxide::Mutex;
-
-let mutex = Mutex::new(data);
-let guard = mutex.lock();  // Acquire lock
-// Use guard to access data
-// Lock is automatically released when guard is dropped
-```
-
-#### RwLock
-```rust
-use deloxide::RwLock;
-
-let rwlock = RwLock::new(data);
-
-// Read operations (shared access)
-let read_guard = rwlock.read();
-// Multiple readers can access simultaneously
-// Lock is automatically released when guard is dropped
-
-// Write operations (exclusive access)
-let write_guard = rwlock.write();
-// Only one writer can access at a time
-// Lock is automatically released when guard is dropped
-
-// Try operations (non-blocking)
-if let Some(read_guard) = rwlock.try_read() {
-    // Read lock acquired immediately
-}
-
-if let Some(write_guard) = rwlock.try_write() {
-    // Write lock acquired immediately
-}
-```
-
-#### Condvar
-```rust
-use deloxide::{Mutex, Condvar};
-
-let condvar = Condvar::new();
-let mut guard = mutex.lock();
-condvar.wait(&mut guard);        // Wait until notified; releases and re-acquires mutex around wait
-condvar.notify_one();            // Wake a single waiter
-condvar.notify_all();            // Wake all waiters
-```
-
-### C API
-
-#### Mutex Functions
-```c
-// Create and destroy
-void* mutex = deloxide_create_mutex();
-deloxide_destroy_mutex(mutex);
-
-// Lock and unlock
-deloxide_lock_mutex(mutex);
-deloxide_unlock_mutex(mutex);
-
-// Convenience macros
-LOCK_MUTEX(mutex);
-UNLOCK_MUTEX(mutex);
-```
-
-#### RwLock Functions
-#### Condvar Functions
-```c
-// Create and destroy
-void* condvar = deloxide_create_condvar();
-deloxide_destroy_condvar(condvar);
-
-// Wait and notify
-deloxide_condvar_wait(condvar, mutex);
-deloxide_condvar_wait_timeout(condvar, mutex, 100 /* ms */);
-deloxide_condvar_notify_one(condvar);
-deloxide_condvar_notify_all(condvar);
-
-// Convenience macros
-CONDVAR_WAIT(condvar, mutex);
-CONDVAR_WAIT_TIMEOUT(condvar, mutex, 100);
-CONDVAR_NOTIFY_ONE(condvar);
-CONDVAR_NOTIFY_ALL(condvar);
-```
-```c
-// Create and destroy
-void* rwlock = deloxide_create_rwlock();
-deloxide_destroy_rwlock(rwlock);
-
-// Read operations
-deloxide_rw_lock_read(rwlock);
-deloxide_rw_unlock_read(rwlock);
-
-// Write operations
-deloxide_rw_lock_write(rwlock);
-deloxide_rw_unlock_write(rwlock);
-
-// Convenience macros
-RWLOCK_READ(rwlock);
-RWLOCK_UNLOCK_READ(rwlock);
-RWLOCK_WRITE(rwlock);
-RWLOCK_UNLOCK_WRITE(rwlock);
-```
-
-## Common Deadlock Scenarios
-
-### Mutex Deadlocks
-1. **Circular Wait**: Thread A holds lock 1 and waits for lock 2, while Thread B holds lock 2 and waits for lock 1
-2. **Resource Ordering**: Locks acquired in different orders by different threads
-3. **Nested Locks**: Complex scenarios with multiple levels of lock nesting
-
-### RwLock Deadlocks
-1. **Upgrade Deadlock**: A thread holds a read lock and tries to upgrade to a write lock while other readers are active
-2. **Writer Starvation**: Multiple readers prevent a writer from acquiring the lock
-3. **Mixed Lock Scenarios**: Combinations of RwLock and Mutex that create circular dependencies
-
 ## Documentation
 
 For more detailed documentation:
@@ -647,6 +695,9 @@ This part outlines the performance, deadlock detection capabilities, and robustn
 *   **Reliability:** `Deloxide` is robust and does **not** produce false alarms in deadlock-free code.
 
 All benchmarks were run on a base M1 MacBook Pro with Rust 1.86.0-nightly.
+
+> [!IMPORTANT]
+> The following benchmarks were conducted using version v0.1.0 and currently cover only Mutex performance. Benchmarks for RwLock and Condvar will be added in future updates.
 
 ### 1. Performance Overhead
 
@@ -731,22 +782,7 @@ We ran two deadlock-free scenarios 100 times each:
 **Result:**
 Across all tests, `Deloxide` (in all configurations), `parking_lot`, and `no_deadlocks` all passed with **zero false positives**.
 
-## Examples
-
-Example programs are provided in both Rust and C to demonstrate various deadlock scenarios and detection capabilities:
-
-### Mutex Examples
-- **Two Thread Deadlock**: Simple deadlock between two threads
-- **Dining Philosophers**: Classic deadlock scenario
-- **Random Ring**: Deadlock in a ring of threads
-
-### RwLock Examples
-- **RwLock Upgrade Deadlock**: Deadlock when a thread tries to upgrade from read to write lock
-- **Multiple Readers No Deadlock**: Demonstrates that multiple readers can coexist without deadlock
-- **Writer Waits for Readers**: Shows proper behavior when a writer waits for readers to finish
-- **Three Thread RwLock Cycle**: Complex deadlock involving three threads and multiple RwLocks
-
-See examples in `/tests` or `/c_tests`
+See tests/examples in `/tests` or `/c_tests`
 
 ## License
 
