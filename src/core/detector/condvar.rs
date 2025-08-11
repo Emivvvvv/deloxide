@@ -22,7 +22,11 @@ impl Detector {
         self.cv_waiters.insert(condvar_id, VecDeque::new());
 
         self.log_if_enabled(|logger| {
-            logger.log_lock_event(condvar_id, Some(get_current_thread_id()), Events::Spawn);
+            logger.log_lock_event(
+                condvar_id,
+                Some(get_current_thread_id()),
+                Events::CondvarSpawn,
+            );
         });
     }
 
@@ -42,7 +46,7 @@ impl Detector {
             .retain(|_, &mut (cv_id, _)| cv_id != condvar_id);
 
         if let Some(logger) = &self.logger {
-            logger.log_lock_event(condvar_id, None, Events::Exit);
+            logger.log_lock_event(condvar_id, None, Events::CondvarExit);
         }
     }
 

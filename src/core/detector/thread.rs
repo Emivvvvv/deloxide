@@ -14,7 +14,7 @@ impl Detector {
     /// * `parent_id` - Optional ID of the parent thread that created this thread
     pub fn on_thread_spawn(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
         if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, parent_id, Events::Spawn);
+            logger.log_thread_event(thread_id, parent_id, Events::ThreadSpawn);
         }
 
         // Ensure node exists in the wait-for graph
@@ -30,7 +30,7 @@ impl Detector {
     /// * `thread_id` - ID of the exiting thread
     pub fn on_thread_exit(&mut self, thread_id: ThreadId) {
         if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, None, Events::Exit);
+            logger.log_thread_event(thread_id, None, Events::ThreadExit);
         }
 
         // remove thread and its edges from the wait-for graph

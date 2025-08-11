@@ -1,5 +1,5 @@
 pub mod encoder;
-pub use encoder::process_log_for_url;
+use encoder::process_log_for_url;
 
 use crate::core::detector::flush_global_detector_logs;
 use crate::core::logger::{self};

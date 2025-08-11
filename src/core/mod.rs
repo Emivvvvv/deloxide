@@ -34,7 +34,7 @@ pub mod stress;
 #[cfg(feature = "stress-test")]
 pub use stress::{StressConfig, StressMode};
 
-use crate::core::logger::EventLogger;
+use logger::EventLogger;
 use anyhow::Result;
 
 /// Deloxide configuration builder struct

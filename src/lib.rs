@@ -211,7 +211,7 @@ pub use core::{
 pub use core::{StressConfig, StressMode};
 
 mod showcase;
-pub use showcase::{process_log_for_url, showcase, showcase_this};
+pub use showcase::{showcase, showcase_this};
 
 pub mod ffi;
 

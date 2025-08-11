@@ -42,10 +42,25 @@ pub type CondvarId = LockId;
 /// and their interactions, which is essential for deadlock detection.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Events {
-    /// A new Thread/Lock is spawned
-    Spawn,
-    /// The Thread/Lock is exited/dropped
-    Exit,
+    /// A new thread is spawned
+    ThreadSpawn,
+    /// The thread is exited
+    ThreadExit,
+
+    /// A new Mutex is created
+    MutexSpawn,
+    /// The Mutex is destroyed
+    MutexExit,
+
+    /// A new RwLock is created
+    RwSpawn,
+    /// The RwLock is destroyed
+    RwExit,
+
+    /// A new Condvar is created
+    CondvarSpawn,
+    /// The Condvar is destroyed
+    CondvarExit,
 
     /// Thread is attempting to acquire a mutex
     MutexAttempt,

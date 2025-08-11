@@ -35,7 +35,7 @@ pub fn expect_deadlock(h: &DetectorHarness, timeout: Duration) -> DeadlockInfo {
             assert!(*h.detected.lock().unwrap(), "Deadlock flag should be set");
             info
         }
-        Err(_) => panic!("No deadlock detected within {:?}", timeout),
+        Err(_) => panic!("No deadlock detected within {timeout:?}"),
     }
 }
 
