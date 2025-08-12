@@ -3,9 +3,6 @@
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
 
-> [!IMPORTANT]
->  Deloxide is under active development. We've recently added RwLock and Condvar support, but visualization features are not yet available. It will be available in next major update. Stay tuned for updates!
-
 Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex and reader-writer lock operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
 
 ## Features
@@ -515,7 +512,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.1-pre", features = ["stress-test"] }
+deloxide = { version = "0.2.0", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -578,14 +575,14 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 
 ```toml
 [dependencies]
-deloxide = "0.2.1-pre"
+deloxide = "0.2.0"
 ```
 
 With stress testing:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.1-pre", features = ["stress-test"] }
+deloxide = { version = "0.2.0", features = ["stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:
