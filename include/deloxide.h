@@ -82,10 +82,13 @@
  *        UNLOCK_MUTEX(mutex);
  */
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#if !defined(_WIN32)
+#include <pthread.h>
+#endif
 
 /**
  * @brief Define a tracked thread function
@@ -108,14 +111,20 @@
  * DEFINE_TRACKED_THREAD(worker)
  * ```
  */
+#if !defined(_WIN32)
+typedef struct {
+    uintptr_t parent_tid;
+    void* user_arg;
+} deloxide_thread_arg_t;
+
 #define DEFINE_TRACKED_THREAD(fn_name) \
-    void* fn_name##_tracked(void* arg) { \
-        unsigned long parent_tid = (uintptr_t)arg; \
-        unsigned long tid = deloxide_get_thread_id(); \
-        deloxide_register_thread_spawn(tid, parent_tid); \
+    void* fn_name##_tracked(void* _arg) { \
+        deloxide_thread_arg_t a = *(deloxide_thread_arg_t*)_arg; \
+        free(_arg); \
+        uintptr_t tid = deloxide_get_thread_id(); \
+        deloxide_register_thread_spawn(tid, a.parent_tid); \
         extern void* fn_name(void*); /* forward declare user function */ \
-        void* real_arg = (void*)(uintptr_t)parent_tid; /* unwrap real argument */ \
-        void* ret = fn_name(real_arg); \
+        void* ret = fn_name(a.user_arg); \
         deloxide_register_thread_exit(tid); \
         return ret; \
     }
@@ -137,8 +146,15 @@
  * ```
  */
 #define CREATE_TRACKED_THREAD(thread_var, original_fn, real_arg) do { \
-    pthread_create(&(thread_var), NULL, original_fn##_tracked, (void*)(uintptr_t)(real_arg)); \
+    deloxide_thread_arg_t* a = (deloxide_thread_arg_t*)malloc(sizeof(deloxide_thread_arg_t)); \
+    a->parent_tid = deloxide_get_thread_id(); \
+    a->user_arg = (void*)(real_arg); \
+    pthread_create(&(thread_var), NULL, original_fn##_tracked, (void*)a); \
 } while(0)
+#else
+#define DEFINE_TRACKED_THREAD(fn_name) /* not available on Windows */
+#define CREATE_TRACKED_THREAD(thread_var, original_fn, real_arg) /* not available on Windows */
+#endif
 
 
 /**
@@ -328,7 +344,7 @@ void* deloxide_create_mutex();
  *
  * @return Opaque pointer to the mutex, or NULL on allocation failure.
  */
-void* deloxide_create_mutex_with_creator(unsigned long creator_thread_id);
+void* deloxide_create_mutex_with_creator(uintptr_t creator_thread_id);
 
 /**
  * @brief Destroy a tracked mutex.
@@ -377,7 +393,7 @@ int deloxide_unlock_mutex(void* mutex);
  *
  * @return 0 on success.
  */
-int deloxide_register_thread_spawn(unsigned long thread_id, unsigned long parent_id);
+int deloxide_register_thread_spawn(uintptr_t thread_id, uintptr_t parent_id);
 
 /**
  * @brief Register a thread exit with the deadlock detector.
@@ -391,7 +407,7 @@ int deloxide_register_thread_spawn(unsigned long thread_id, unsigned long parent
  *
  * @return 0 on success.
  */
-int deloxide_register_thread_exit(unsigned long thread_id);
+int deloxide_register_thread_exit(uintptr_t thread_id);
 
 /**
  * @brief Get a unique identifier for the current thread.
@@ -400,7 +416,7 @@ int deloxide_register_thread_exit(unsigned long thread_id);
  *
  * @return A unique thread ID as an unsigned long.
  */
-unsigned long deloxide_get_thread_id();
+uintptr_t deloxide_get_thread_id();
 
 /**
  * @brief Get the creator thread ID of a mutex.
@@ -409,7 +425,7 @@ unsigned long deloxide_get_thread_id();
  *
  * @return The thread ID of the creator thread, or 0 if the mutex is NULL.
  */
-unsigned long deloxide_get_mutex_creator(void* mutex);
+uintptr_t deloxide_get_mutex_creator(void* mutex);
 
 /**
  * @brief Flush all pending log entries to disk.
@@ -523,7 +539,7 @@ void* deloxide_create_rwlock();
  * @param creator_thread_id ID of the thread to register as the creator.
  * @return Opaque pointer to the RwLock, or NULL on allocation failure.
  */
-void* deloxide_create_rwlock_with_creator(unsigned long creator_thread_id);
+void* deloxide_create_rwlock_with_creator(uintptr_t creator_thread_id);
 
 /**
  * @brief Destroy a tracked RwLock.
@@ -579,6 +595,155 @@ int deloxide_rw_unlock_write(void* rwlock);
  * @param rwlock Pointer to a RwLock created with deloxide_create_rwlock.
  * @return The thread ID of the creator thread, or 0 if the RwLock is NULL.
  */
-unsigned long deloxide_get_rwlock_creator(void* rwlock);
+uintptr_t deloxide_get_rwlock_creator(void* rwlock);
+
+/**
+ * @brief Create a new tracked condition variable.
+ *
+ * Creates a condition variable that will be tracked by the deadlock detector.
+ * The current thread will be registered as the creator of this condition variable.
+ *
+ * @return Opaque pointer to the condition variable, or NULL on allocation failure.
+ */
+void* deloxide_create_condvar();
+
+/**
+ * @brief Create a new tracked condition variable with a specified creator thread.
+ *
+ * Allows specifying which thread should be considered the "owner" for resource tracking.
+ *
+ * @param creator_thread_id ID of the thread to register as the creator.
+ * @return Opaque pointer to the condition variable, or NULL on allocation failure.
+ */
+void* deloxide_create_condvar_with_creator(uintptr_t creator_thread_id);
+
+/**
+ * @brief Destroy a tracked condition variable.
+ *
+ * @param condvar Pointer to a condition variable created with deloxide_create_condvar.
+ * @note After calling this function, the condition variable pointer must not be used again.
+ */
+void deloxide_destroy_condvar(void* condvar);
+
+/**
+ * @brief Wait on a condition variable.
+ *
+ * This function atomically releases the associated mutex and waits for the condition variable
+ * to be signaled. When the function returns, the mutex will be re-acquired.
+ *
+ * @param condvar Pointer to a condition variable created with deloxide_create_condvar.
+ * @param mutex Pointer to a mutex that is currently locked by this thread.
+ * @return  0 on success
+ *         -1 if condvar is NULL
+ *         -2 if mutex is NULL  
+ *         -3 if mutex is not currently held by this thread
+ *         -4 if wait operation failed
+ */
+int deloxide_condvar_wait(void* condvar, void* mutex);
+
+/**
+ * @brief Wait on a condition variable with a timeout.
+ *
+ * This function atomically releases the associated mutex and waits for the condition variable
+ * to be signaled or until the timeout expires. When the function returns, the mutex will be re-acquired.
+ *
+ * @param condvar Pointer to a condition variable created with deloxide_create_condvar.
+ * @param mutex Pointer to a mutex that is currently locked by this thread.
+ * @param timeout_ms Timeout in milliseconds. The function will wait at most this long.
+ * @return  0 on success (condition variable was signaled)
+ *          1 on timeout
+ *         -1 if condvar is NULL
+ *         -2 if mutex is NULL
+ *         -3 if mutex is not currently held by this thread
+ *         -4 if wait operation failed
+ */
+int deloxide_condvar_wait_timeout(void* condvar, void* mutex, unsigned long timeout_ms);
+
+/**
+ * @brief Signal one thread waiting on the condition variable.
+ *
+ * This function wakes up one thread that is waiting on the condition variable.
+ * If no threads are waiting, this function has no effect.
+ *
+ * @param condvar Pointer to a condition variable created with deloxide_create_condvar.
+ * @return  0 on success
+ *         -1 if condvar is NULL
+ */
+int deloxide_condvar_notify_one(void* condvar);
+
+/**
+ * @brief Signal all threads waiting on the condition variable.
+ *
+ * This function wakes up all threads that are waiting on the condition variable.
+ * If no threads are waiting, this function has no effect.
+ *
+ * @param condvar Pointer to a condition variable created with deloxide_create_condvar.
+ * @return  0 on success
+ *         -1 if condvar is NULL
+ */
+int deloxide_condvar_notify_all(void* condvar);
+
+/**
+ * @brief Wait on a tracked condition variable.
+ *
+ * This macro waits on a condition variable while ensuring the operation is tracked by the deadlock detector.
+ * The associated mutex will be automatically unlocked during wait and re-locked when signaled.
+ * Always use this instead of directly calling deloxide_condvar_wait().
+ *
+ * @param condvar_ptr Pointer to the condition variable to wait on
+ * @param mutex_ptr Pointer to the mutex that must be currently locked
+ */
+#define CONDVAR_WAIT(condvar_ptr, mutex_ptr) do { \
+    int result = deloxide_condvar_wait((condvar_ptr), (mutex_ptr)); \
+    if (result != 0) { \
+        fprintf(stderr, "Failed to wait on condition variable (error %d)\n", result); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Wait on a tracked condition variable with timeout.
+ *
+ * This macro waits on a condition variable with a timeout while ensuring the operation is tracked.
+ * The associated mutex will be automatically unlocked during wait and re-locked when signaled or timeout occurs.
+ * Always use this instead of directly calling deloxide_condvar_wait_timeout().
+ *
+ * @param condvar_ptr Pointer to the condition variable to wait on
+ * @param mutex_ptr Pointer to the mutex that must be currently locked
+ * @param timeout_ms Timeout in milliseconds
+ * @return The result from deloxide_condvar_wait_timeout (0=success, 1=timeout, <0=error)
+ */
+#define CONDVAR_WAIT_TIMEOUT(condvar_ptr, mutex_ptr, timeout_ms) \
+    deloxide_condvar_wait_timeout((condvar_ptr), (mutex_ptr), (timeout_ms))
+
+/**
+ * @brief Signal one thread waiting on a condition variable.
+ *
+ * This macro signals one waiting thread while ensuring the operation is tracked by the deadlock detector.
+ * Always use this instead of directly calling deloxide_condvar_notify_one().
+ *
+ * @param condvar_ptr Pointer to the condition variable to signal
+ */
+#define CONDVAR_NOTIFY_ONE(condvar_ptr) do { \
+    if (deloxide_condvar_notify_one((condvar_ptr)) != 0) { \
+        fprintf(stderr, "Failed to notify one on condition variable\n"); \
+        exit(1); \
+    } \
+} while(0)
+
+/**
+ * @brief Signal all threads waiting on a condition variable.
+ *
+ * This macro signals all waiting threads while ensuring the operation is tracked by the deadlock detector.
+ * Always use this instead of directly calling deloxide_condvar_notify_all().
+ *
+ * @param condvar_ptr Pointer to the condition variable to signal
+ */
+#define CONDVAR_NOTIFY_ALL(condvar_ptr) do { \
+    if (deloxide_condvar_notify_all((condvar_ptr)) != 0) { \
+        fprintf(stderr, "Failed to notify all on condition variable\n"); \
+        exit(1); \
+    } \
+} while(0)
 
 #endif /* DELOXIDE_H */

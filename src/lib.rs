@@ -15,7 +15,7 @@
 //! ## Features
 //!
 //! - **Real-time deadlock detection**: Monitors thread-lock interactions to detect deadlocks as they happen
-//! - **Multiple lock types**: Supports both `Mutex` and `RwLock` (reader-writer locks) for comprehensive deadlock detection
+//! - **Multiple sync primitives**: Supports `Mutex`, `RwLock`, and `Condvar` for comprehensive deadlock detection
 //! - **Lock operation logging**: Records all lock operations for later analysis
 //! - **Web-based visualization**: Visualize thread-lock relationships to understand deadlock patterns
 //! - **Cross-language support**: Core implementation in Rust with C FFI bindings
@@ -102,10 +102,108 @@
 //!     println!("Writer acquired write lock");
 //! });
 //! ```
+//!
+//! ### Condvar Example
+//!
+//! ```rust
+//! use deloxide::{Deloxide, Mutex, Condvar, Thread};
+//! use std::sync::Arc;
+//! use std::time::Duration;
+//! use std::thread;
+//!
+//! // Initialize the detector (omitted callback for brevity)
+//! let _ = Deloxide::new().start();
+//!
+//! let pair = Arc::new((Mutex::new(false), Condvar::new()));
+//! let pair2 = pair.clone();
+//!
+//! // Thread waiting on condition
+//! Thread::spawn(move || {
+//!     let (mutex, condvar) = (&pair2.0, &pair2.1);
+//!     let mut ready = mutex.lock();
+//!     while !*ready {
+//!         condvar.wait(&mut ready);
+//!     }
+//! });
+//!
+//! // Notifier thread
+//! let pair3 = pair.clone();
+//! Thread::spawn(move || {
+//!     thread::sleep(Duration::from_millis(50));
+//!     let (mutex, condvar) = (&pair3.0, &pair3.1);
+//!     let mut ready = mutex.lock();
+//!     *ready = true;
+//!     condvar.notify_one();
+//! });
+//!
+//! thread::sleep(Duration::from_millis(150));
+//! ```
+//!
+//! ## Visualization (Showcase)
+//!
+//! You can open the interactive visualization in your browser for a given log file,
+//! or for the currently active log if you initialized logging with `with_log()`.
+//!
+//! ```rust,no_run
+//! use deloxide::{Deloxide, showcase, showcase_this};
+//!
+//! // Initialize with logging enabled
+//! Deloxide::new()
+//!     .with_log("logs/deadlock_{timestamp}.json")
+//!     .callback(|info| {
+//!         eprintln!("Deadlock: {:?}", info.thread_cycle);
+//!         // Optionally open the current log automatically
+//!         showcase_this().expect("Failed to launch visualization");
+//!     })
+//!     .start()
+//!     .unwrap();
+//!
+//! // Or later, open a specific log file
+//! showcase("logs/deadlock_20250101_120000.json").unwrap();
+//! ```
+//!
+//! ## Stress Testing (optional feature)
+//!
+//! Enable the `stress-test` feature to increase the probability of deadlocks by
+//! strategically delaying threads before lock attempts.
+//!
+//! ```toml
+//! # Cargo.toml
+//! [dependencies]
+//! deloxide = { version = "0.2.0", features = ["stress-test"] }
+//! ```
+//!
+//! ```rust
+//! #[cfg(feature = "stress-test")]
+//! {
+//! use deloxide::{Deloxide, StressConfig};
+//!
+//! // Random preemption strategy with default config
+//! Deloxide::new()
+//!     .with_random_stress()
+//!     .start()
+//!     .unwrap();
+//!
+//! // Component-based strategy with custom config
+//! Deloxide::new()
+//!     .with_component_stress()
+//!     .with_stress_config(StressConfig {
+//!         preemption_probability: 0.7,
+//!         min_delay_ms: 2,
+//!         max_delay_ms: 15,
+//!         preempt_after_release: true,
+//!     })
+//!     .start()
+//!     .unwrap();
+//! }
+//! ```
+//!
+//! Note: For `Condvar`, stress is applied to the synthesized mutex attempt that
+//! the woken thread performs to re-acquire its mutex after a notify.
 
 mod core;
 pub use core::{
-    DeadlockInfo, Deloxide, Mutex, RwLock, Thread,
+    Condvar, DeadlockInfo, Deloxide, Mutex, RwLock, Thread,
     types::{LockId, ThreadId},
 };
 
@@ -113,14 +211,13 @@ pub use core::{
 pub use core::{StressConfig, StressMode};
 
 mod showcase;
-pub use showcase::{process_log_for_url, showcase, showcase_this};
+pub use showcase::{showcase, showcase_this};
 
 pub mod ffi;
 
 // Ascii art font name "miniwi"
 const BANNER: &str = r#"
 ▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▄▖
-▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌▄▖▛▌▛▘█▌
-▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▙▖▗ █▌  ▙▌▌ ▙▖
-                                ▌
+▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌
+▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▙▖▗ █▌
 "#;

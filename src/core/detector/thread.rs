@@ -14,7 +14,7 @@ impl Detector {
     /// * `parent_id` - Optional ID of the parent thread that created this thread
     pub fn on_thread_spawn(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
         if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, parent_id, Events::Spawn);
+            logger.log_thread_event(thread_id, parent_id, Events::ThreadSpawn);
         }
 
         // Ensure node exists in the wait-for graph
@@ -30,13 +30,17 @@ impl Detector {
     /// * `thread_id` - ID of the exiting thread
     pub fn on_thread_exit(&mut self, thread_id: ThreadId) {
         if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, None, Events::Exit);
+            logger.log_thread_event(thread_id, None, Events::ThreadExit);
         }
 
         // remove thread and its edges from the wait-for graph
         self.wait_for_graph.remove_thread(thread_id);
         // no more held locks
         self.thread_holds.remove(&thread_id);
+
+        // Note: We don't clean up cv_woken, thread_wait_cv, or thread_waits_for here
+        // because these might be needed for deadlock detection even after thread exit.
+        // This is a design choice - we prioritize correctness over immediate cleanup.
     }
 }
 

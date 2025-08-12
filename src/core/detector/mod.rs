@@ -1,3 +1,4 @@
+pub mod condvar;
 pub mod mutex;
 pub mod rwlock;
 mod stress;
@@ -11,11 +12,12 @@ use crate::core::StressMode;
 use crate::core::graph::WaitForGraph;
 use crate::core::logger::EventLogger;
 
-use crate::core::types::{DeadlockInfo, LockId, ThreadId};
+use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
 use anyhow::Result;
 use crossbeam_channel::{Sender, unbounded};
 use fxhash::{FxHashMap, FxHashSet};
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::sync::{Arc, OnceLock};
 
 // Global dispatcher for asynchronous deadlock callback execution
@@ -95,6 +97,12 @@ pub struct Detector {
     rwlock_readers: FxHashMap<LockId, FxHashSet<ThreadId>>,
     /// Maps RwLock IDs to the current writer (if any)
     rwlock_writer: FxHashMap<LockId, ThreadId>,
+    /// Maps condvar IDs to queues of waiting threads and their associated mutex IDs
+    cv_waiters: FxHashMap<CondvarId, VecDeque<(ThreadId, LockId)>>,
+    /// Maps threads to the condvar and mutex they're waiting on
+    thread_wait_cv: FxHashMap<ThreadId, (CondvarId, LockId)>,
+    /// Set of threads that have been woken from condvar waits (for diagnostics)
+    cv_woken: FxHashSet<ThreadId>,
     /// Event logger for recording lock, thread operations, and interactions (logging is optional)
     logger: Option<EventLogger>,
     #[cfg(feature = "stress-test")]
@@ -112,6 +120,16 @@ impl Default for Detector {
 }
 
 impl Detector {
+    /// Helper method to log events if logger is present
+    fn log_if_enabled<F>(&self, log_fn: F)
+    where
+        F: FnOnce(&EventLogger),
+    {
+        if let Some(logger) = &self.logger {
+            log_fn(logger);
+        }
+    }
+
     /// Create a new deadlock detector
     pub fn new() -> Self {
         Detector {
@@ -121,6 +139,9 @@ impl Detector {
             mutex_owners: FxHashMap::default(),
             rwlock_readers: FxHashMap::default(),
             rwlock_writer: FxHashMap::default(),
+            cv_waiters: FxHashMap::default(),
+            thread_wait_cv: FxHashMap::default(),
+            cv_woken: FxHashSet::default(),
             logger: None,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
@@ -140,6 +161,9 @@ impl Detector {
             mutex_owners: FxHashMap::default(),
             rwlock_readers: Default::default(),
             rwlock_writer: Default::default(),
+            cv_waiters: FxHashMap::default(),
+            thread_wait_cv: FxHashMap::default(),
+            cv_woken: FxHashSet::default(),
             logger: None,
             stress_mode: mode,
             stress_config: config,

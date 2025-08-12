@@ -1,31 +1,13 @@
-use deloxide::{DeadlockInfo, Deloxide, Mutex, RwLock, Thread};
-use std::sync::{Arc, Mutex as StdMutex, mpsc};
+use deloxide::{Mutex, RwLock, Thread};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+mod common;
+use common::{DEADLOCK_TIMEOUT, expect_deadlock, start_detector};
 
 #[test]
 fn test_mutex_rwlock_deadlock() {
-    // Channel for deadlock info
-    let (tx, rx) = mpsc::channel::<DeadlockInfo>();
-
-    // Atomic flags to track detection
-    let deadlock_detected = Arc::new(StdMutex::new(false));
-    let deadlock_info = Arc::new(StdMutex::new(None));
-
-    // For callback closure
-    let detected_clone = Arc::clone(&deadlock_detected);
-    let info_clone = Arc::clone(&deadlock_info);
-
-    Deloxide::new()
-        .callback(move |detected_info| {
-            let mut detected = detected_clone.lock().unwrap();
-            *detected = true;
-            let mut info = info_clone.lock().unwrap();
-            *info = Some(detected_info.clone());
-            let _ = tx.send(detected_info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let harness = start_detector();
 
     // The Mutex and RwLock under test
     let mutex = Arc::new(Mutex::new(()));
@@ -53,31 +35,7 @@ fn test_mutex_rwlock_deadlock() {
         false
     });
 
-    // Wait for deadlock or timeout
-    let timeout = Duration::from_secs(2);
-    match rx.recv_timeout(timeout) {
-        Ok(info) => {
-            assert!(
-                *deadlock_detected.lock().unwrap(),
-                "Deadlock flag should be set"
-            );
-            assert_eq!(
-                info.thread_cycle.len(),
-                2,
-                "Deadlock should involve exactly 2 threads"
-            );
-            assert_eq!(
-                info.thread_waiting_for_locks.len(),
-                2,
-                "There should be exactly 2 thread-lock waiting relationships"
-            );
-            println!(
-                "✔ Detected Mutex-RwLock mixed deadlock: {:?}",
-                info.thread_cycle
-            );
-        }
-        Err(_) => {
-            panic!("No deadlock detected within timeout period!");
-        }
-    }
+    let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
+    assert_eq!(info.thread_cycle.len(), 2);
+    assert_eq!(info.thread_waiting_for_locks.len(), 2);
 }

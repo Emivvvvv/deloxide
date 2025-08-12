@@ -1,27 +1,14 @@
-use deloxide::{DeadlockInfo, Deloxide, RwLock, Thread};
+use deloxide::{RwLock, Thread};
 use std::sync::{
-    Arc, Mutex as StdMutex,
+    Arc,
     atomic::{AtomicUsize, Ordering},
-    mpsc,
 };
-use std::time::Duration;
+mod common;
+use common::{DEADLOCK_TIMEOUT, expect_deadlock, start_detector};
 
 #[test]
 fn test_guaranteed_three_thread_rwlock_deadlock() {
-    let (tx, rx) = mpsc::channel::<DeadlockInfo>();
-    let detected = Arc::new(StdMutex::new(false));
-    let info_slot = Arc::new(StdMutex::new(None));
-
-    let flag = detected.clone();
-    let slot = info_slot.clone();
-    Deloxide::new()
-        .callback(move |info| {
-            *flag.lock().unwrap() = true;
-            *slot.lock().unwrap() = Some(info.clone());
-            let _ = tx.send(info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let harness = start_detector();
 
     let lock1 = Arc::new(RwLock::new(0));
     let lock2 = Arc::new(RwLock::new(0));
@@ -49,11 +36,7 @@ fn test_guaranteed_three_thread_rwlock_deadlock() {
         }));
     }
 
-    let timeout = Duration::from_secs(2);
-    let info = rx
-        .recv_timeout(timeout)
-        .expect("No deadlock detected within timeout");
-    assert!(*detected.lock().unwrap(), "Deadlock flag not set");
+    let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
     assert_eq!(
         info.thread_cycle.len(),
         3,

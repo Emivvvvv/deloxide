@@ -5,12 +5,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-}
+// Use shared test util globals/callback
 
 struct reader_args {
     void* rwlock;
@@ -27,7 +24,7 @@ void* reader(void* arg) {
 DEFINE_TRACKED_THREAD(reader)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     void* rwlock = deloxide_create_rwlock();
 
@@ -43,7 +40,7 @@ int main() {
     }
 
     // There should be no deadlock notification
-    if (deadlock_detected) {
+    if (DEADLOCK_FLAG) {
         fprintf(stderr, "False deadlock detected with multiple readers!\n");
         return 1;
     } else {

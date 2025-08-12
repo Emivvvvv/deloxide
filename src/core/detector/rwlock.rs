@@ -18,7 +18,7 @@ impl Detector {
     pub fn on_rwlock_create(&mut self, lock_id: LockId, creator_id: Option<ThreadId>) {
         let creator = creator_id.unwrap_or_else(get_current_thread_id);
         if let Some(logger) = &self.logger {
-            logger.log_lock_event(lock_id, Some(creator), Events::Spawn);
+            logger.log_lock_event(lock_id, Some(creator), Events::RwSpawn);
         }
     }
 
@@ -40,7 +40,7 @@ impl Detector {
         }
 
         if let Some(logger) = &self.logger {
-            logger.log_lock_event(lock_id, None, Events::Exit);
+            logger.log_lock_event(lock_id, None, Events::RwExit);
         }
     }
 

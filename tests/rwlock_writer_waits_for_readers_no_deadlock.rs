@@ -1,21 +1,13 @@
-use deloxide::{DeadlockInfo, Deloxide, RwLock, Thread};
-use std::sync::{Arc, Mutex as StdMutex, mpsc};
+use deloxide::{RwLock, Thread};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+mod common;
+use common::{NO_DEADLOCK_TIMEOUT, assert_no_deadlock, start_detector};
 
 #[test]
 fn test_rwlock_writer_waits_for_readers_no_deadlock() {
-    let (tx, rx) = mpsc::channel::<DeadlockInfo>();
-    let detected = Arc::new(StdMutex::new(false));
-    let flag = detected.clone();
-
-    Deloxide::new()
-        .callback(move |_info| {
-            *flag.lock().unwrap() = true;
-            let _ = tx.send(_info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let harness = start_detector();
 
     let lock = Arc::new(RwLock::new(42));
     let l1 = Arc::clone(&lock);
@@ -40,13 +32,5 @@ fn test_rwlock_writer_waits_for_readers_no_deadlock() {
     writer.join().unwrap();
 
     // There should be no deadlock notification
-    let timeout = Duration::from_millis(300);
-    assert!(
-        rx.recv_timeout(timeout).is_err(),
-        "False deadlock detected with writer waiting for readers"
-    );
-    assert!(
-        !*detected.lock().unwrap(),
-        "Deadlock flag should not be set"
-    );
+    assert_no_deadlock(&harness, NO_DEADLOCK_TIMEOUT);
 }

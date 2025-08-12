@@ -6,14 +6,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "deloxide.h"
+#include "test_util.h"
 
-static volatile int deadlock_detected = 0;
-static char *deadlock_info_json = NULL;
-
-void deadlock_callback(const char* json_info) {
-    deadlock_detected = 1;
-    deadlock_info_json = strdup(json_info);
-}
+// Use shared test util globals/callback
 
 struct two_args {
     void* lock_a;
@@ -31,7 +26,7 @@ void* cross_lock(void* arg) {
 DEFINE_TRACKED_THREAD(cross_lock)
 
 int main() {
-    deloxide_init(NULL, deadlock_callback);
+    deloxide_test_init();
 
     void* ra = deloxide_create_mutex();
     void* rb = deloxide_create_mutex();
@@ -45,12 +40,10 @@ int main() {
 
 
     // Wait up to 2 s
-    for (int i = 0; i < 20 && !deadlock_detected; i++) {
-        usleep(100000);
-    }
+    wait_for_deadlock_ms(2000, 100);
 
-    if (deadlock_detected) {
-        printf("Deadlock detected (2-thread cross)!\n%s\n", deadlock_info_json);
+    if (DEADLOCK_FLAG) {
+        printf("Deadlock detected (2-thread cross)!\n%s\n", DEADLOCK_INFO);
         return 0;
     } else {
         fprintf(stderr, "No deadlock detected in 2-thread test\n");

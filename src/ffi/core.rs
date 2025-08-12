@@ -27,8 +27,10 @@ use crate::ffi::{STRESS_CONFIG, STRESS_MODE};
 /// # Safety
 /// This function dereferences raw pointers (`log_path`) and writes to mutable global statics:
 ///  - The caller must ensure `log_path` is either `NULL` or a valid null-terminated string.
-///  - Concurrency must be managed so that global statics (`DEADLOCK_DETECTED` and `DEADLOCK_CALLBACK`) are not mutated unsafely from multiple threads.
-///  - Because this is an FFI boundary, the Rust side cannot guarantee the validity of incoming data. Callers must uphold these invariants.
+///  - Concurrency must be managed so that global statics (`DEADLOCK_DETECTED` and `DEADLOCK_CALLBACK`) are
+///    not mutated unsafely from multiple threads.
+///  - Because this is an FFI boundary, the Rust side cannot guarantee the validity of incoming data. Callers
+///    must uphold these invariants.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_init(
     log_path: *const c_char,

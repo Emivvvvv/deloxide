@@ -1,15 +1,13 @@
-//! Event logger for recording lock and thread operations for deadlock detection
+//! Logger for recording lock and thread operations for deadlock detection
 //!
 //! This module provides an efficient logging mechanism for tracking thread and lock operations,
 //! including thread creation/exit and lock acquisition/release events. It supports asynchronous
 //! file I/O with batching for improved performance, and ensures log files are properly flushed
 //! before being processed for visualization.
 //!
-//! Each EventLogger instance maintains its own graph state for complete visibility into
-//! thread-lock relationships over time.
+//! The logger only records events - graph state is reconstructed in the frontend for better performance.
 
-use crate::core::logger::graph_logger::{GraphLogger, GraphState};
-use crate::core::types::{Events, LockId, ThreadId};
+use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId};
 use anyhow::Result;
 use chrono::Utc;
 use serde::Serialize;
@@ -23,19 +21,6 @@ use std::thread;
 use std::time::Duration;
 
 const DEFAULT_LOG_PATH: &str = "deadlock_detection_{timestamp}.log";
-
-/// Combined log entry containing both event data and graph state
-///
-/// This structure represents a single point-in-time snapshot of the system,
-/// including both the specific event that occurred and the current state
-/// of all threads and locks as tracked by this logger instance.
-#[derive(Debug, Serialize, Clone)]
-pub struct CombinedLogEntry {
-    /// The specific event that occurred
-    pub event: LogEntry,
-    /// The current state of the thread-lock graph
-    pub graph: GraphState,
-}
 
 /// Structure for a single log entry representing a thread or lock event
 #[derive(Debug, Serialize, Clone)]
@@ -57,7 +42,9 @@ pub struct LogEntry {
 #[derive(Debug)]
 pub enum LoggerCommand {
     /// Write a log entry to the file
-    LogEntry(CombinedLogEntry),
+    LogEntry(LogEntry),
+    /// Write a terminal deadlock record
+    Deadlock(DeadlockInfo),
     /// Flush all pending entries to disk and signal completion
     Flush(Sender<()>),
 }
@@ -65,20 +52,27 @@ pub enum LoggerCommand {
 /// Event logger for recording lock and thread operations
 ///
 /// The EventLogger provides asynchronous file I/O with batching capabilities
-/// to minimize performance overhead. Each instance maintains its own graph
-/// state and uses a background thread to handle file writes.
+/// to minimize performance overhead and uses a background thread to handle file writes.
 pub struct EventLogger {
     /// Channel sender for async communication with logger thread
     sender: Sender<LoggerCommand>,
     /// Flag indicating if a flush operation is in progress
     flushing: Arc<AtomicBool>,
-    /// Graph logger instance for tracking thread-lock relationships
-    graph_logger: Mutex<GraphLogger>,
 }
 
 impl Default for EventLogger {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Drop for EventLogger {
+    fn drop(&mut self) {
+        // Attempt to flush remaining logs when the logger is dropped
+        // This is important to ensure logs aren't lost if the program exits
+        if let Err(e) = self.flush() {
+            eprintln!("Warning: Failed to flush logs during EventLogger drop: {e:?}");
+        }
     }
 }
 
@@ -128,7 +122,6 @@ impl EventLogger {
         Ok(EventLogger {
             sender: tx,
             flushing,
-            graph_logger: Mutex::new(GraphLogger::new()),
         })
     }
 
@@ -194,7 +187,6 @@ impl EventLogger {
         Ok(EventLogger {
             sender: tx,
             flushing,
-            graph_logger: Mutex::new(GraphLogger::new()),
         })
     }
 
@@ -227,25 +219,8 @@ impl EventLogger {
             parent_id,
         };
 
-        // Get the current graph state from this instance's graph logger
-        let graph = if let Ok(logger) = self.graph_logger.lock() {
-            logger.get_current_state()
-        } else {
-            eprintln!("Failed to get current state while logging.");
-            GraphState {
-                threads: Vec::new(),
-                locks: Vec::new(),
-                links: Vec::new(),
-            }
-        };
-
-        let combined_entry = CombinedLogEntry {
-            event: entry,
-            graph,
-        };
-
         // Non-blocking send to async logger
-        if let Err(e) = self.sender.send(LoggerCommand::LogEntry(combined_entry)) {
+        if let Err(e) = self.sender.send(LoggerCommand::LogEntry(entry)) {
             eprintln!("Failed to send log entry: {e:?}");
         }
     }
@@ -291,62 +266,46 @@ impl EventLogger {
         result
     }
 
-    /// Update graph state and log a thread event to the logger
+    /// Log a thread event to the logger
     ///
     /// # Arguments
     /// * `thread_id` - ID of the thread involved
     /// * `parent_id` - Optional ID of the thread that created this thread
-    /// * `event` - Type of event (Spawn or Exit)
+    /// * `event` - Type of event (ThreadSpawn or ThreadExit)
     pub fn log_thread_event(
         &self,
         thread_id: ThreadId,
         parent_id: Option<ThreadId>,
         event: Events,
     ) {
-        if let Ok(mut logger) = self.graph_logger.lock() {
-            match event {
-                Events::Spawn => logger.update_thread_spawn(thread_id, parent_id),
-                Events::Exit => logger.update_thread_exit(thread_id),
-                _ => {} // Other events are handled by update_graph
-            }
-        }
         self.log_event(thread_id, 0, event, parent_id);
     }
 
-    /// Update graph state and log a lock event to the logger
+    /// Log a lock event to the logger
     ///
     /// # Arguments
     /// * `lock_id` - ID of the lock involved
     /// * `creator_id` - ID of the thread that created this lock (for Spawn events)
-    /// * `event` - Type of event (Spawn or Exit)
+    /// * `event` - Type of event (MutexSpawn/MutexExit, RwSpawn/RwExit, CondvarSpawn/CondvarExit)
     pub fn log_lock_event(&self, lock_id: LockId, creator_id: Option<ThreadId>, event: Events) {
-        if let Ok(mut logger) = self.graph_logger.lock() {
-            match event {
-                Events::Spawn => {
-                    if let Some(thread_id) = creator_id {
-                        logger.update_lock_create(lock_id, thread_id);
-                    } else {
-                        logger.update_lock_create(lock_id, 0);
-                    }
-                }
-                Events::Exit => logger.update_lock_destroy(lock_id),
-                _ => {} // Other events are handled by update_graph
-            }
-        }
         self.log_event(0, lock_id, event, creator_id);
     }
 
-    /// Update graph state and log a thread-lock interaction event to the logger
+    /// Log a thread-lock interaction event to the logger
     ///
     /// # Arguments
     /// * `thread_id` - ID of the thread involved
     /// * `lock_id` - ID of the lock involved
     /// * `event` - Type of event (Attempt, Acquired, or Released)
     pub fn log_interaction_event(&self, thread_id: ThreadId, lock_id: LockId, event: Events) {
-        if let Ok(mut logger) = self.graph_logger.lock() {
-            logger.update_lock_event(thread_id, lock_id, event);
-        }
         self.log_event(thread_id, lock_id, event, None);
+    }
+
+    /// Log a terminal deadlock record
+    pub fn log_deadlock(&self, info: DeadlockInfo) {
+        if let Err(e) = self.sender.send(LoggerCommand::Deadlock(info)) {
+            eprintln!("Failed to send deadlock record: {e:?}");
+        }
     }
 }
 
@@ -374,6 +333,26 @@ fn async_logger_thread(file: File, rx: Receiver<LoggerCommand>, flushing: Arc<At
                     eprintln!("Logger write error: {e:?}");
                 }
             }
+            LoggerCommand::Deadlock(info) => {
+                // Wrap as a distinct terminal record
+                #[derive(serde::Serialize)]
+                struct DeadlockRecord<'a> {
+                    deadlock: &'a DeadlockInfo,
+                    timestamp: f64,
+                }
+                let now = chrono::Utc::now();
+                let ts =
+                    now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1_000_000.0;
+                let record = DeadlockRecord {
+                    deadlock: &info,
+                    timestamp: ts,
+                };
+                if let Ok(json) = serde_json::to_string(&record)
+                    && let Err(e) = writeln!(writer, "{json}").and_then(|_| writer.flush())
+                {
+                    eprintln!("Logger write error (deadlock): {e:?}");
+                }
+            }
             LoggerCommand::Flush(responder) => {
                 // Signal flushing
                 flushing.store(true, Ordering::Release);
@@ -384,6 +363,11 @@ fn async_logger_thread(file: File, rx: Receiver<LoggerCommand>, flushing: Arc<At
                 let _ = responder.send(());
             }
         }
+    }
+
+    // Channel closed - perform final flush before thread exits
+    if let Err(e) = writer.flush() {
+        eprintln!("Logger final flush error: {e:?}");
     }
 }
 
@@ -413,11 +397,11 @@ mod tests {
         let logger = EventLogger::with_file(&log_path).unwrap();
 
         // Log some events
-        logger.log_event(1, 0, Events::Spawn, None);
+        logger.log_event(1, 0, Events::ThreadSpawn, None);
         logger.log_event(1, 10, Events::MutexAttempt, None);
         logger.log_event(1, 10, Events::MutexAcquired, None);
         logger.log_event(1, 10, Events::MutexReleased, None);
-        logger.log_event(1, 0, Events::Exit, None);
+        logger.log_event(1, 0, Events::ThreadExit, None);
 
         // Flush to ensure writes complete
         logger.flush().unwrap();
@@ -428,7 +412,7 @@ mod tests {
 
         assert_eq!(lines.len(), 5);
         assert!(lines[0].contains("\"thread_id\":1"));
-        assert!(lines[0].contains("\"event\":\"Spawn\""));
+        assert!(lines[0].contains("\"event\":\"ThreadSpawn\""));
     }
 
     #[test]
@@ -440,7 +424,7 @@ mod tests {
 
         // Log some events
         for i in 0..10 {
-            logger.log_event(i, 0, Events::Spawn, None);
+            logger.log_event(i, 0, Events::ThreadSpawn, None);
         }
 
         // Multiple flushes should not cause issues
@@ -463,11 +447,11 @@ mod tests {
         let logger2 = EventLogger::with_file(&log_path2).unwrap();
 
         // Log different events to each logger
-        logger1.log_thread_event(1, None, Events::Spawn);
-        logger1.log_lock_event(10, Some(1), Events::Spawn);
+        logger1.log_thread_event(1, None, Events::ThreadSpawn);
+        logger1.log_lock_event(10, Some(1), Events::MutexSpawn);
 
-        logger2.log_thread_event(2, None, Events::Spawn);
-        logger2.log_lock_event(20, Some(2), Events::Spawn);
+        logger2.log_thread_event(2, None, Events::ThreadSpawn);
+        logger2.log_lock_event(20, Some(2), Events::MutexSpawn);
 
         // Flush both
         logger1.flush().unwrap();
@@ -486,5 +470,26 @@ mod tests {
         assert!(content2.contains("\"lock_id\":20"));
         assert!(!content2.contains("\"thread_id\":1"));
         assert!(!content2.contains("\"lock_id\":10"));
+    }
+
+    #[test]
+    fn test_logger_drop_flushes() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_path = temp_dir.path().join("drop_test.log");
+
+        {
+            // Create logger in a scope so it gets dropped
+            let logger = EventLogger::with_file(&log_path).unwrap();
+            logger.log_event(1, 0, Events::ThreadSpawn, None);
+            // Logger is dropped here, which should trigger flush
+        }
+
+        // Give the async thread a moment to finish
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Verify the log was written
+        let contents = std::fs::read_to_string(&log_path).unwrap();
+        assert!(!contents.is_empty());
+        assert!(contents.contains("\"thread_id\":1"));
     }
 }

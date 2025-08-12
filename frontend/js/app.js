@@ -303,9 +303,29 @@ const initUploadFeature = () => {
             showToast("Error processing log file: " + lineFormatError.message, "error")
           }
         } else {
-          // Handle standard JSON formats
+          // Prefer line-by-line JSON (JSONL) for uploads; fallback to single JSON only if needed
           try {
-            // Parse the uploaded file as standard JSON
+            // First, try JSONL detection and processing to avoid JSON.parse errors on multi-line logs
+            try {
+              const maybeLines = content.split(/\r?\n/).filter(Boolean)
+              if (maybeLines.length >= 1 && maybeLines.every(l => l.trim().startsWith('{'))) {
+                scenario = processNewFormatLogs(content)
+
+                // Proceed to render
+                uploadModal.style.display = "none"
+                resetVisualization()
+                currentScenario = scenario
+                logData = scenario.logs
+                graphStateData = scenario.graph_state
+                document.getElementById("loading").style.display = "block"
+                document.getElementById("loading").innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>'
+                if (shareBtn) shareBtn.style.display = "flex"
+                setTimeout(() => { initVisualization(); showVisualizationElements(); initTimeline(); updateVisualization(); }, 100)
+                return
+              }
+            } catch (_) {}
+
+            // If not JSONL, parse the uploaded file as standard JSON
             const jsonData = JSON.parse(content)
 
             // Check if this is the new format (raw data array)
@@ -394,6 +414,25 @@ const initUploadFeature = () => {
                   // Auto-start removed - user needs to click play manually
                 }, 100)
               } else {
+                // Try auto-detect line-by-line even if user didn't select it
+                try {
+                  const maybeLines = content.split(/\r?\n/).filter(Boolean)
+                  if (maybeLines.length > 1 && maybeLines.every(l => l.trim().startsWith('{') && l.includes('"event"'))) {
+                    scenario = processNewFormatLogs(content)
+                    uploadModal.style.display = "none"
+                    resetVisualization()
+                    currentScenario = scenario
+                    logData = scenario.logs
+                    graphStateData = scenario.graph_state
+                    document.getElementById("loading").style.display = "block"
+                    document.getElementById("loading").innerHTML = '<div class="spinner"></div><p>Loading visualization...</p>'
+                    if (shareBtn) shareBtn.style.display = "flex"
+                    setTimeout(() => {
+                      initVisualization(); showVisualizationElements(); initTimeline(); updateVisualization();
+                    }, 100)
+                    return
+                  }
+                } catch (_) {}
                 showToast("Error: The file is not a valid deadlock log file. Please upload a properly formatted file.", "error")
               }
             }
@@ -725,6 +764,11 @@ function checkForSharedScenario() {
       let processed;
       if (format === "line-by-line" || (typeof decodedData === 'string' && decodedData.trim().startsWith("{") && decodedData.includes('{"event":'))) {
         processed = processNewFormatLogs(decodedData);
+      } else if (Array.isArray(decodedData)) {
+        // New encoded shape: [events, deadlock_or_null]
+        processed = transformRawObject(decodedData);
+      } else if (decodedData && (decodedData.events || decodedData.deadlock)) {
+        processed = transformRawObject(decodedData);
       } else {
         processed = processEncodedLog(decodedData);
       }
@@ -1087,6 +1131,21 @@ function initVisualization() {
     .append("path")
     .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z") // Improved arrow shape
     .attr("fill", "var(--warning-color)")
+    .style("stroke", "none");
+
+  // Add wait arrow marker (condvar wait) in pink
+  defs.append("marker")
+    .attr("id", "wait-arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28)
+    .attr("refY", 0)
+    .attr("orient", "auto")
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("xoverflow", "visible")
+    .append("path")
+    .attr("d", "M 0,-4 L 10,0 L 0,4 L 4,0 Z")
+    .attr("fill", "var(--link-wait)")
     .style("stroke", "none");
 
   // Add acquired arrow marker with a thicker line
@@ -1469,7 +1528,7 @@ function updateNodeElements() {
   const nodeEnter = nodeSelection
     .enter()
     .append("g")
-    .attr("class", d => `node ${d.type}`)
+    .attr("class", d => `node ${d.type}${d.lock_type ? ` ${d.lock_type}` : ''}`)
     .attr("data-in-cycle", d => d.isInCycle === true ? "true" : "false")
     .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`)
     .style("opacity", 0) // Start invisible for fade-in
@@ -1481,20 +1540,29 @@ function updateNodeElements() {
   // Add circles to new nodes
   nodeEnter
     .append("circle")
+    .attr("class", "main-circle")
     .attr("r", 0) // Start with radius 0
-    .attr("fill", d => {
+    .style("fill", d => {
       if (d.type === "thread") {
         return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
       }
-      return "var(--primary-color)"; // Default color for resources
+      // Resource colors by lock type
+      if (d.lock_type === "mutex") return "#2ecc71";
+      if (d.lock_type === "rwlock") return "#f39c12";
+      if (d.lock_type === "condvar") return "#9b59b6";
+      return "var(--primary-color)"; // Default
     })
-    .attr("stroke", d => {
+    .style("stroke", d => {
       if (d.type === "thread") {
         if (d.isInCycle) {
           return "#f44336"; // Modern red for deadlock threads
         }
         return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
       }
+      // Resource stroke by type
+      if (d.lock_type === "mutex") return "#27ae60";
+      if (d.lock_type === "rwlock") return "#e67e22";
+      if (d.lock_type === "condvar") return "#8e44ad";
       return "var(--primary-dark)";
     })
     .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
@@ -1503,13 +1571,22 @@ function updateNodeElements() {
   // Add text labels to new nodes
   nodeEnter
     .append("text")
-    .attr("dy", 5)
-    .text(d => d.id)
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "middle")
+    .text(d => {
+      if (d.type === "resource") {
+        const num = d.id.substring(1);
+        if (d.lock_type === "mutex") return `M${num}`;
+        if (d.lock_type === "rwlock") return `RW${num}`;
+        if (d.lock_type === "condvar") return `C${num}`;
+      }
+      return d.id;
+    })
     .attr("fill", "white")
     .style("opacity", 0); // Start with transparent text
   
   // Apply special effects for new nodes
-  nodeEnter.selectAll("circle").each(function(d) {
+  nodeEnter.selectAll("circle.main-circle").each(function(d) {
     if (d.isInCycle) {
       // Add a subtle glow effect for threads in deadlock
       d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
@@ -1543,27 +1620,33 @@ function updateNodeElements() {
     .attr("transform", d => `translate(${d.x || 0}, ${d.y || 0})`);
     
   // Update attributes of existing circles
-  nodeUpdate.select("circle")
-    .attr("fill", d => {
+  nodeUpdate.select("circle.main-circle")
+    .style("fill", d => {
       if (d.type === "thread") {
         return d.is_main_thread ? "#9b59b6" : "var(--danger-color)"; // Purple for main thread
       }
-      return "var(--primary-color)"; // Default color for resources
+      if (d.lock_type === "mutex") return "#2ecc71";
+      if (d.lock_type === "rwlock") return "#f39c12";
+      if (d.lock_type === "condvar") return "#9b59b6";
+      return "var(--primary-color)";
     })
-    .attr("stroke", d => {
+    .style("stroke", d => {
       if (d.type === "thread") {
         if (d.isInCycle) {
           return "#f44336"; // Modern red for deadlock threads
         }
         return d.is_main_thread ? "#8e44ad" : "var(--danger-dark)"; // Darker purple for main thread
       }
+      if (d.lock_type === "mutex") return "#27ae60";
+      if (d.lock_type === "rwlock") return "#e67e22";
+      if (d.lock_type === "condvar") return "#8e44ad";
       return "var(--primary-dark)";
     })
     .attr("stroke-width", d => d.isInCycle ? "2px" : "2px")
     .attr("stroke-dasharray", d => d.isInCycle ? "3" : "none");
   
-  // Merge enter and update for event handlers
-  nodeSelection.merge(nodeEnter)
+  // Merge enter and update for event handlers and custom overlays
+  const mergedNodes = nodeSelection.merge(nodeEnter)
     .on("mouseover", function(event, d) {
       // Don't apply any transforms that might move the node away from cursor
       let tooltipContent;
@@ -1595,9 +1678,45 @@ function updateNodeElements() {
       d3.select(".tooltip")
         .style("opacity", 0);
     });
+
+  // Transient cyan dotted outline for woken threads on this step
+  if (logData && logData[currentStep - 1]) {
+    const le = logData[currentStep - 1];
+    let wokenList = [];
+    if (le.woken_thread_id) wokenList = [le.woken_thread_id];
+    else if (Array.isArray(le.woken_threads)) wokenList = le.woken_threads;
+    const wokenSet = new Set((wokenList || []).map(v => parseInt(v)));
+
+    mergedNodes.each(function(d) {
+      const g = d3.select(this);
+      let outline = g.select('circle.woken-outline');
+      const isWokenThread = d.type === 'thread' && wokenSet.has(parseInt(d.id.substring(1)));
+      if (isWokenThread) {
+        if (outline.empty()) {
+          // insert as first child so it renders behind the main circle/text
+          g.insert('circle', ':first-child')
+            .attr('class', 'woken-outline')
+            .attr('r', 33)
+            .style('opacity', 0.95)
+            .style('stroke', 'var(--link-notify)')
+            .style('fill', 'none')
+            .style('stroke-dasharray', '4,3')
+            .style('pointer-events', 'none');
+        } else {
+          // ensure it stays behind content
+          outline.lower();
+        }
+      } else {
+        if (!outline.empty()) outline.remove();
+      }
+    });
+  } else {
+    // No woken info at this step; ensure outlines are removed
+    mergedNodes.select('circle.woken-outline').remove();
+  }
     
   // Update filter effects for existing nodes
-  nodeSelection.select("circle").each(function(d) {
+  nodeSelection.select("circle.main-circle").each(function(d) {
     if (d.isInCycle) {
       d3.select(this).style("filter", "drop-shadow(0 0 2px rgba(244, 67, 54, 0.6))");
     } else if (d.is_main_thread) {
@@ -1633,32 +1752,70 @@ function updateLinkElements() {
     .attr("y2", d => d.target.y || 0)
     .style("opacity", 0); // Start invisible for fade-in
   
-  // Apply style based on link type
+  // Apply style based on link type (use inline styles to override CSS)
   linkEnter.each(function(d) {
+    const el = d3.select(this);
     if (d.type === "deadlock") {
-      d3.select(this)
-        .attr("stroke", "#f44336") 
-        .attr("stroke-width", "3") // Reduced from 4
+      el.style("stroke", "var(--link-deadlock)")
+        .style("stroke-width", "3")
         .attr("marker-end", "url(#deadlock-arrowhead)")
-        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
-        .style("stroke-dashoffset", "0");
-    } else if (d.type === "attempt") {
-      d3.select(this)
-        .attr("stroke", "var(--warning-color)")
-        .attr("stroke-width", "2.5")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))")
+        .style("stroke-dashoffset", "0")
+        .style("stroke-dasharray", null);
+    } else if (d.type.includes("notify_all")) {
+      el.style("stroke", "var(--link-notify)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", "2,4")
+        .style("filter", null);
+    } else if (d.type.includes("notify")) {
+      el.style("stroke", "var(--link-notify)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", "2,4")
+        .style("filter", null);
+    } else if (d.type.includes("wait_begin")) {
+      el.style("stroke", "var(--link-wait)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#wait-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", null);
+    } else if (d.type.includes("attempt")) {
+      el.style("stroke", "var(--link-attempt)")
+        .style("stroke-width", "2.5")
         .attr("marker-end", "url(#attempt-arrowhead)")
-        .style("stroke-dasharray", "5,3");
-    } else if (d.type === "acquired") {
-      d3.select(this)
-        .attr("stroke", "var(--success-color)")
-        .attr("stroke-width", "3")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", null);
+    } else if (d.type.includes("rwlock_read_acquired")) {
+      el.style("stroke", "var(--link-acquired-read)")
+        .style("stroke-width", "3")
         .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", "drop-shadow(0 0 2px rgba(102, 224, 138, 0.5))");
+    } else if (d.type.includes("rwlock_write_acquired")) {
+      el.style("stroke", "var(--link-acquired-write)")
+        .style("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", null)
+        .style("filter", "drop-shadow(0 0 2px rgba(30, 132, 73, 0.5))");
+    } else if (d.type.includes("acquired")) {
+      el.style("stroke", "var(--link-acquired)")
+        .style("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", null)
         .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
+    } else if (d.type.includes("released") || d.type.includes("wait_end")) {
+      el.style("stroke", "var(--link-released)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", "5")
+        .style("filter", null);
     } else {
-      d3.select(this)
-        .attr("stroke", "var(--primary-color)")
-        .attr("stroke-width", "2.5")
-        .attr("marker-end", "url(#arrowhead)");
+      el.style("stroke", "var(--primary-color)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", null)
+        .style("filter", null);
     }
   });
   
@@ -1681,35 +1838,70 @@ function updateLinkElements() {
     .attr("x2", d => d.target.x || 0)
     .attr("y2", d => d.target.y || 0);
   
-  // Update all link styles
+  // Update all link styles (inline styles override CSS)
   linkSelection.each(function(d) {
+    const el = d3.select(this);
     if (d.type === "deadlock") {
-      d3.select(this)
-        .attr("stroke", "#f44336") 
-        .attr("stroke-width", "3") // Reduced from 4
+      el.style("stroke", "var(--link-deadlock)")
+        .style("stroke-width", "3")
         .attr("marker-end", "url(#deadlock-arrowhead)")
-        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))") // Reduced from 4px
-        .style("stroke-dashoffset", "0");
-    } else if (d.type === "attempt") {
-      d3.select(this)
-        .attr("stroke", "var(--warning-color)")
-        .attr("stroke-width", "2.5")
+        .style("filter", "drop-shadow(0 0 3px rgba(244, 67, 54, 0.7))")
+        .style("stroke-dashoffset", "0")
+        .style("stroke-dasharray", null);
+    } else if (d.type.includes("notify_all")) {
+      el.style("stroke", "var(--link-notify)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", "2,4")
+        .style("filter", null);
+    } else if (d.type.includes("notify")) {
+      el.style("stroke", "var(--link-notify)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", "2,4")
+        .style("filter", null);
+    } else if (d.type.includes("wait_begin")) {
+      el.style("stroke", "var(--link-wait)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#wait-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", null);
+    } else if (d.type.includes("attempt")) {
+      el.style("stroke", "var(--link-attempt)")
+        .style("stroke-width", "2.5")
         .attr("marker-end", "url(#attempt-arrowhead)")
         .style("stroke-dasharray", "5,3")
-        .style("filter", "none");
-    } else if (d.type === "acquired") {
-      d3.select(this)
-        .attr("stroke", "var(--success-color)")
-        .attr("stroke-width", "3")
+        .style("filter", null);
+    } else if (d.type.includes("rwlock_read_acquired")) {
+      el.style("stroke", "var(--link-acquired-read)")
+        .style("stroke-width", "3")
         .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", "5,3")
+        .style("filter", "drop-shadow(0 0 2px rgba(102, 224, 138, 0.5))");
+    } else if (d.type.includes("rwlock_write_acquired")) {
+      el.style("stroke", "var(--link-acquired-write)")
+        .style("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", null)
+        .style("filter", "drop-shadow(0 0 2px rgba(30, 132, 73, 0.5))");
+    } else if (d.type.includes("acquired")) {
+      el.style("stroke", "var(--link-acquired)")
+        .style("stroke-width", "3")
+        .attr("marker-end", "url(#acquired-arrowhead)")
+        .style("stroke-dasharray", null)
         .style("filter", "drop-shadow(0 0 2px rgba(39, 174, 96, 0.5))");
-    } else {
-      d3.select(this)
-        .attr("stroke", "var(--primary-color)")
-        .attr("stroke-width", "2.5")
+    } else if (d.type.includes("released") || d.type.includes("wait_end")) {
+      el.style("stroke", "var(--link-released)")
+        .style("stroke-width", "2.5")
         .attr("marker-end", "url(#arrowhead)")
-        .style("filter", "none")
-        .style("stroke-dasharray", "none");
+        .style("stroke-dasharray", "5")
+        .style("filter", null);
+    } else {
+      el.style("stroke", "var(--primary-color)")
+        .style("stroke-width", "2.5")
+        .attr("marker-end", "url(#arrowhead)")
+        .style("stroke-dasharray", null)
+        .style("filter", null);
     }
   });
 }
@@ -1746,34 +1938,40 @@ function updateStepInfo() {
     } else if (logEntry.type === "init") {
       stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description || "No description available"}</p>`
     } else if (logEntry.type === "deadlock") {
-      // For deadlock, format the description with line breaks for better readability
-      const deadlockPrefix = '<strong>DEADLOCK DETECTED:</strong>';
-
-      // Remove the prefix from the description to work with just the thread details
-      let deadlockDetails = logEntry.description.replace(deadlockPrefix, '').trim();
-
-      // Format the deadlock details with line breaks
-      if (deadlockDetails.includes(',')) {
-        // Split by comma and 'and' to get individual thread statements
-        let statements = deadlockDetails.split(/,\s*(?=<span)|and\s*(?=<span)/);
-
-        // Format with line breaks
-        deadlockDetails = statements.map(statement => statement.trim()).join(',<br>');
-
-        // Replace the last comma with 'and' if there was an 'and' in the original
-        if (logEntry.description.includes(' and ')) {
-          const lastCommaIndex = deadlockDetails.lastIndexOf(',<br>');
-          if (lastCommaIndex !== -1) {
-            deadlockDetails =
-                deadlockDetails.substring(0, lastCommaIndex) +
-                ' and<br>' +
-                deadlockDetails.substring(lastCommaIndex + 5);
-          }
-        }
+      // Restore original description-based rendering and enhance it
+      const nodeIndex = {};
+      if (Array.isArray(nodes)) {
+        nodes.forEach(n => { if (n && n.id) nodeIndex[n.id] = n; });
       }
 
-      // Reconstruct the full description with prefix and formatted details and animations
-      stepInfoContent += `<p class="animate__animated animate__fadeIn animate__headShake">${deadlockPrefix}<br>${deadlockDetails}</p>`;
+      const rawDesc = String(logEntry.description || '');
+      const deadlockPrefix = '<strong>DEADLOCK DETECTED:</strong>';
+
+      // Insert line breaks between statements so pills don't touch
+      // add <br> before each subsequent thread span occurrence
+      let formatted = rawDesc
+        .replace(/,\s*(?=<span)/g, ',<br>')
+        .replace(/\sand\s*(?=<span)/g, ' and<br>');
+
+      // Replace "Resource N" with typed lock label using current node lock_type
+      formatted = formatted.replace(/Resource\s+(\d+)/g, (_m, id) => {
+        const lockNode = nodeIndex[`R${id}`];
+        let label = `Resource ${id}`;
+        let cls = '';
+        if (lockNode && lockNode.lock_type) {
+          if (lockNode.lock_type === 'mutex') { label = `Mutex ${id}`; cls = 'mutex'; }
+          else if (lockNode.lock_type === 'rwlock') { label = `RwLock ${id}`; cls = 'rwlock'; }
+          else if (lockNode.lock_type === 'condvar') { label = `Condvar ${id}`; cls = 'condvar'; }
+        }
+        return `<span class=\"resource-id ${cls}\">${label}</span>`;
+      });
+
+      // If description lacked the prefix, prepend it
+      if (!formatted.includes(deadlockPrefix)) {
+        formatted = `${deadlockPrefix}<br>${formatted}`;
+      }
+
+      stepInfoContent += `<p class="animate__animated animate__fadeIn animate__headShake">${formatted}</p>`;
     } else {
       // Fallback for any other event types
       stepInfoContent += `<p class="animate__animated animate__fadeIn">${logEntry.description || "No description available"}</p>`
@@ -1886,6 +2084,7 @@ function updateTimelineMarker() {
   if (!timelineElement || !timelineMarker || !logData || logData.length === 0) {
     return
   }
+  console.log('[timeline] update marker currentStep=', currentStep, 'of', logData.length, 'type=', (logData[currentStep-1]||{}).type);
 
   // Find the corresponding timeline event element
   const currentEvent = document.querySelector(
@@ -2031,49 +2230,47 @@ function dragended(event, d) {
  */
 function initTimeline() {
   const timelineElement = document.getElementById("timeline")
-
   if (timelineElement && logData.length > 0) {
-    // Clear existing events
-    while (timelineElement.firstChild) {
-      timelineElement.removeChild(timelineElement.firstChild)
-    }
-
-    // Add back the line and marker
+    console.log('[timeline] initializing with', logData.length, 'events');
+    while (timelineElement.firstChild) timelineElement.removeChild(timelineElement.firstChild)
     timelineElement.appendChild(document.createElement("div")).id = "timeline-line"
     timelineElement.appendChild(document.createElement("div")).id = "timeline-marker"
+    const totalWidth = timelineElement.clientWidth - 40
 
-    // Calculate event positions
-    const totalWidth = timelineElement.clientWidth - 40 // 20px padding on each side
-
-    // Create events with staggered animations
     logData.forEach((event, index) => {
+      if (index === logData.length - 1) {
+        console.log('[timeline] last event:', event)
+      }
       const position = 20 + (totalWidth * index) / (logData.length - 1)
-
       const eventElement = document.createElement("div")
-      eventElement.className = `timeline-event ${event.type} animate__animated animate__fadeIn`
+      const t = (event.type || "").toLowerCase();
+      let cls = "";
+      if (t === "deadlock") cls = "deadlock";
+      else if (t === "init") cls = "init";
+      else if (t.includes("notify")) cls = "notify";
+      else if (t.includes("wait_begin")) cls = "wait";
+      else if (t.includes("attempt")) cls = "attempt";
+      else if (t.includes("acquired")) cls = "acquired";
+      else if (t.includes("wait_end")) cls = "released"; // same gray for end of wait
+      else if (t.includes("released")) cls = "released";
+      else if (t.includes("spawn")) cls = "spawn";
+      else if (t.includes("exit")) cls = "exit";
+      eventElement.className = `timeline-event ${cls} animate__animated animate__fadeIn`
       eventElement.style.left = `${position}px`
       eventElement.setAttribute("data-step", event.step)
       eventElement.setAttribute("title", `Step ${event.step}: ${event.type}`)
-      
-      // Add staggered animation delay based on index
+      // stagger
       eventElement.style.animationDelay = `${index * 50}ms`
-
-      // Add additional animation class for deadlock events
-      if (event.type === "deadlock") {
+      // deadlock pulse
+      if (cls === "deadlock") {
         eventElement.classList.add("animate__pulse")
         eventElement.style.animationIterationCount = "2"
       }
-
       eventElement.addEventListener("click", () => {
-        // Stop any ongoing animation first
-        if (isPlaying) {
-          stopAnimation();
-        }
-        
+        if (isPlaying) stopAnimation();
         currentStep = event.step
         updateVisualization()
       })
-
       timelineElement.appendChild(eventElement)
     })
   }
@@ -2262,6 +2459,16 @@ function setupEventListeners() {
   document.getElementById("speed-up-btn").addEventListener("click", () => {
     increaseAnimationSpeed();
   });
+
+  // Legend toggle
+  const legendToggle = document.getElementById('legend-toggle');
+  const legendEl = document.getElementById('legend');
+  if (legendToggle && legendEl) {
+    legendToggle.addEventListener('click', () => {
+      const isHidden = legendEl.style.display === 'none' || legendEl.style.display === '';
+      legendEl.style.display = isHidden ? 'block' : 'none';
+    });
+  }
   
   document.getElementById("speed-down-btn").addEventListener("click", () => {
     decreaseAnimationSpeed();

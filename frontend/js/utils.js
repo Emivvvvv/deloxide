@@ -5,6 +5,42 @@
  * raw deadlock log data into a format usable by the visualization.
  */
 
+// Helper functions for event classification (used globally)
+function getLockType(eventType) {
+  if (eventType.includes("mutex")) return "mutex";
+  if (eventType.includes("rwlock")) return "rwlock";
+  if (eventType.includes("condvar")) return "condvar";
+  return "mutex"; // default fallback
+}
+
+function isAcquisitionEvent(eventType) {
+  return eventType.includes("acquired") || eventType === "acquired";
+}
+
+function isAttemptEvent(eventType) {
+  return eventType.includes("attempt") || eventType === "attempt";
+}
+
+function isReleaseEvent(eventType) {
+  return eventType.includes("released") || eventType === "released";
+}
+
+function isWaitBeginEvent(eventType) {
+  return eventType.includes("wait_begin");
+}
+
+function isWaitEndEvent(eventType) {
+  return eventType.includes("wait_end");
+}
+
+function isSpawnEvent(eventType) {
+  return eventType.includes("spawn") || eventType === "spawn";
+}
+
+function isExitEvent(eventType) {
+  return eventType.includes("exit") || eventType === "exit";
+}
+
 /**
  * Convert raw lock number to string representation
  * Returns the original lock number as a string
@@ -36,6 +72,31 @@ function transformLogs(rawLogs, resourceMapping) {
       mainThreadId = parentId;
       break;
     }
+    // Condvar notify (transient visual cue only)
+    else if ((log.type && log.type.toLowerCase().includes("notify")) && log.thread_id !== 0 && log.resource_id) {
+      const threadId = log.thread_id;
+      const sourceId = `T${threadId}`;
+      const resourceLetter = log.resource_id;
+      const resourceNum = Object.keys(resourceMapping).find(key => resourceMapping[key] === resourceLetter);
+      const targetId = `R${resourceNum}`;
+
+      if (!activeThreads.has(sourceId)) {
+        activeThreads.add(sourceId);
+        if (!nodesMap[sourceId]) {
+          nodesMap[sourceId] = { id: sourceId, name: `Thread ${threadId}`, type: "thread" };
+        }
+        currentNodes.push(nodesMap[sourceId]);
+      }
+      if (!activeResources.has(targetId)) {
+        activeResources.add(targetId);
+        if (!nodesMap[targetId]) {
+          nodesMap[targetId] = { id: targetId, name: `Resource ${log.resource_id}`, type: "resource" };
+        }
+        currentNodes.push(nodesMap[targetId]);
+      }
+
+      transientLinks.push({ source: sourceId, target: targetId, type: "notify" });
+    }
   }
   
   console.log("Identified main thread ID:", mainThreadId);
@@ -55,12 +116,54 @@ function transformLogs(rawLogs, resourceMapping) {
   
   logs.push(initLog);
   
-  // Event type mapping including new spawn and exit events
-  const eventTypes = { 0: "attempt", 1: "acquired", 2: "released", 3: "spawn", 4: "exit" };
+  // Event type mapping with unique codes for each event type
+  const eventTypes = {
+    // Thread lifecycle
+    0: "thread_spawn",
+    1: "thread_exit",
+    
+    // Mutex lifecycle 
+    2: "mutex_spawn",
+    3: "mutex_exit",
+    
+    // RwLock lifecycle
+    4: "rwlock_spawn",
+    5: "rwlock_exit",
+    
+    // Condvar lifecycle
+    6: "condvar_spawn",
+    7: "condvar_exit",
+    
+    // Mutex interactions
+    10: "mutex_attempt",
+    11: "mutex_acquired",
+    12: "mutex_released",
+    
+    // RwLock interactions
+    20: "rwlock_read_attempt",
+    21: "rwlock_read_acquired",
+    22: "rwlock_read_released",
+    23: "rwlock_write_attempt",
+    24: "rwlock_write_acquired",
+    25: "rwlock_write_released",
+    
+    // Condvar interactions
+    30: "condvar_wait_begin",
+    31: "condvar_wait_end",
+    32: "condvar_notify_one",
+    33: "condvar_notify_all",
+    
+    // Legacy generic events for backward compatibility
+    40: "attempt",
+    41: "acquired",
+    42: "released"
+  };
   
   // Keep track of resource ownership and waiting threads for deadlock detection
   const resourceOwners = {}; // Maps resource_id to thread_id that owns it
   const threadWaiting = {}; // Maps thread_id to resource_id it's waiting for
+  // Per-condvar wait queues to infer which waiter is woken on notify_one/all
+  const condvarQueues = {}; // Maps raw condvar lockNum -> Array<threadId>
   
   // Flag to track if a deadlock has been detected
   let deadlockDetected = false;
@@ -82,14 +185,26 @@ function transformLogs(rawLogs, resourceMapping) {
     
     // Skip unknown event types
     if (type === "unknown") continue;
+
+    // Maintain condvar wait queues to infer woken thread(s)
+    if (type === "condvar_wait_begin" && lockNum !== 0 && rawThread !== 0) {
+      if (!condvarQueues[lockNum]) condvarQueues[lockNum] = [];
+      condvarQueues[lockNum].push(rawThread);
+    } else if (type === "condvar_wait_end" && lockNum !== 0 && rawThread !== 0) {
+      const q = condvarQueues[lockNum];
+      if (q) {
+        const idxq = q.indexOf(rawThread);
+        if (idxq !== -1) q.splice(idxq, 1);
+      }
+    }
     
     // Update resource ownership tracking for deadlock detection
-    if (type === "acquired" && rawThread !== 0 && lockNum !== 0) {
+    if (isAcquisitionEvent(type) && rawThread !== 0 && lockNum !== 0) {
       resourceOwners[lockNum] = rawThread;
       // Thread is no longer waiting
       delete threadWaiting[rawThread];
     }
-    else if (type === "attempt" && rawThread !== 0 && lockNum !== 0) {
+    else if (isAttemptEvent(type) && rawThread !== 0 && lockNum !== 0) {
       // Thread is now waiting for this resource
       threadWaiting[rawThread] = lockNum;
       
@@ -99,18 +214,31 @@ function transformLogs(rawLogs, resourceMapping) {
         deadlockDetected = true;
       }
     }
-    else if (type === "released" && rawThread !== 0 && lockNum !== 0) {
+    else if (isWaitBeginEvent(type) && rawThread !== 0 && lockNum !== 0) {
+      // Treat wait_begin as entering waiting state on the associated mutex
+      threadWaiting[rawThread] = lockNum;
+      const deadlockCycle = detectDeadlockCycle(resourceOwners, threadWaiting);
+      if (deadlockCycle && deadlockCycle.length >= 2) {
+        deadlockDetected = true;
+      }
+    }
+    else if (isReleaseEvent(type) && rawThread !== 0 && lockNum !== 0) {
       // Resource is no longer owned by this thread
       if (resourceOwners[lockNum] === rawThread) {
         delete resourceOwners[lockNum];
       }
     }
+    else if (isWaitEndEvent(type) && rawThread !== 0) {
+      // Leaving wait: clear waiting state (mutex reacquired will set owner)
+      delete threadWaiting[rawThread];
+    }
     
     // For spawn events: Either a thread is spawned or a resource is created
-    if (type === "spawn") {
+    if (isSpawnEvent(type)) {
       let description = "";
+      const lockType = getLockType(type);
       
-      if (rawThread !== 0) {
+      if (type === "thread_spawn" && rawThread !== 0) {
         // Thread spawn - parentId is the thread that spawned it
         let parentName;
         if (parentId === 0) {
@@ -123,7 +251,7 @@ function transformLogs(rawLogs, resourceMapping) {
         
         description = `${parentName} spawned <span class="thread-id">Thread ${rawThread}</span>.`;
       } else if (lockNum !== 0) {
-        // Resource creation
+        // Lock/Resource creation
         let parentName;
         if (parentId === 0) {
           parentName = "main thread";
@@ -133,13 +261,22 @@ function transformLogs(rawLogs, resourceMapping) {
           parentName = `<span class="thread-id">Thread ${parentId}</span>`;
         }
         
-        description = `<span class="resource-id">Resource ${resourceMapping[lockNum]}</span> generated by ${parentName}.`;
+        let lockTypeDesc = "";
+        switch (lockType) {
+          case "mutex": lockTypeDesc = "Mutex"; break;
+          case "rwlock": lockTypeDesc = "RwLock"; break;
+          case "condvar": lockTypeDesc = "Condvar"; break;
+          default: lockTypeDesc = "Resource"; break;
+        }
+        
+        description = `<span class="resource-id ${lockType}">${lockTypeDesc} ${resourceMapping[lockNum]}</span> created by ${parentName}.`;
       }
       
       logs.push({
       step: idx + 2, // init step is 1, so we start from 2
       timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
+        lock_type: lockType,
         thread_id: rawThread,
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
         parent_id: parentId,
@@ -148,10 +285,11 @@ function transformLogs(rawLogs, resourceMapping) {
       });
     } 
     // For exit events: Either a thread exits or a resource is dropped
-    else if (type === "exit") {
+    else if (isExitEvent(type)) {
       let description = "";
+      const lockType = getLockType(type);
       
-      if (rawThread !== 0) {
+      if (type === "thread_exit" && rawThread !== 0) {
         // Thread exit
         if (rawThread === mainThreadId) {
           description = `<span class="main-thread">Main Thread</span> exited.`;
@@ -169,7 +307,15 @@ function transformLogs(rawLogs, resourceMapping) {
         });
       } else if (lockNum !== 0) {
         // Resource drop
-        description = `<span class="resource-id">Resource ${resourceMapping[lockNum]}</span> dropped.`;
+        let lockTypeDesc = "";
+        switch (lockType) {
+          case "mutex": lockTypeDesc = "Mutex"; break;
+          case "rwlock": lockTypeDesc = "RwLock"; break;
+          case "condvar": lockTypeDesc = "Condvar"; break;
+          default: lockTypeDesc = "Resource"; break;
+        }
+        
+        description = `<span class="resource-id ${lockType}">${lockTypeDesc} ${resourceMapping[lockNum]}</span> dropped.`;
         
         // Clean up tracking for this resource
         delete resourceOwners[lockNum];
@@ -179,13 +325,14 @@ function transformLogs(rawLogs, resourceMapping) {
         step: idx + 2, // init step is 1, so we start from 2
         timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
+        lock_type: lockType,
         thread_id: rawThread,
         resource_id: lockNum !== 0 ? resourceMapping[lockNum] : null,
         description,
         is_main_thread: rawThread === mainThreadId, // Mark if this is the main thread
       });
     }
-    // For normal resource events
+    // For interaction events (attempt, acquired, released, notify, wait)
     else {
       let threadDescription;
       if (rawThread === mainThreadId) {
@@ -194,83 +341,125 @@ function transformLogs(rawLogs, resourceMapping) {
         threadDescription = `<span class="thread-id">Thread ${rawThread}</span>`;
       }
       
-      // Update description based on type
-      let actionText = type;
-      if (type === "attempt") {
-        actionText = "attempted to acquire";
+      const lockType = getLockType(type);
+      
+      // Generate action description based on event type
+      let actionText = "";
+      let lockTypeDesc = "";
+      let extraSuffix = ""; // for notify target info
+      
+      switch (lockType) {
+        case "mutex": lockTypeDesc = "Mutex"; break;
+        case "rwlock": lockTypeDesc = "RwLock"; break;
+        case "condvar": lockTypeDesc = "Condvar"; break;
+        default: lockTypeDesc = "Resource"; break;
       }
       
-      logs.push({
+      switch (type) {
+        // Mutex events
+        case "mutex_attempt":
+        case "attempt":
+          actionText = `attempted to acquire`;
+          break;
+        case "mutex_acquired":
+        case "acquired":
+          actionText = `acquired`;
+          break;
+        case "mutex_released":
+        case "released":
+          actionText = `released`;
+          break;
+          
+        // RwLock events
+        case "rwlock_read_attempt":
+          actionText = `attempted to read-lock`;
+          break;
+        case "rwlock_read_acquired":
+          actionText = `acquired read-lock on`;
+          break;
+        case "rwlock_read_released":
+          actionText = `released read-lock on`;
+          break;
+        case "rwlock_write_attempt":
+          actionText = `attempted to write-lock`;
+          break;
+        case "rwlock_write_acquired":
+          actionText = `acquired write-lock on`;
+          break;
+        case "rwlock_write_released":
+          actionText = `released write-lock on`;
+          break;
+          
+        // Condvar events
+        case "condvar_wait_begin":
+          actionText = `began waiting on`;
+          break;
+        case "condvar_wait_end":
+          actionText = `finished waiting on`;
+          break;
+        case "condvar_notify_one":
+          actionText = `notified one waiter on`;
+          {
+            const q = condvarQueues[lockNum] || [];
+            const woken = q.length > 0 ? q[0] : null; // next to be woken (we'll pop when event is committed)
+            if (woken) {
+              const wokenDisplay = woken === mainThreadId ? `<span class="main-thread">Main Thread</span>` : `<span class="thread-id">Thread ${woken}</span>`;
+              extraSuffix = ` (woke ${wokenDisplay})`;
+            } else {
+              extraSuffix = ` (no waiters)`;
+            }
+          }
+          break;
+        case "condvar_notify_all":
+          actionText = `notified all waiters on`;
+          {
+            const q = condvarQueues[lockNum] || [];
+            if (q.length > 0) {
+              const list = q.map(t => t === mainThreadId ? `Main Thread` : `Thread ${t}`).join(", ");
+              extraSuffix = ` (woke ${list})`;
+            } else {
+              extraSuffix = ` (no waiters)`;
+            }
+          }
+          break;
+          
+        default:
+          actionText = type;
+          break;
+      }
+      
+      // Build base log entry
+      const baseEntry = {
         step: idx + 2, // init step is 1, so we start from 2
         timestamp: Math.floor(timestamp * 1000), // Convert to milliseconds
         type,
+        lock_type: lockType,
         thread_id: rawThread,
         resource_id: resourceMapping[lockNum],
-        description: `${threadDescription} ${actionText} <span class="resource-id">Resource ${resourceMapping[lockNum]}</span>`,
+        description: `${threadDescription} ${actionText} <span class="resource-id ${lockType}">${lockTypeDesc} ${resourceMapping[lockNum]}</span>${extraSuffix}`,
         is_main_thread: rawThread === mainThreadId, // Mark if this is the main thread
-      });
+      };
+
+      // Attach explicit woken info and update queues on notify events
+      if (type === "condvar_notify_one") {
+        const q = condvarQueues[lockNum] || [];
+        const woken = q.length > 0 ? q.shift() : null;
+        if (woken) baseEntry.woken_thread_id = woken;
+      } else if (type === "condvar_notify_all") {
+        const q = condvarQueues[lockNum] || [];
+        if (q.length > 0) {
+          baseEntry.woken_threads = q.slice();
+          q.length = 0; // clear
+        } else {
+          baseEntry.woken_threads = [];
+        }
+      }
+
+      logs.push(baseEntry);
     }
   }
 
-  // Detect deadlock using the resource ownership and waiting threads information
-  const deadlockCycle = detectDeadlockCycle(resourceOwners, threadWaiting);
-  
-  if (deadlockCycle && deadlockCycle.length >= 2) {
-    // Create descriptions of the deadlock cycle
-    const deadlockDescriptions = [];
-    
-    for (let i = 0; i < deadlockCycle.length; i++) {
-      const threadId = deadlockCycle[i];
-      const waitingForResource = threadWaiting[threadId];
-      const resourceHeldByThread = resourceOwners[waitingForResource];
-      const resourceSymbol = resourceMapping[waitingForResource];
-      
-      // Format thread display based on whether it's the main thread
-      const threadDisplay = threadId === mainThreadId 
-        ? `<span class="main-thread">Main Thread</span>` 
-        : `<span class="thread-id">Thread ${threadId}</span>`;
-      
-      // Format resource owner display based on whether it's the main thread
-      const resourceOwnerDisplay = resourceHeldByThread === mainThreadId
-        ? `<span class="main-thread">Main Thread</span>`
-        : `<span class="thread-id">Thread ${resourceHeldByThread}</span>`;
-      
-      deadlockDescriptions.push(`${threadDisplay} is waiting for <span class="resource-id">Resource ${resourceSymbol}</span> held by ${resourceOwnerDisplay}`);
-    }
-
-    // Join descriptions with proper separators for better readability
-    let deadlockDescription = `<strong>DEADLOCK DETECTED:</strong><br>`;
-    deadlockDescription += deadlockDescriptions.join('<br>');
-
-    // Last log timestamp: 100 ms after the last event (in milliseconds)
-    const lastTimestamp = logs.length > 1 
-      ? logs[logs.length - 1].timestamp 
-      : Math.floor(Date.now());
-    const deadlockTimestamp = lastTimestamp + 100;
-      
-    const deadlockLog = {
-      step: logs.length + 1,
-      timestamp: deadlockTimestamp,
-      type: "deadlock",
-      cycle: deadlockCycle,
-      description: deadlockDescription,
-      deadlock_details: {
-        thread_cycle: deadlockCycle,
-        thread_waiting_for_locks: Object.entries(threadWaiting)
-          .filter(([threadId]) => deadlockCycle.includes(parseInt(threadId)) || deadlockCycle.includes(threadId))
-          .map(([threadId, resourceId]) => ({
-            thread_id: parseInt(threadId),
-            lock_id: resourceMapping[resourceId],
-            resource_id: resourceId
-          })),
-        timestamp: deadlockTimestamp,
-      },
-    };
-      
-    logs.push(deadlockLog);
-    
-    console.log("Deadlock detected, showing only events up to deadlock");
-  }
+  // Remove frontend deadlock detection; rely on terminal record in logs
 
   return logs;
 }
@@ -383,6 +572,7 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
       id: `R${lockNum}`,
       name: `Resource ${resourceMapping[lockNum]}`,
       type: "resource",
+      lock_type: "mutex", // default, will be updated when resource is created
     };
   });
   
@@ -412,10 +602,12 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
     const prevState = graphStates[graphStates.length - 1];
     const currentNodes = [...prevState.nodes];
     let currentLinks = [...prevState.links];
+    // Transient links that exist only for this step (e.g., notify)
+    const transientLinks = [];
     
     // Handle spawn events
-    if (log.type === "spawn") {
-      if (log.thread_id !== 0) {
+    if (isSpawnEvent(log.type)) {
+      if (log.type === "thread_spawn" && log.thread_id !== 0) {
         // Thread spawn
         const threadId = log.thread_id;
         const nodeId = `T${threadId}`;
@@ -434,27 +626,43 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
           currentNodes.push(nodesMap[nodeId]);
         }
       } else if (log.resource_id) {
-        // Resource creation
+        // Resource creation (Mutex, RwLock, or Condvar)
         const resourceId = `R${log.resource_id.replace(/^[A-Z]/, '')}`;
+        const lockType = log.lock_type || "mutex";
         
         // Add resource to active set and to nodes if not already there
         if (!activeResources.has(resourceId)) {
           activeResources.add(resourceId);
+          
+          let lockTypeDesc = "";
+          switch (lockType) {
+            case "mutex": lockTypeDesc = "Mutex"; break;
+            case "rwlock": lockTypeDesc = "RwLock"; break;
+            case "condvar": lockTypeDesc = "Condvar"; break;
+            default: lockTypeDesc = "Resource"; break;
+          }
+          
           // Create node if it doesn't exist in the map
           if (!nodesMap[resourceId]) {
             nodesMap[resourceId] = {
               id: resourceId,
-              name: `Resource ${log.resource_id}`,
+              name: `${lockTypeDesc} ${log.resource_id}`,
               type: "resource",
+              lock_type: lockType,
             };
+          } else {
+            // Update existing node with lock type info
+            nodesMap[resourceId].lock_type = lockType;
+            nodesMap[resourceId].name = `${lockTypeDesc} ${log.resource_id}`;
           }
           currentNodes.push(nodesMap[resourceId]);
         }
       }
     }
+    // Check if this is an exit event (any type)
     // Handle exit events
-    else if (log.type === "exit") {
-      if (log.thread_id !== 0) {
+    else if (isExitEvent(log.type)) {
+      if (log.type === "thread_exit" && log.thread_id !== 0) {
         // Thread exit
         const threadId = log.thread_id;
         const nodeId = `T${threadId}`;
@@ -503,13 +711,15 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
         });
       }
     }
-    // Handle resource access events (attempt, acquired, released)
-    else if (["attempt", "acquired", "released"].includes(log.type) && 
+    // Handle resource access events (attempt, acquired, released, wait)
+    else if ((isAttemptEvent(log.type) || isWaitBeginEvent(log.type) || isAcquisitionEvent(log.type) || isReleaseEvent(log.type) || isWaitEndEvent(log.type)) && 
              log.thread_id !== 0 && log.resource_id) {
       const threadId = log.thread_id;
       const sourceId = `T${threadId}`;
-      const resourceIdStr = log.resource_id.toString().replace(/^[A-Z]/, '');
-      const targetId = `R${resourceIdStr}`;
+      // Find the numeric key for this resource letter from resourceMapping
+      const resourceLetter = log.resource_id;
+      const resourceNum = Object.keys(resourceMapping).find(key => resourceMapping[key] === resourceLetter);
+      const targetId = `R${resourceNum}`;
       const linkKey = `${sourceId}-${targetId}`;
       
       // Make sure both nodes exist in the active sets
@@ -540,11 +750,11 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
       }
       
       // Update link state
-      if (log.type === "released") {
+      if (isReleaseEvent(log.type) || isWaitEndEvent(log.type)) {
       // Remove the link when resource is released
         delete cumulativeLinks[linkKey];
     } else {
-      // Add or update link for attempt or acquired
+        // Add or update link for attempt, wait_begin or acquired
         cumulativeLinks[linkKey] = log.type;
     }
 
@@ -573,7 +783,7 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
     graphStates.push({
       step: graphStates.length + 1,
       nodes: currentNodes,
-      links: currentLinks,
+      links: [...currentLinks, ...transientLinks],
     });
   });
 
@@ -659,7 +869,11 @@ function generateGraphStateFromLogs(logs, graphThreadMapping, resourceMapping) {
  * Here rawGraph is not used; the graph state is derived from logs
  */
 function transformRawObject(rawData) {
-  const rawLogs = rawData[0];
+  // Support new format: { events, deadlock }
+  try { console.log('[transformRawObject] rawData keys:', Array.isArray(rawData) ? 'array' : Object.keys(rawData || {})); } catch (e) {}
+  const rawLogs = Array.isArray(rawData)
+    ? rawData[0]
+    : (Array.isArray(rawData.events) ? rawData.events : []);
 
   // For graph: Keep track of thread IDs without re-mapping
   const graphThreadMapping = {};
@@ -681,6 +895,109 @@ function transformRawObject(rawData) {
 
   // Transform logs and generate graph states
   const logs = transformLogs(rawLogs, resourceMapping);
+  // If backend provided terminal deadlock info, append it and skip internal detection
+  try {
+    if (Array.isArray(rawData)) {
+      const second = (rawData.length > 1) ? rawData[1] : null;
+      let dl = null;
+      if (second && typeof second === 'object' && !Array.isArray(second)) {
+        dl = second.deadlock ? second.deadlock : (Array.isArray(second.thread_cycle) ? second : null);
+      } else if (Array.isArray(second) && second.length >= 3) {
+        // rmp_serde may encode struct as an array: [thread_cycle, thread_waiting_for_locks, timestamp]
+        const [thread_cycle, thread_waiting_for_locks, timestamp] = second;
+        if (Array.isArray(thread_cycle)) {
+          dl = { thread_cycle, thread_waiting_for_locks: thread_waiting_for_locks || [], timestamp };
+          console.log('[transformRawObject] Interpreted tuple-form deadlock:', dl);
+        }
+      }
+      if (dl && Array.isArray(dl.thread_cycle)) {
+        console.log('[transformRawObject] Found terminal deadlock (array form):', dl);
+
+        // Build rich description
+        const waits = (dl.thread_waiting_for_locks || []).map(w => Array.isArray(w) ? { thread_id: w[0], resource_id: w[1] } : w);
+        const resourceTypeById = {};
+        try {
+          logs.forEach(e => {
+            if (e && typeof e.type === 'string' && e.type.endsWith('_spawn') && e.resource_id) {
+              const num = parseInt(e.resource_id);
+              if (!isNaN(num)) resourceTypeById[num] = e.lock_type || 'mutex';
+            }
+          });
+        } catch (e) { /* ignore */ }
+        const descLines = [];
+        for (let i = 0; i < dl.thread_cycle.length; i++) {
+          const threadId = dl.thread_cycle[i];
+          const nextThread = dl.thread_cycle[(i + 1) % dl.thread_cycle.length];
+          const wait = waits.find(w => w.thread_id === threadId);
+          if (!wait) continue;
+          const resId = parseInt(wait.resource_id);
+          const rType = resourceTypeById[resId] || 'mutex';
+          const rLabel = rType === 'rwlock' ? 'RwLock' : (rType === 'condvar' ? 'Condvar' : 'Mutex');
+          descLines.push(`<span class="thread-id">Thread ${threadId}</span> is waiting for <span class="resource-id ${rType}">${rLabel} ${resId}</span> held by <span class="thread-id">Thread ${nextThread}</span>`);
+        }
+        const description = `<strong>DEADLOCK DETECTED:</strong><br>` + (descLines.length ? descLines.join('<br>') : '');
+
+        logs.push({
+          step: logs.length + 1,
+          timestamp: Date.now(),
+          type: 'deadlock',
+          cycle: dl.thread_cycle,
+          description,
+          deadlock_details: {
+            thread_cycle: dl.thread_cycle,
+            thread_waiting_for_locks: waits.map(w => ({ thread_id: w.thread_id, lock_id: w.resource_id, resource_id: w.resource_id })),
+            timestamp: dl.timestamp,
+          },
+        });
+        console.log('[transformRawObject] Appended deadlock entry (array) at step', logs[logs.length-1].step);
+      } else {
+        console.log('[transformRawObject] No terminal deadlock found in array payload second element:', second);
+      }
+    } else {
+      const dl = (rawData && rawData.deadlock) ? rawData.deadlock : null;
+      if (dl) {
+        console.log('[transformRawObject] Found terminal deadlock (object form):', dl);
+        // Build rich description
+        const waits = (dl.thread_waiting_for_locks || []).map(w => Array.isArray(w) ? { thread_id: w[0], resource_id: w[1] } : w);
+        const resourceTypeById = {};
+        try {
+          logs.forEach(e => {
+            if (e && typeof e.type === 'string' && e.type.endsWith('_spawn') && e.resource_id) {
+              const num = parseInt(e.resource_id);
+              if (!isNaN(num)) resourceTypeById[num] = e.lock_type || 'mutex';
+            }
+          });
+        } catch (e) { /* ignore */ }
+        const descLines = [];
+        for (let i = 0; i < dl.thread_cycle.length; i++) {
+          const threadId = dl.thread_cycle[i];
+          const nextThread = dl.thread_cycle[(i + 1) % dl.thread_cycle.length];
+          const wait = waits.find(w => w.thread_id === threadId);
+          if (!wait) continue;
+          const resId = parseInt(wait.resource_id);
+          const rType = resourceTypeById[resId] || 'mutex';
+          const rLabel = rType === 'rwlock' ? 'RwLock' : (rType === 'condvar' ? 'Condvar' : 'Mutex');
+          descLines.push(`<span class="thread-id">Thread ${threadId}</span> is waiting for <span class="resource-id ${rType}">${rLabel} ${resId}</span> held by <span class="thread-id">Thread ${nextThread}</span>`);
+        }
+        const description = `<strong>DEADLOCK DETECTED:</strong><br>` + (descLines.length ? descLines.join('<br>') : '');
+
+        logs.push({
+          step: logs.length + 1,
+          timestamp: Date.now(),
+          type: 'deadlock',
+          cycle: dl.thread_cycle,
+          description,
+          deadlock_details: {
+            thread_cycle: dl.thread_cycle,
+            thread_waiting_for_locks: waits.map(w => ({ thread_id: w.thread_id, lock_id: w.resource_id, resource_id: w.resource_id })),
+            timestamp: dl.timestamp,
+          },
+        });
+        console.log('[transformRawObject] Appended deadlock entry (object) at step', logs[logs.length-1].step);
+      }
+    }
+  } catch (e) { console.warn('No terminal deadlock info or failed to parse', e); }
+
   const graph_state = generateGraphStateFromLogs(
     logs,
     graphThreadMapping,
@@ -711,7 +1028,7 @@ function decodeLogs(encodedStr) {
     var decompressed = pako.ungzip(bytes);
     var logsData = msgpack.decode(decompressed);
     
-    return logsData;
+    return logsData; // Expecting { events, deadlock? }
   } catch (error) {
     console.error("Error decoding logs:", error);
     throw new Error("Failed to decode the logs data: " + error.message);
@@ -725,11 +1042,19 @@ function processEncodedLog(encodedStr) {
   try {
     // Handle case where encodedStr is already an object (not a string)
     if (typeof encodedStr !== 'string') {
-      return transformRawObject(encodedStr);
+      const out = transformRawObject(encodedStr);
+      console.log('[processEncodedLog] non-string input; logs:', out.logs.length, 'graph steps:', out.graph_state.length);
+      return out;
     }
     
     const decoded = decodeLogs(encodedStr);
-    return transformRawObject(decoded);
+    const out = transformRawObject(decoded);
+    console.log('[processEncodedLog] decoded; logs:', out.logs.length, 'graph steps:', out.graph_state.length);
+    // Ensure last event is visible in timeline
+    if (out.logs.length > 0) {
+      console.log('[processEncodedLog] last log type:', out.logs[out.logs.length-1].type);
+    }
+    return out;
   } catch (error) {
     console.error("Error in processEncodedLog:", error);
     throw error;
@@ -746,176 +1071,27 @@ function processNewFormatLogs(logText) {
   try {
     let jsonData;
     
-    // Check if the input is already a parsed object or a string that needs parsing
+    // Always parse upload as JSONL (one JSON object per line)
     if (typeof logText === 'string') {
-      // Handle the line-by-line JSON format
-      if (logText.trim().startsWith("{") && logText.includes('{"event":')) {
-        // Split by newlines and parse each line as a separate JSON object
-        const lines = logText.trim().split('\n');
+      const lines = logText.split(/\r?\n/).filter(l => l.trim().length > 0);
         const events = [];
-        const graphState = [];
-        
-        // Keep track of deadlock detection
-        let deadlockDetected = false;
-        let deadlockThreads = [];
-        
-        // Process each line as a separate JSON object
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue; // Skip empty lines
-          
-          try {
-            const lineData = JSON.parse(line.trim());
-            if (lineData.event) {
-              const { thread_id, lock_id, event, timestamp, parent_id } = lineData.event;
-              
-              // Check if this event would create a deadlock
-              if (event === 'Attempt' && lineData.graph) {
-                const links = lineData.graph.links || [];
-                // If we have a deadlock condition (thread attempting to acquire a resource held by another waiting thread)
-                const attemptLinks = links.filter(link => link.type === 'Attempt');
-                const acquiredLinks = links.filter(link => link.type === 'Acquired');
-                
-                // Simple deadlock detection: If we have at least 2 threads where each is waiting for a resource 
-                // held by the other, we have a deadlock
-                if (attemptLinks.length >= 2) {
-                  // Check for cyclic dependencies
-                  const dependencies = {};
-                  
-                  // Build dependency graph
-                  for (const link of links) {
-                    if (link.type === 'Acquired') {
-                      // A thread has acquired a resource
-                      const threadId = link.source;
-                      const resourceId = link.target;
-                      
-                      // Mark this resource as being held by this thread
-                      if (!dependencies[resourceId]) {
-                        dependencies[resourceId] = { heldBy: threadId };
-                      } else {
-                        dependencies[resourceId].heldBy = threadId;
-                      }
-                    } else if (link.type === 'Attempt') {
-                      // A thread is waiting for a resource
-                      const threadId = link.source;
-                      const resourceId = link.target;
-                      
-                      // Mark this thread as waiting for this resource
-                      if (!dependencies[resourceId]) {
-                        dependencies[resourceId] = { waitingThreads: [threadId] };
-                      } else if (!dependencies[resourceId].waitingThreads) {
-                        dependencies[resourceId].waitingThreads = [threadId];
-                      } else {
-                        dependencies[resourceId].waitingThreads.push(threadId);
-                      }
-                    }
-                  }
-                  
-                  // Check for cycles in the dependency graph
-                  const visited = new Set();
-                  const recStack = new Set();
-                  const threadsInCycle = new Set();
-                  
-                  // Function to detect cycle
-                  const detectCycle = (threadId, path = []) => {
-                    if (recStack.has(threadId)) {
-                      // We found a cycle
-                      const cycleStart = path.indexOf(threadId);
-                      deadlockThreads = path.slice(cycleStart);
-                      deadlockThreads.forEach(t => threadsInCycle.add(t));
-                      return true;
-                    }
-                    
-                    if (visited.has(threadId)) {
-                      return false;
-                    }
-                    
-                    visited.add(threadId);
-                    recStack.add(threadId);
-                    path.push(threadId);
-                    
-                    // Find resources this thread is waiting for
-                    for (const [resourceId, info] of Object.entries(dependencies)) {
-                      if (info.waitingThreads && info.waitingThreads.includes(threadId) && info.heldBy) {
-                        // This thread is waiting for a resource held by another thread
-                        if (detectCycle(info.heldBy, [...path])) {
-                          return true;
-                        }
-                      }
-                    }
-                    
-                    recStack.delete(threadId);
-                    return false;
-                  };
-                  
-                  // Start cycle detection from each thread that's waiting
-                  for (const [resourceId, info] of Object.entries(dependencies)) {
-                    if (info.waitingThreads && info.waitingThreads.length > 0 && info.heldBy) {
-                      for (const waitingThread of info.waitingThreads) {
-                        if (detectCycle(waitingThread)) {
-                          deadlockDetected = true;
-                          break;
-                        }
-                      }
-                      if (deadlockDetected) break;
-                    }
-                  }
-                  
-                  // If we've detected a deadlock, we want this to be the last event we process
-                  if (deadlockDetected && threadsInCycle.size >= 2) {
-                    console.log("Deadlock detected, stopping log processing");
-                    // Add the current event that caused the deadlock
-                    const formattedEvent = [
-                      thread_id, 
-                      lock_id, 
-                      getEventCode(event), 
-                      timestamp,
-                      parent_id || 0
-                    ];
-                    events.push(formattedEvent);
-                    
-                    // Add the current graph state
-                    if (lineData.graph) {
-                      graphState.push(lineData.graph);
-                    }
-                    
-                    // Break out of the loop to stop processing further logs
-                    break;
-                  }
-                }
-              }
-              
-              // Convert event to event code
+      let terminalDeadlock = null;
+      for (const rawLine of lines) {
+        const line = rawLine.trim().replace(/^\uFEFF/, '');
+        try {
+          const obj = JSON.parse(line);
+          if (obj.event) {
+            const { thread_id, lock_id, event, timestamp, parent_id } = obj;
               const eventCode = getEventCode(event);
-              
-              // Create event in the expected format [thread_id, lock_id, event_code, timestamp, parent_id]
-              const formattedEvent = [
-                thread_id, 
-                lock_id, 
-                eventCode, 
-                timestamp,
-                parent_id || 0
-              ];
-              
-              events.push(formattedEvent);
-              
-              // Also store the graph state if available
-              if (lineData.graph) {
-                graphState.push(lineData.graph);
-              }
-            }
-          } catch (lineError) {
-            console.error("Error parsing JSON line:", lineError, line);
-            // Continue with next line instead of failing completely
+            events.push([thread_id, lock_id, eventCode, timestamp, parent_id || 0]);
+          } else if (obj.deadlock) {
+            terminalDeadlock = obj.deadlock;
           }
+        } catch (e) {
+          console.error('Error parsing JSON line:', e, line);
         }
-        
-        // Create the data structure expected by the rest of the code
-        jsonData = { events, graphs: graphState };
-      } else {
-        // Try to parse as a single JSON object
-        jsonData = JSON.parse(logText);
       }
+      jsonData = { events, deadlock: terminalDeadlock };
     } else {
       jsonData = logText;
     }
@@ -954,7 +1130,47 @@ function processNewFormatLogs(logText) {
     // Transform raw logs into structured log entries
     const logs = transformLogs(rawLogs, resourceMapping);
 
-    // Generate graph states based on logs
+    // If terminal deadlock exists in upload, append a deadlock step with rich description
+    if (jsonData.deadlock) {
+      const dl = jsonData.deadlock;
+      const waits = (dl.thread_waiting_for_locks || []).map(w => Array.isArray(w) ? { thread_id: w[0], resource_id: w[1] } : w);
+      const resourceTypeById = {};
+      try {
+        logs.forEach(e => {
+          if (e && typeof e.type === 'string' && e.type.endsWith('_spawn') && e.resource_id) {
+            const num = parseInt(e.resource_id);
+            if (!isNaN(num)) resourceTypeById[num] = e.lock_type || 'mutex';
+          }
+        });
+      } catch (_) {}
+      const descLines = [];
+      for (let i = 0; i < dl.thread_cycle.length; i++) {
+        const threadId = dl.thread_cycle[i];
+        const nextThread = dl.thread_cycle[(i + 1) % dl.thread_cycle.length];
+        const wait = waits.find(w => w.thread_id === threadId);
+        if (!wait) continue;
+        const resId = parseInt(wait.resource_id);
+        const rType = resourceTypeById[resId] || 'mutex';
+        const rLabel = rType === 'rwlock' ? 'RwLock' : (rType === 'condvar' ? 'Condvar' : 'Mutex');
+        descLines.push(`<span class="thread-id">Thread ${threadId}</span> is waiting for <span class="resource-id ${rType}">${rLabel} ${resId}</span> held by <span class="thread-id">Thread ${nextThread}</span>`);
+      }
+      const description = `<strong>DEADLOCK DETECTED:</strong><br>` + (descLines.length ? descLines.join('<br>') : '');
+
+      logs.push({
+        step: logs.length + 1,
+        timestamp: Date.now(),
+        type: 'deadlock',
+        cycle: dl.thread_cycle,
+        description,
+        deadlock_details: {
+          thread_cycle: dl.thread_cycle,
+          thread_waiting_for_locks: waits.map(w => ({ thread_id: w.thread_id, lock_id: w.resource_id, resource_id: w.resource_id })),
+          timestamp: dl.timestamp,
+        },
+      });
+    }
+
+    // Generate graph states based on logs (includes appended deadlock step)
     const graphStates = generateGraphStateFromLogs(
       logs,
       graphThreadMapping,
@@ -974,11 +1190,48 @@ function processNewFormatLogs(logText) {
 // Helper function to convert event string to event code
 function getEventCode(event) {
   switch (event) {
-    case 'Attempt': return 0;
-    case 'Acquired': return 1;
-    case 'Released': return 2;
-    case 'Spawn': return 3;
-    case 'Exit': return 4;
+    // Thread lifecycle
+    case 'ThreadSpawn': return 0;
+    case 'ThreadExit': return 1;
+    
+    // Mutex lifecycle 
+    case 'MutexSpawn': return 2;
+    case 'MutexExit': return 3;
+    
+    // RwLock lifecycle
+    case 'RwSpawn': return 4;
+    case 'RwExit': return 5;
+    
+    // Condvar lifecycle
+    case 'CondvarSpawn': return 6;
+    case 'CondvarExit': return 7;
+    
+    // Mutex interactions
+    case 'MutexAttempt': return 10;
+    case 'MutexAcquired': return 11;
+    case 'MutexReleased': return 12;
+    
+    // RwLock interactions
+    case 'RwReadAttempt': return 20;
+    case 'RwReadAcquired': return 21;
+    case 'RwReadReleased': return 22;
+    case 'RwWriteAttempt': return 23;
+    case 'RwWriteAcquired': return 24;
+    case 'RwWriteReleased': return 25;
+    
+    // Condvar interactions
+    case 'CondvarWaitBegin': return 30;
+    case 'CondvarWaitEnd': return 31;
+    case 'CondvarNotifyOne': return 32;
+    case 'CondvarNotifyAll': return 33;
+    
+    // Legacy generic events for backward compatibility
+    case 'Attempt': return 40;
+    case 'Acquired': return 41;
+    case 'Released': return 42;
+    case 'Spawn': return 3; // Legacy mapping
+    case 'Exit': return 4; // Legacy mapping
+    
     default: return -1; // Unknown event
   }
 }

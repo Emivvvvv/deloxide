@@ -2,7 +2,7 @@ use crate::core::mutex::on_mutex_create;
 use crate::ffi::FFI_GUARD;
 use crate::{Mutex, ThreadId};
 use std::ffi::c_void;
-use std::os::raw::{c_int, c_ulong};
+use std::os::raw::c_int;
 
 /// Create a new tracked mutex.
 ///
@@ -37,7 +37,7 @@ pub unsafe extern "C" fn deloxide_create_mutex() -> *mut c_void {
 /// - Any usage from C must ensure not to free or move the returned pointer by other means.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
-    creator_thread_id: c_ulong,
+    creator_thread_id: usize,
 ) -> *mut c_void {
     let mutex = Box::new(Mutex::new(()));
 
@@ -93,7 +93,9 @@ pub unsafe extern "C" fn deloxide_lock_mutex(mutex: *mut c_void) -> c_int {
         let guard = mutex_ref.lock();
 
         #[allow(clippy::missing_transmute_annotations)]
-        FFI_GUARD.with(|slot| *slot.borrow_mut() = Some(std::mem::transmute(guard)));
+        FFI_GUARD.with(|map| {
+            map.borrow_mut().insert(mutex, std::mem::transmute(guard));
+        });
     }
 
     0
@@ -120,8 +122,8 @@ pub unsafe extern "C" fn deloxide_unlock_mutex(mutex: *mut c_void) -> c_int {
     }
 
     // Drop the guard we stashed above; this actually unlocks the Mutex
-    FFI_GUARD.with(|slot| {
-        let _ = slot.borrow_mut().take();
+    FFI_GUARD.with(|map| {
+        map.borrow_mut().remove(&mutex);
     });
 
     0
@@ -140,13 +142,13 @@ pub unsafe extern "C" fn deloxide_unlock_mutex(mutex: *mut c_void) -> c_int {
 /// # Safety
 /// - The caller must pass a valid pointer to a `Mutex<()>`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> c_ulong {
+pub unsafe extern "C" fn deloxide_get_mutex_creator(mutex: *mut c_void) -> usize {
     if mutex.is_null() {
         return 0;
     }
 
     unsafe {
         let mutex_ref = &*(mutex as *const Mutex<()>);
-        mutex_ref.creator_thread_id() as c_ulong
+        mutex_ref.creator_thread_id()
     }
 }

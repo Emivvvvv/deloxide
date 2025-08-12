@@ -19,7 +19,7 @@ impl Detector {
     pub fn on_mutex_create(&mut self, lock_id: LockId, creator_id: Option<ThreadId>) {
         let creator = creator_id.unwrap_or_else(get_current_thread_id);
         if let Some(logger) = &self.logger {
-            logger.log_lock_event(lock_id, Some(creator), Events::Spawn);
+            logger.log_lock_event(lock_id, Some(creator), Events::MutexSpawn);
         }
     }
 
@@ -42,7 +42,7 @@ impl Detector {
         self.thread_waits_for.retain(|_, &mut l| l != 0);
 
         if let Some(logger) = &self.logger {
-            logger.log_lock_event(lock_id, None, Events::Exit);
+            logger.log_lock_event(lock_id, None, Events::MutexExit);
         }
 
         // purge from all held-lock sets
@@ -102,10 +102,14 @@ impl Detector {
 
         // Update ownership
         self.mutex_owners.insert(lock_id, thread_id);
-        self.thread_waits_for.remove(&thread_id);
 
-        // Remove thread from wait graph
-        self.wait_for_graph.remove_thread(thread_id);
+        // For synthetic attempts (condvar woken threads), don't remove wait-for edges immediately
+        // This allows deadlock detection to see the full cycle
+        if !self.cv_woken.contains(&thread_id) {
+            self.thread_waits_for.remove(&thread_id);
+            // Remove thread from wait graph
+            self.wait_for_graph.remove_thread(thread_id);
+        }
 
         // Record held lock
         self.thread_holds
