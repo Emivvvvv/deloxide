@@ -19,12 +19,12 @@
     --color-modal-bg: rgba(0, 0, 0, 0.5);
 
     /* General variables */
-    --bg-color: #f5f5f5;
+    --bg-color: #f4f2f2ff;
     --bg-gradient-end: #e0e9f5;
     --container-bg: #ffffff;
     --text-color: #333333;
-    --primary-color: #3498db;
-    --primary-dark: #2980b9;
+    --primary-color: #ce412cff;
+    --primary-dark: #a53423ff;
     --success-color: #27ae60;
     --warning-color: #f39c12;
     --danger-color: #e74c3c;
@@ -35,6 +35,31 @@
     --hover-bg: #f8f9fa;
     --shadow-color: rgba(0, 0, 0, 0.1);
     --tooltip-bg: rgba(0, 0, 0, 0.8);
+
+    /* Synchronization primitive colors */
+    --mutex-fill: #2ecc71;
+    --mutex-stroke: #27ae60;
+    --rwlock-fill: #f39c12;
+    --rwlock-stroke: #e67e22;
+    --condvar-fill: #9b59b6;
+    --condvar-stroke: #8e44ad;
+
+    /* Thread colors */
+    --thread-fill: #e74c3c;           /* regular thread */
+    --thread-stroke: #c0392b;
+    --thread-main-fill: #3498db;      /* main thread (blue) */
+    --thread-main-stroke: #2980b9;
+
+    /* Link colors */
+    --link-deadlock: #ff1f1f;         /* more vivid red */
+    --link-attempt: #f1c40f;          /* attempts (lock tries) */
+    --link-wait: #f06292;             /* slightly pinker, further from primary */
+    --link-acquired: #27ae60;
+    --link-acquired-read: #a8f5c2;   /* lighter green for RW read acquired */
+    --link-acquired-write: #0e5a34;  /* darker green for RW write acquired */
+    --link-released: #95a5a6;         /* released & condvar wait_end */
+    --link-notify: #00bcd4;           /* notify one/all */
+    --link-spawn: #d76250; /* spawn: lighter tint of primary for better contrast */
 }
 
 .upload-item-name {
@@ -87,7 +112,6 @@
     width: 70px; /* Reduced from 80px */
     height: auto;
     margin-bottom: 15px; /* Reduced from 20px */
-    filter: brightness(0) saturate(100%) invert(48%) sepia(81%) saturate(2476%) hue-rotate(187deg) brightness(90%) contrast(86%);
 }
 
 .welcome-message h2 {
@@ -185,31 +209,60 @@
 /* Main thread styling */
 .main-thread {
     font-family: 'Roboto Mono', monospace;
-    color: #9b59b6; /* Purple color for main thread */
+    color: var(--thread-main-fill);
     font-weight: 700;
     position: relative;
     font-size: 0.95em;
-    background-color: rgba(155, 89, 182, 0.1);
+    background-color: rgba(52, 152, 219, 0.12);
     padding: 3px 6px;
     border-radius: 4px;
-    border: 1px solid rgba(155, 89, 182, 0.2);
+    border: 1px solid rgba(41, 128, 185, 0.25);
 }
 
 /* Thread and resource IDs styling */
 .thread-id {
     font-family: 'Roboto Mono', monospace;
-    color: #e74c3c;
-    font-weight: 500;
+    color: var(--thread-fill);
+    font-weight: 700;
     position: relative;
-    font-size: 0.95em;
+    font-size: 0.9em;
+    background-color: rgba(231, 76, 60, 0.12);
+    padding: 2px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(192, 57, 43, 0.25);
 }
 
 .resource-id {
     font-family: 'Roboto Mono', monospace;
-    color: #3498db;
-    font-weight: 500;
+    color: var(--primary-color);
+    font-weight: 600;
     position: relative;
-    font-size: 0.95em;
+    font-size: 0.9em;
+}
+
+/* Specific lock type styling */
+.resource-id.mutex {
+    color: var(--mutex-fill);
+    background-color: color-mix(in srgb, var(--mutex-fill) 15%, transparent);
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--mutex-stroke) 20%, transparent);
+}
+
+.resource-id.rwlock {
+    color: var(--rwlock-fill);
+    background-color: color-mix(in srgb, var(--rwlock-fill) 15%, transparent);
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--rwlock-stroke) 20%, transparent);
+}
+
+.resource-id.condvar {
+    color: var(--condvar-fill);
+    background-color: color-mix(in srgb, var(--condvar-fill) 15%, transparent);
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--condvar-stroke) 20%, transparent);
 }
 
 /* Modern card styling */
@@ -274,8 +327,8 @@
     --bg-gradient-end: #1a2333;
     --container-bg: #1e1e1e;
     --text-color: #f5f5f5;
-    --primary-color: #3498db;
-    --primary-dark: #2980b9;
+    --primary-color: #ce412cff;
+    --primary-dark: #a53423ff;
     --success-color: #2ecc71;
     --warning-color: #f1c40f;
     --danger-color: #e74c3c;
@@ -539,22 +592,24 @@ main {
     fill-opacity: 0.9;
 }
 
+/* Node label defaults */
 .node text {
-    font-size: 13px;
+    font-size: 13px; /* Reduced from 14px */
     font-weight: bold;
     fill: white;
     pointer-events: none;
     user-select: none;
     text-anchor: middle;
     dominant-baseline: middle;
-    transition: opacity 0.3s ease, fill 0.3s ease;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    stroke: none !important; /* ensure no outline */
+    paint-order: normal;
 }
 
-/* Subtle text effect on hover */
+/* Subtle text effect on hover disabled for clarity */
 .node:hover text {
     fill: #ffffff;
-    text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+    text-shadow: none;
+    stroke: none;
 }
 
 .resource circle {
@@ -623,7 +678,7 @@ main {
 }
 
 .link.spawn {
-    stroke: #9b59b6; /* Purple color for spawn links */
+    stroke: var(--link-spawn);
     stroke-width: 2.5px;
 }
 
@@ -634,12 +689,20 @@ main {
 }
 
 .link.deadlock {
-    stroke: #f44336;
+    stroke: var(--link-deadlock);
     stroke-width: 3px; /* Reduced from 4px */ 
     animation: pulse-link 3s infinite alternate;
     stroke-opacity: 0.9;
     filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.7)); /* Reduced from 4px */
     z-index: 1000;
+}
+
+/* Transient outline for woken threads (notify visual cue) */
+.woken-outline {
+    stroke: var(--link-notify) !important; /* cyan */
+    fill: none !important;
+    stroke-dasharray: 4,3;
+    pointer-events: none;
 }
 
 @keyframes pulse-link {
@@ -823,23 +886,31 @@ main {
 }
 
 .timeline-event.init {
-    background-color: var(--primary-color);
+    background-color: whitesmoke; /* distinct neutral for init */
 }
 
 .timeline-event.attempt {
-    background-color: var(--warning-color);
+    background-color: var(--link-attempt);
 }
 
 .timeline-event.acquired {
-    background-color: var(--success-color);
+    background-color: var(--link-acquired);
 }
 
 .timeline-event.released {
-    background-color: var(--neutral-color);
+    background-color: var(--link-released);
+}
+
+.timeline-event.wait {
+    background-color: var(--link-wait);
+}
+
+.timeline-event.notify {
+    background-color: var(--link-notify);
 }
 
 .timeline-event.spawn {
-    background-color: #9b59b6; /* Purple color for spawn events */
+    background-color: var(--link-spawn);
 }
 
 .timeline-event.exit {
@@ -847,7 +918,7 @@ main {
 }
 
 .timeline-event.deadlock {
-    background-color: var(--danger-color);
+    background-color: var(--link-deadlock);
     width: 18px; /* Reduced from 20px */
     height: 18px; /* Reduced from 20px */
 }
@@ -867,6 +938,28 @@ main {
     transition: opacity 0.1s ease;
 }
 
+.legend-sections {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+
+.legend-section {
+    flex: 1 1 280px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.legend-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
 #legend h3 {
     margin: 0 0 8px 0; /* Reduced from 12px */
     font-size: 0.85rem; /* Reduced from 0.9rem */
@@ -879,22 +972,22 @@ main {
 .legend-items {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px; /* Reduced from 8px */
-    justify-content: center;
+    gap: 6px;
+    justify-content: flex-start;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 5px; /* Reduced from 6px */
-    font-size: 0.8rem; /* Reduced from 0.85rem */
-    background: rgba(0, 0, 0, 0.03);
-    padding: 3px 8px; /* Reduced from 4px 10px */
-    border-radius: 6px;
+    gap: 5px;
+    font-size: 0.78rem;
+    background: rgba(0, 0, 0, 0.02);
+    padding: 2px 6px;
+    border-radius: 5px;
     transition: all 0.2s ease;
     flex: 0 1 auto;
-    min-width: auto;
-    justify-content: center;
+    min-width: 0;
+    justify-content: flex-start;
 }
 
 .legend-item:hover {
@@ -904,8 +997,8 @@ main {
 }
 
 .legend-color {
-    width: 18px; /* Reduced from 20px */
-    height: 18px; /* Reduced from 20px */
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
 }
 
@@ -914,14 +1007,45 @@ main {
     border: 2px solid var(--danger-dark);
 }
 
-.legend-color.resource {
-    background-color: var(--primary-color);
-    border: 2px solid var(--primary-dark);
+.legend-color.mutex {
+    background-color: var(--mutex-fill);
+    border: 2px solid var(--mutex-stroke);
+}
+
+.legend-color.rwlock {
+    background-color: var(--rwlock-fill);
+    border: 2px solid var(--rwlock-stroke);
+}
+
+.legend-color.condvar {
+    background-color: var(--condvar-fill);
+    border: 2px solid var(--condvar-stroke);
+}
+
+/* Visualization node styling for different lock types */
+.node.mutex {
+    fill: var(--mutex-fill) !important; /* Green for Mutex */
+    stroke: var(--mutex-stroke) !important;
+}
+
+.node.rwlock {
+    fill: var(--rwlock-fill) !important; /* Orange for RwLock */
+    stroke: var(--rwlock-stroke) !important;
+}
+
+.node.condvar {
+    fill: var(--condvar-fill) !important; /* Purple for Condvar */
+    stroke: var(--condvar-stroke) !important;
+}
+
+.node.thread {
+    fill: var(--thread-fill) !important; /* Red for Thread */
+    stroke: var(--thread-stroke) !important;
 }
 
 .legend-line {
-    width: 35px; /* Reduced from 40px */
-    height: 4px; /* Reduced from 5px */
+    width: 30px;
+    height: 4px;
     border-radius: 2px;
 }
 
@@ -932,8 +1056,26 @@ main {
     background-repeat: repeat-x;
 }
 
+.legend-line.wait {
+    background-color: var(--link-wait);
+    background-image: linear-gradient(to right, var(--link-wait) 50%, transparent 50%);
+    background-size: 6px 100%;
+    background-repeat: repeat-x;
+}
+
 .legend-line.acquired {
     background-color: var(--success-color);
+}
+
+.legend-line.rw-read-acquired {
+    background-color: var(--link-acquired-read);
+    background-image: linear-gradient(to right, var(--link-acquired-read) 50%, transparent 50%);
+    background-size: 8px 100%;
+    background-repeat: repeat-x;
+}
+
+.legend-line.rw-write-acquired {
+    background-color: var(--link-acquired-write);
 }
 
 .legend-line.released {
@@ -944,7 +1086,7 @@ main {
 }
 
 .legend-line.spawn {
-    background-color: #9b59b6;
+    background-color: var(--link-spawn);
 }
 
 .legend-line.exit {
@@ -954,8 +1096,15 @@ main {
     background-repeat: repeat-x;
 }
 
+.legend-line.notify {
+    background-color: var(--link-notify);
+    background-image: linear-gradient(to right, var(--link-notify) 40%, transparent 60%);
+    background-size: 6px 100%;
+    background-repeat: repeat-x;
+}
+
 .legend-line.deadlock {
-    background-color: var(--danger-color);
+    background-color: var(--link-deadlock);
     height: 5px; /* Reduced from 6px */
 }
 
@@ -1583,8 +1732,8 @@ button.primary-action {
 /* Thread and resource IDs styling */
 .thread-id {
     font-family: 'Roboto Mono', monospace;
-    color: var(--danger-color);
-    font-weight: 500;
+    color: var(--thread-fill);
+    font-weight: 700;
 }
 
 .resource-id {
@@ -1760,3 +1909,11 @@ strong {
         padding: 15px;
     }
 }
+
+.deadlock-line {
+    margin: 12px 0; /* extra spacing between lines */
+    line-height: 2.0;
+}
+
+.thread-id { margin: 0 2px; }
+.resource-id { margin: 0 2px; }
