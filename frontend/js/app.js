@@ -2476,6 +2476,10 @@ function setupEventListeners() {
 
   // Add keyboard navigation
   document.addEventListener("keydown", (event) => {
+    // If no data loaded yet, ignore navigation and hotkeys
+    if (!logData || !Array.isArray(logData) || logData.length === 0) {
+      return;
+    }
     // Don't respond to keyboard during animation or cooldown
     if (isAnimating || buttonCooldown) {
       // Show feedback when user tries to use arrow keys during cooldown
@@ -2657,9 +2661,10 @@ function showWelcomeScreen() {
   loading.innerHTML = `
     <div class="welcome-message">
         <img src="img/mini-logo.png" alt="Deloxide Logo" class="welcome-logo">
-        <h2>Welcome to Deloxide</h2>
-        <p>A visualization tool for understanding deadlock detection in operating systems.</p>
-        <p>To get started, upload a Deloxide log file by clicking the Upload button in the top-right corner.</p>
+        <h2>Welcome to Deloxide's Visualizer</h2>
+        <p>Deloxide scrubs your threads clean by detecting deadlocks in real time—keeping your system smooth, safe, and corrosion-free. 🦀🧼🔒</p>
+        <br>
+        <p>To get started, upload a Deloxide log file by clicking the Upload button in the top-right corner or open it directly with the CLI.</p>
     </div>`
   loading.style.display = "block"
 
