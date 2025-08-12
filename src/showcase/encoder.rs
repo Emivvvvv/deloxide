@@ -1,3 +1,4 @@
+use crate::core::types::DeadlockInfo;
 use anyhow::{Context, Result};
 use base64::alphabet::URL_SAFE;
 use base64::engine::{Engine as _, general_purpose};
@@ -39,6 +40,7 @@ pub(crate) fn process_log_for_url<P: AsRef<Path>>(log_path: P) -> Result<String>
 
     // Create compact data structure
     let mut compact_events = Vec::new();
+    let mut terminal_deadlock: Option<DeadlockCompact> = None;
 
     // Process each line
     for line in reader.lines() {
@@ -47,17 +49,26 @@ pub(crate) fn process_log_for_url<P: AsRef<Path>>(log_path: P) -> Result<String>
             // Process each log entry
             let event = parse_log_entry(entry).context("Failed to parse log entry")?;
             compact_events.push(event);
+        } else if let Ok(dl) = serde_json::from_str::<DeadlockRecord>(&line) {
+            terminal_deadlock = Some(DeadlockCompact {
+                thread_cycle: dl.deadlock.thread_cycle.iter().map(|&t| t as u64).collect(),
+                thread_waiting_for_locks: dl
+                    .deadlock
+                    .thread_waiting_for_locks
+                    .iter()
+                    .map(|&(t, l)| (t as u64, l as u64))
+                    .collect(),
+                timestamp: dl.deadlock.timestamp.clone(),
+            });
         }
     }
 
-    // Create the compact log data
-    let compact_data = LogsData {
-        events: compact_events,
-    };
+    // Encode as a fixed 2-tuple: [events, deadlock_or_null]
+    let compact_output: (Events, Option<DeadlockCompact>) = (compact_events, terminal_deadlock);
 
     // 1. Convert to MessagePack
     let msgpack =
-        rmp_serde::to_vec(&compact_data).context("Failed to convert data to MessagePack")?;
+        rmp_serde::to_vec(&compact_output).context("Failed to convert data to MessagePack")?;
 
     // 2. Apply Gzip compression
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
@@ -99,6 +110,15 @@ type Events = Vec<Event>;
 #[derive(Serialize, Deserialize)]
 pub struct LogsData {
     pub events: Events,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadlock: Option<DeadlockCompact>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DeadlockCompact {
+    pub thread_cycle: Vec<u64>,
+    pub thread_waiting_for_locks: Vec<(u64, u64)>,
+    pub timestamp: String,
 }
 
 /// Parse a log entry into the compact format
@@ -169,6 +189,11 @@ fn parse_log_entry(entry: LogEntry) -> Result<Event> {
     Ok(compact_event)
 }
 
+#[derive(Deserialize)]
+struct DeadlockRecord {
+    deadlock: DeadlockInfo,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,8 +252,8 @@ mod tests {
                 parent_id: None,
             };
 
-            let result =
-                parse_log_entry(log_entry).expect(&format!("Failed to parse {}", event_name));
+            let result = parse_log_entry(log_entry)
+                .unwrap_or_else(|_| panic!("Failed to parse {event_name}"));
             assert_eq!(
                 result.2, expected_code,
                 "Event {event_name} should have code {expected_code}",

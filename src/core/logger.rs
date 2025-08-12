@@ -7,7 +7,7 @@
 //!
 //! The logger only records events - graph state is reconstructed in the frontend for better performance.
 
-use crate::core::types::{Events, LockId, ThreadId};
+use crate::core::types::{DeadlockInfo, Events, LockId, ThreadId};
 use anyhow::Result;
 use chrono::Utc;
 use serde::Serialize;
@@ -43,6 +43,8 @@ pub struct LogEntry {
 pub enum LoggerCommand {
     /// Write a log entry to the file
     LogEntry(LogEntry),
+    /// Write a terminal deadlock record
+    Deadlock(DeadlockInfo),
     /// Flush all pending entries to disk and signal completion
     Flush(Sender<()>),
 }
@@ -298,6 +300,13 @@ impl EventLogger {
     pub fn log_interaction_event(&self, thread_id: ThreadId, lock_id: LockId, event: Events) {
         self.log_event(thread_id, lock_id, event, None);
     }
+
+    /// Log a terminal deadlock record
+    pub fn log_deadlock(&self, info: DeadlockInfo) {
+        if let Err(e) = self.sender.send(LoggerCommand::Deadlock(info)) {
+            eprintln!("Failed to send deadlock record: {e:?}");
+        }
+    }
 }
 
 /// Async logger thread that batches writes to improve performance
@@ -322,6 +331,26 @@ fn async_logger_thread(file: File, rx: Receiver<LoggerCommand>, flushing: Arc<At
                     && let Err(e) = writeln!(writer, "{json}").and_then(|_| writer.flush())
                 {
                     eprintln!("Logger write error: {e:?}");
+                }
+            }
+            LoggerCommand::Deadlock(info) => {
+                // Wrap as a distinct terminal record
+                #[derive(serde::Serialize)]
+                struct DeadlockRecord<'a> {
+                    deadlock: &'a DeadlockInfo,
+                    timestamp: f64,
+                }
+                let now = chrono::Utc::now();
+                let ts =
+                    now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1_000_000.0;
+                let record = DeadlockRecord {
+                    deadlock: &info,
+                    timestamp: ts,
+                };
+                if let Ok(json) = serde_json::to_string(&record)
+                    && let Err(e) = writeln!(writer, "{json}").and_then(|_| writer.flush())
+                {
+                    eprintln!("Logger write error (deadlock): {e:?}");
                 }
             }
             LoggerCommand::Flush(responder) => {
