@@ -45,6 +45,10 @@
                     <i class="fas fa-share-alt"></i>
                     <span>Share</span>
                 </button>
+                <button id="legend-toggle" class="header-btn" aria-label="Toggle legend">
+                    <i class="fas fa-list"></i>
+                    <span>Legend</span>
+                </button>
                 <button id="theme-toggle" aria-label="Toggle dark mode">
                     <i id="theme-icon" class="fas fa-moon"></i>
                     <span>Dark Mode</span>
@@ -113,46 +117,38 @@
                 <!-- Timeline events will be added here dynamically -->
             </div>
             
-            <div id="legend">
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <div class="legend-color thread"></div>
-                        <span>Thread</span>
+            <div id="legend" style="display: none;">
+                <div class="legend-sections">
+                    <div class="legend-section">
+                        <div class="legend-title">Nodes</div>
+                        <div class="legend-items compact">
+                            <div class="legend-item"><div class="legend-color thread"></div><span>Thread</span></div>
+                            <div class="legend-item"><div class="legend-color mutex"></div><span>Mutex</span></div>
+                            <div class="legend-item"><div class="legend-color rwlock"></div><span>RwLock</span></div>
+                            <div class="legend-item"><div class="legend-color condvar"></div><span>Condvar</span></div>
+                        </div>
                     </div>
-                    <div class="legend-item">
-                        <div class="legend-color resource"></div>
-                        <span>Resource</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line attempt"></div>
-                        <span>Attempt</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line acquired"></div>
-                        <span>Acquired</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line released"></div>
-                        <span>Released</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line spawn"></div>
-                        <span>Spawn</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line exit"></div>
-                        <span>Exit</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-line deadlock"></div>
-                        <span>Deadlock</span>
+                    <div class="legend-section">
+                        <div class="legend-title">Links</div>
+                        <div class="legend-items compact">
+                            <div class="legend-item"><div class="legend-line attempt"></div><span>Attempt</span></div>
+                            <div class="legend-item"><div class="legend-line wait"></div><span>Wait</span></div>
+                            <div class="legend-item"><div class="legend-line acquired"></div><span>Acquired</span></div>
+                            <div class="legend-item"><div class="legend-line rw-read-acquired"></div><span>RW Read</span></div>
+                            <div class="legend-item"><div class="legend-line rw-write-acquired"></div><span>RW Write</span></div>
+                            <div class="legend-item"><div class="legend-line released"></div><span>Released</span></div>
+                            <div class="legend-item"><div class="legend-line notify"></div><span>Notify</span></div>
+                            <div class="legend-item"><div class="legend-line spawn"></div><span>Spawn</span></div>
+                            <div class="legend-item"><div class="legend-line exit"></div><span>Exit</span></div>
+                            <div class="legend-item"><div class="legend-line deadlock"></div><span>Deadlock</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </main>
 
         <footer>
-            <p>Developed by <a href="https://github.com/emivvvvv">Emirhan Tala</a> and <a href="https://github.com/ulascan54">Ulaş Can Demirbağ</a> for the Yeditepe University - CSE 336 Operating Systems Practice course.</p>
+            <p>Developed by <a href="https://github.com/emivvvvv">Emirhan Tala</a> for the Graduation project of Yeditepe University, Computer Engineering. Special thanks to <a href="https://github.com/ulascan54">Ulaş Can Demirbağ</a> for a base deloxide frontend project and his valuable guidance.</p>
             <div class="footer-links">
                 <a href="https://github.com/emivvvvv/deloxide" target="_blank" rel="noopener noreferrer">
                     <i class="fab fa-github"></i>
@@ -192,39 +188,55 @@
                 </ul>
                 
                 <h3>Visualization Legend</h3>
-                <p>The visualization shows threads and resources as nodes, with different types of relationships between them:</p>
+                <p>The visualization shows threads and synchronization primitives (Mutex, RwLock, Condvar) as nodes, with different types of relationships between them:</p>
                 <div class="legend-container">
                     <div class="legend-item-help">
                         <div class="legend-color thread"></div>
-                        <span><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID (T{id})</span>
+                        <span><strong>Thread Nodes:</strong> Shown as circles labeled with the thread ID</span>
                     </div>
                     <div class="legend-item-help">
-                        <div class="legend-color resource"></div>
-                        <span><strong>Resource Nodes:</strong> Shown as circles labeled with the resource ID (R{id})</span>
+                        <div class="legend-color mutex"></div>
+                        <span><strong>Mutex:</strong> Mutual exclusion lock - only one thread can acquire it at a time</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-color rwlock"></div>
+                        <span><strong>RwLock:</strong> Reader-writer lock - multiple readers or one writer</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-color condvar"></div>
+                        <span><strong>Condvar:</strong> Condition variable - allows threads to wait for conditions</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line attempt"></div>
-                        <span><strong>Attempt:</strong> A thread is attempting to acquire a resource</span>
+                        <span><strong>Attempt:</strong> Thread tries to acquire a lock</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line wait"></div>
+                        <span><strong>Wait (Condvar):</strong> Thread is waiting on a condition</span>
+                    </div>
+                    <div class="legend-item-help">
+                        <div class="legend-line notify"></div>
+                        <span><strong>Notify:</strong> Condvar notified waiter(s)</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line acquired"></div>
-                        <span><strong>Acquired:</strong> A thread has successfully acquired a resource</span>
+                        <span><strong>Acquired:</strong> Lock acquired</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line released"></div>
-                        <span><strong>Released:</strong> A resource has been released</span>
+                        <span><strong>Released:</strong> Lock released</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line spawn"></div>
-                        <span><strong>Spawn:</strong> A thread is created or a resource is generated</span>
+                        <span><strong>Spawn:</strong> Thread/resource created</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line exit"></div>
-                        <span><strong>Exit:</strong> A thread exits or a resource is dropped</span>
+                        <span><strong>Exit:</strong> Thread/resource dropped</span>
                     </div>
                     <div class="legend-item-help">
                         <div class="legend-line deadlock"></div>
-                        <span><strong>Deadlock:</strong> A circular wait condition has been detected</span>
+                        <span><strong>Deadlock:</strong> Circular wait detected</span>
                     </div>
                 </div>
                 
