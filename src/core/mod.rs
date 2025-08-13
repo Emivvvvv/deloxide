@@ -6,25 +6,21 @@
 //! deadlock information, and the interfaces for tracking thread-lock relationships.
 
 // Core types
-pub mod types;
-pub use types::*;
+pub(crate) mod types;
+pub(crate) use types::*;
 
 // Logging functionality
-pub mod logger;
+pub(crate) mod logger;
 
 // Graph implementation
-pub mod graph;
+pub(crate) mod graph;
 
 // Deadlock detector
-pub mod detector;
+pub(crate) mod detector;
 #[allow(unused_imports)]
-pub use detector::*;
+pub(crate) use detector::*;
 
-pub use locks::condvar::Condvar;
-pub use locks::mutex::Mutex;
-pub use locks::rwlock::RwLock;
-
-pub mod thread;
+mod thread;
 pub use thread::Thread;
 
 pub(crate) mod locks;

@@ -170,7 +170,7 @@
 //! ```toml
 //! # Cargo.toml
 //! [dependencies]
-//! deloxide = { version = "0.2.0", features = ["stress-test"] }
+//! deloxide = { version = "0.2.1", features = ["stress-test"] }
 //! ```
 //!
 //! ```rust
@@ -197,14 +197,14 @@
 //!     .unwrap();
 //! }
 //! ```
-//!
-//! Note: For `Condvar`, stress is applied to the synthesized mutex attempt that
-//! the woken thread performs to re-acquire its mutex after a notify.
 
 mod core;
 pub use core::{
-    Condvar, DeadlockInfo, Deloxide, Mutex, RwLock, Thread,
-    types::{LockId, ThreadId},
+    Deloxide, Thread,
+    locks::condvar::Condvar,
+    locks::mutex::{Mutex, MutexGuard},
+    locks::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    types::{DeadlockInfo, LockId, ThreadId},
 };
 
 #[cfg(feature = "stress-test")]

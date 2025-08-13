@@ -1,5 +1,5 @@
-use crate::core::RwLock;
 use crate::core::detector::rwlock::on_rwlock_create;
+use crate::core::locks::rwlock::RwLock;
 use crate::core::types::ThreadId;
 use std::cell::RefCell;
 use std::ffi::{c_int, c_void};
