@@ -420,6 +420,7 @@ header {
     color: white;
     display: flex;
     align-items: center;
+    justify-content: center; /* center label+icon */
     padding: 6px 10px; /* Reduced from 8px 12px */
     border-radius: 6px;
     cursor: pointer;
@@ -1273,11 +1274,15 @@ footer p {
         gap: 10px; /* Reduced from 15px */
         text-align: center;
         padding: 12px; /* Reduced from 15px */
+        align-items: center;
     }
 
     .header-buttons {
         width: 100%;
         justify-content: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .visualization-container {
@@ -1343,6 +1348,36 @@ footer p {
     .modal-content {
         width: 95%;
     }
+}
+
+/* Ultra-small screens: group header buttons 2x2 to avoid overflow */
+@media (max-width: 460px) {
+    header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .header-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        width: 100%;
+    }
+
+    .header-buttons .header-btn {
+        width: 100%;
+        min-width: 0;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
+    /* Center logo and title on very small screens */
+    .logo {
+        justify-content: center;
+        width: 100%;
+    }
+    .logo h1 { width: 100%; text-align: center; }
 }
 
 /* Graph styles */
