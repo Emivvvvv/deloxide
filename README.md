@@ -10,7 +10,8 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 - **Real-time deadlock detection** - Detects deadlocks as they happen
 - **Cross-language support** - Core implementation in Rust with C bindings
 - **Thread & lock tracking** - Monitors relationships between threads and sync primitives (Mutex, RwLock, Condvar)
-- **Visualization** - Web-based visualization of thread-lock relationships
+- **Visualization** - Web-based visualization of thread-lock relationships (see [example](https://deloxide.vercel.app/?logs=H4sIAAAAAAAC_03NvQrCMBSG4ZNEHKqDiOIipYMWi1ROo_2hm4uDo3hlkVyAk-DgjejmZNE7cLVdPcWkOD688H3qCT0NrHVdF_77M57cmAbOjaYnkmgb-S-mOYDRLCKxgdUGSEOrLYk7VudaHasLSbhGAdataxWDFs1DsGNaNCvlkVqzUt5JwjOqnP-_qk-NjX5yVQEHxYVSnCvBHp5EGYeYhZHcyyhfJrnExSpNsySdI-aIX6996tkRAQAA
+  ) here)
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C
 - **Stress testing** - Optional feature to increase deadlock manifestation during testing
