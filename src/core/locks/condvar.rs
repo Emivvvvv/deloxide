@@ -183,7 +183,7 @@ impl Condvar {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use deloxide::{Mutex, Condvar};
     /// use std::sync::Arc;
     ///
@@ -191,7 +191,7 @@ impl Condvar {
     /// let (lock, cvar) = &*pair;
     ///
     /// let mut guard = lock.lock();
-    /// // Wait while the value is true
+    /// // Wait while the value is true (another thread would set it to false)
     /// cvar.wait_while(&mut guard, |pending| *pending);
     /// ```
     pub fn wait_while<'a, T, F>(&self, guard: &mut MutexGuard<'a, T>, mut condition: F)

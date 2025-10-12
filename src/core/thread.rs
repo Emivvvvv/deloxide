@@ -208,22 +208,23 @@ impl Builder {
     ///
     /// ```rust
     /// use deloxide::thread;
+    /// use std::sync::atomic::{AtomicI32, Ordering};
     ///
-    /// let mut x = 0;
+    /// let x = AtomicI32::new(0);
     ///
     /// thread::scope(|s| {
-    ///     let builder = thread::Builder::new();
-    ///     
-    ///     builder.spawn_scoped(s, || {
-    ///         x += 1;
-    ///     }).unwrap();
+    ///     thread::Builder::new()
+    ///         .spawn_scoped(s, || {
+    ///             x.fetch_add(1, Ordering::SeqCst);
+    ///         }).unwrap();
     ///
-    ///     builder.spawn_scoped(s, || {
-    ///         x += 1;
-    ///     }).unwrap();
+    ///     thread::Builder::new()
+    ///         .spawn_scoped(s, || {
+    ///             x.fetch_add(1, Ordering::SeqCst);
+    ///         }).unwrap();
     /// });
     ///
-    /// assert_eq!(x, 2);
+    /// assert_eq!(x.load(Ordering::SeqCst), 2);
     /// ```
     pub fn spawn_scoped<'scope, 'env, F, T>(
         self,
@@ -270,20 +271,21 @@ impl Default for Builder {
 ///
 /// ```rust
 /// use deloxide::thread;
+/// use std::sync::atomic::{AtomicI32, Ordering};
 ///
-/// let mut x = 0;
+/// let x = AtomicI32::new(0);
 ///
 /// thread::scope(|s| {
 ///     s.spawn(|| {
-///         x += 1;
+///         x.fetch_add(1, Ordering::SeqCst);
 ///     });
 ///
 ///     s.spawn(|| {
-///         x += 1;
+///         x.fetch_add(1, Ordering::SeqCst);
 ///     });
 /// });
 ///
-/// assert_eq!(x, 2);
+/// assert_eq!(x.load(Ordering::SeqCst), 2);
 /// ```
 pub fn scope<'env, F, T>(f: F) -> T
 where

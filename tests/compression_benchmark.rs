@@ -253,12 +253,12 @@ fn measure_compression_ratios() {
     let json_size = json_with_deadlock.len();
     
     let msgpack_data = rmp_serde::to_vec(&data_with_deadlock).unwrap();
-    let msgpack_size = msgpack_data.len();
+    let _msgpack_size = msgpack_data.len();
     
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
     encoder.write_all(&msgpack_data).unwrap();
     let gzip_data = encoder.finish().unwrap();
-    let gzip_size = gzip_data.len();
+    let _gzip_size = gzip_data.len();
     
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let base64_data = base64_engine.encode(&gzip_data);
