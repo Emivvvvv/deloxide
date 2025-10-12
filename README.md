@@ -513,7 +513,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.1", features = ["stress-test"] }
+deloxide = { version = "0.3", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -576,14 +576,14 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 
 ```toml
 [dependencies]
-deloxide = "0.2.1"
+deloxide = "0.3"
 ```
 
 With stress testing:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.2.1", features = ["stress-test"] }
+deloxide = { version = "0.3", features = ["stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:

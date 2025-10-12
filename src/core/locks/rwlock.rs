@@ -159,6 +159,50 @@ impl<T> RwLock<T> {
             None
         }
     }
+
+    /// Consumes this RwLock, returning the underlying data
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::RwLock;
+    ///
+    /// let lock = RwLock::new(String::from("hello"));
+    /// let s = lock.into_inner();
+    /// assert_eq!(s, "hello");
+    /// ```
+    pub fn into_inner(self) -> T
+    where
+        T: Sized,
+    {
+        // We need to prevent Drop from running since we're manually extracting the value
+        // First, manually drop the detector tracking
+        detector::rwlock::on_rwlock_destroy(self.id);
+        
+        // Use ManuallyDrop to prevent the automatic Drop implementation
+        let rwlock = std::mem::ManuallyDrop::new(self);
+        
+        // Safety: We're taking ownership and preventing double-drop
+        unsafe { std::ptr::read(&rwlock.inner) }.into_inner()
+    }
+
+    /// Returns a mutable reference to the underlying data
+    ///
+    /// Since this call borrows the RwLock mutably, no actual locking needs to
+    /// take place – the mutable borrow statically guarantees no locks exist.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::RwLock;
+    ///
+    /// let mut lock = RwLock::new(0);
+    /// *lock.get_mut() = 10;
+    /// assert_eq!(*lock.read(), 10);
+    /// ```
+    pub fn get_mut(&mut self) -> &mut T {
+        self.inner.get_mut()
+    }
 }
 
 impl<T> Drop for RwLock<T> {
@@ -195,5 +239,22 @@ impl<'a, T> DerefMut for RwLockWriteGuard<'a, T> {
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
         detector::rwlock::on_rw_write_release(self.thread_id, self.lock_id);
+    }
+}
+
+// Trait implementations for better compatibility with std
+
+impl<T: Default> Default for RwLock<T> {
+    /// Creates a new RwLock<T>, with the Default value for T
+    fn default() -> RwLock<T> {
+        RwLock::new(Default::default())
+    }
+}
+
+impl<T> From<T> for RwLock<T> {
+    /// Creates a new instance of an RwLock<T> which is unlocked
+    /// This is equivalent to RwLock::new
+    fn from(t: T) -> Self {
+        RwLock::new(t)
     }
 }

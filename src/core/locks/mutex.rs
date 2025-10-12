@@ -180,6 +180,50 @@ impl<T> Mutex<T> {
             None
         }
     }
+
+    /// Consumes this mutex, returning the underlying data
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::Mutex;
+    ///
+    /// let mutex = Mutex::new(42);
+    /// let value = mutex.into_inner();
+    /// assert_eq!(value, 42);
+    /// ```
+    pub fn into_inner(self) -> T
+    where
+        T: Sized,
+    {
+        // We need to prevent Drop from running since we're manually extracting the value
+        // First, manually drop the detector tracking
+        detector::mutex::on_mutex_destroy(self.id);
+        
+        // Use ManuallyDrop to prevent the automatic Drop implementation
+        let mutex = std::mem::ManuallyDrop::new(self);
+        
+        // Safety: We're taking ownership and preventing double-drop
+        unsafe { std::ptr::read(&mutex.inner) }.into_inner()
+    }
+
+    /// Returns a mutable reference to the underlying data
+    ///
+    /// Since this call borrows the Mutex mutably, no actual locking needs to
+    /// take place – the mutable borrow statically guarantees no locks exist.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::Mutex;
+    ///
+    /// let mut mutex = Mutex::new(0);
+    /// *mutex.get_mut() = 10;
+    /// assert_eq!(*mutex.lock(), 10);
+    /// ```
+    pub fn get_mut(&mut self) -> &mut T {
+        self.inner.get_mut()
+    }
 }
 
 impl<T> Drop for Mutex<T> {
@@ -224,5 +268,22 @@ impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
         detector::mutex::on_mutex_release(self.thread_id, self.lock_id);
+    }
+}
+
+// Trait implementations for better compatibility with std
+
+impl<T: Default> Default for Mutex<T> {
+    /// Creates a Mutex<T>, with the Default value for T
+    fn default() -> Mutex<T> {
+        Mutex::new(Default::default())
+    }
+}
+
+impl<T> From<T> for Mutex<T> {
+    /// Creates a new mutex in an unlocked state ready for use
+    /// This is equivalent to Mutex::new
+    fn from(t: T) -> Self {
+        Mutex::new(t)
     }
 }

@@ -2,6 +2,7 @@ use crate::core::detector;
 use crate::core::locks::{NEXT_LOCK_ID, mutex::MutexGuard};
 use crate::core::types::{CondvarId, get_current_thread_id};
 use parking_lot::Condvar as ParkingLotCondvar;
+use std::ops::DerefMut;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -169,6 +170,90 @@ impl Condvar {
         detector::mutex::on_mutex_acquired(thread_id, mutex_id);
 
         timed_out
+    }
+
+    /// Blocks the current thread until the provided condition becomes false
+    ///
+    /// This is a convenience method that repeatedly calls `wait` while the condition
+    /// returns true. It's equivalent to a while loop with wait.
+    ///
+    /// # Arguments
+    /// * `guard` - A mutable reference to a MutexGuard
+    /// * `condition` - A closure that returns true while waiting should continue
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::{Mutex, Condvar};
+    /// use std::sync::Arc;
+    ///
+    /// let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    /// let (lock, cvar) = &*pair;
+    ///
+    /// let mut guard = lock.lock();
+    /// // Wait while the value is true
+    /// cvar.wait_while(&mut guard, |pending| *pending);
+    /// ```
+    pub fn wait_while<'a, T, F>(&self, guard: &mut MutexGuard<'a, T>, mut condition: F)
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        while condition(guard.deref_mut()) {
+            self.wait(guard);
+        }
+    }
+
+    /// Waits on this condition variable with a timeout while a condition is true
+    ///
+    /// This is a convenience method that waits with a timeout while the condition
+    /// returns true.
+    ///
+    /// # Arguments
+    /// * `guard` - A mutable reference to a MutexGuard
+    /// * `timeout` - The maximum duration to wait
+    /// * `condition` - A closure that returns true while waiting should continue
+    ///
+    /// # Returns
+    /// `true` if the timeout elapsed, `false` if the condition became false
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::{Mutex, Condvar};
+    /// use std::sync::Arc;
+    /// use std::time::Duration;
+    ///
+    /// let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    /// let (lock, cvar) = &*pair;
+    ///
+    /// let mut guard = lock.lock();
+    /// let timed_out = cvar.wait_timeout_while(
+    ///     &mut guard,
+    ///     Duration::from_millis(100),
+    ///     |pending| *pending
+    /// );
+    /// ```
+    pub fn wait_timeout_while<'a, T, F>(
+        &self,
+        guard: &mut MutexGuard<'a, T>,
+        timeout: Duration,
+        mut condition: F,
+    ) -> bool
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        let start = std::time::Instant::now();
+        while condition(guard.deref_mut()) {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return true; // Timed out
+            }
+            let remaining = timeout - elapsed;
+            if self.wait_timeout(guard, remaining) {
+                return true; // Timed out in wait_timeout
+            }
+        }
+        false // Condition became false
     }
 
     /// Wake up one blocked thread on this condition variable
