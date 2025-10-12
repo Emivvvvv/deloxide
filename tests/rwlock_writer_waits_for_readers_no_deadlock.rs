@@ -1,6 +1,5 @@
-use deloxide::{RwLock, Thread};
+use deloxide::{RwLock, thread};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 mod common;
 use common::{NO_DEADLOCK_TIMEOUT, assert_no_deadlock, start_detector};
@@ -14,7 +13,7 @@ fn test_rwlock_writer_waits_for_readers_no_deadlock() {
     let l2 = Arc::clone(&lock);
 
     // One thread grabs a read lock for a while
-    let reader = Thread::spawn(move || {
+    let reader = thread::spawn(move || {
         let _g = l1.read();
         thread::sleep(Duration::from_millis(100));
     });
@@ -23,7 +22,7 @@ fn test_rwlock_writer_waits_for_readers_no_deadlock() {
     thread::sleep(Duration::from_millis(10));
 
     // Writer will block until reader is done (but not a deadlock!)
-    let writer = Thread::spawn(move || {
+    let writer = thread::spawn(move || {
         let _g = l2.write();
         // Should succeed after reader is done
     });

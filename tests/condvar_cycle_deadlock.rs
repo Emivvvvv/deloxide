@@ -1,4 +1,4 @@
-use deloxide::{Condvar, Mutex as DMutex, Thread};
+use deloxide::{Condvar, Mutex as DMutex, thread};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -23,7 +23,7 @@ fn test_condvar_cycle_deadlock() {
         let m_b = Arc::clone(&m_b);
         let cv = Arc::clone(&cv);
         let ready = ready.clone();
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let mut guard_a = m_a.lock();
             while !*guard_a {
                 cv.wait(&mut guard_a); // releases A while asleep
@@ -35,7 +35,7 @@ fn test_condvar_cycle_deadlock() {
     }
 
     /* thread 2 : holds B, signals, then needs A ------------------------- */
-    Thread::spawn({
+    thread::spawn({
         let m_a = Arc::clone(&m_a);
         let m_b = Arc::clone(&m_b);
         let cv = Arc::clone(&cv);

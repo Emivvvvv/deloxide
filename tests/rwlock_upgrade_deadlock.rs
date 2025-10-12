@@ -1,4 +1,4 @@
-use deloxide::{RwLock, Thread};
+use deloxide::{RwLock, thread};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -17,7 +17,7 @@ fn test_rwlock_upgrade_deadlock() {
     for _ in 0..2 {
         let lock = Arc::clone(&lock);
         let ready = Arc::clone(&ready_count);
-        handles.push(Thread::spawn(move || {
+        handles.push(thread::spawn(move || {
             let _r = lock.read();
             // Signal ready and wait for all threads
             ready.fetch_add(1, Ordering::SeqCst);

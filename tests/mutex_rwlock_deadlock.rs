@@ -1,6 +1,5 @@
-use deloxide::{Mutex, RwLock, Thread};
+use deloxide::{Mutex, RwLock, thread};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 mod common;
 use common::{DEADLOCK_TIMEOUT, expect_deadlock, start_detector};
@@ -20,7 +19,7 @@ fn test_mutex_rwlock_deadlock() {
     let rwlock2 = Arc::clone(&rwlock);
 
     // Thread 1: Lock Mutex, then try to lock RwLock (write)
-    let _t1 = Thread::spawn(move || {
+    let _t1 = thread::spawn(move || {
         let _g1 = mutex1.lock();
         thread::sleep(Duration::from_millis(100));
         let _g2 = rwlock1.write();
@@ -28,7 +27,7 @@ fn test_mutex_rwlock_deadlock() {
     });
 
     // Thread 2: Lock RwLock (write), then try to lock Mutex
-    let _t2 = Thread::spawn(move || {
+    let _t2 = thread::spawn(move || {
         let _g1 = rwlock2.write();
         thread::sleep(Duration::from_millis(100));
         let _g2 = mutex2.lock();

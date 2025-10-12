@@ -1,11 +1,10 @@
-use deloxide::{Mutex, Thread};
+use deloxide::{Mutex, thread};
 use rand::Rng;
 use std::{
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
-    thread,
     time::Duration,
 };
 mod common;
@@ -34,7 +33,7 @@ fn test_random_ring_deadlock() {
         let second = locks[(i + 1) % n].clone();
         let ready = ready_count.clone();
 
-        handles.push(Thread::spawn(move || {
+        handles.push(thread::spawn(move || {
             let mut rng = rand::rng();
 
             // Signal ready and wait for all threads

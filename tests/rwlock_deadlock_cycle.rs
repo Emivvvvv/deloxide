@@ -1,4 +1,4 @@
-use deloxide::{RwLock, Thread};
+use deloxide::{RwLock, thread};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -22,7 +22,7 @@ fn test_guaranteed_three_thread_rwlock_deadlock() {
     for i in 0..3 {
         let locks = locks.clone();
         let ready = Arc::clone(&ready_count);
-        handles.push(Thread::spawn(move || {
+        handles.push(thread::spawn(move || {
             // Each thread grabs read on i
             let _ri = locks[i].read();
             // Signal ready and wait for all threads

@@ -1,4 +1,4 @@
-use deloxide::{Condvar, Mutex as DMutex, Thread};
+use deloxide::{Condvar, Mutex as DMutex, thread};
 use std::sync::Arc;
 use std::time::Duration;
 mod common;
@@ -19,7 +19,7 @@ fn test_condvar_producer_consumer_deadlock() {
         let consumer_mutex = Arc::clone(&consumer_mutex);
         let producer_cv = Arc::clone(&producer_cv);
 
-        Thread::spawn(move || {
+        thread::spawn(move || {
             // Producer holds buffer mutex
             let mut buffer = buffer_mutex.lock();
             println!("Producer: Got buffer mutex");
@@ -54,7 +54,7 @@ fn test_condvar_producer_consumer_deadlock() {
         let consumer_mutex = Arc::clone(&consumer_mutex);
         let producer_cv = Arc::clone(&producer_cv);
 
-        Thread::spawn(move || {
+        thread::spawn(move || {
             // Small delay to let producer start waiting
             std::thread::sleep(Duration::from_millis(50));
 

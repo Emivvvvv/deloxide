@@ -1,4 +1,4 @@
-use deloxide::{Condvar, Mutex as DMutex, RwLock as DRwLock, Thread};
+use deloxide::{Condvar, Mutex as DMutex, RwLock as DRwLock, thread};
 use std::sync::Arc;
 use std::time::Duration;
 mod common;
@@ -19,7 +19,7 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
         let processor_mutex = Arc::clone(&processor_mutex);
         let data_ready_cv = Arc::clone(&data_ready_cv);
 
-        Thread::spawn(move || {
+        thread::spawn(move || {
             // Reader gets read access to shared data
             let data_guard = shared_data.read();
             println!("Reader: Got read lock on data: {:?}", *data_guard);
@@ -53,7 +53,7 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
         let processor_mutex = Arc::clone(&processor_mutex);
         let data_ready_cv = Arc::clone(&data_ready_cv);
 
-        Thread::spawn(move || {
+        thread::spawn(move || {
             // Small delay to let reader get the read lock first
             std::thread::sleep(Duration::from_millis(10));
 

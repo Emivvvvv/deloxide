@@ -1,4 +1,4 @@
-use deloxide::{Condvar, Mutex as DMutex, Thread};
+use deloxide::{Condvar, Mutex as DMutex, thread};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -18,7 +18,7 @@ fn test_condvar_spurious_wakeup_no_deadlock() {
         let m = Arc::clone(&m);
         let cv = Arc::clone(&cv);
         let notify_count = Arc::clone(&notify_count);
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let mut g = m.lock();
             // Typical condvar loop against spurious wakeups
             while !*g {

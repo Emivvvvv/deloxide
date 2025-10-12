@@ -1,4 +1,4 @@
-use deloxide::{Condvar, Mutex as DMutex, RwLock as DRwLock, Thread};
+use deloxide::{Condvar, Mutex as DMutex, RwLock as DRwLock, thread};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -24,7 +24,7 @@ fn test_mixed_three_thread_deadlock_mutex_rwlock_condvar() {
         let rw = Arc::clone(&rw);
         let cv = Arc::clone(&cv);
         let ready = Arc::clone(&ready);
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let mut g2 = m2.lock();
             while !ready.load(Ordering::SeqCst) {
                 cv.wait(&mut g2);
@@ -39,7 +39,7 @@ fn test_mixed_three_thread_deadlock_mutex_rwlock_condvar() {
     {
         let rw = Arc::clone(&rw);
         let m1 = Arc::clone(&m1);
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let _r = rw.read();
             std::thread::sleep(Duration::from_millis(30));
             let _m1 = m1.lock();
@@ -53,7 +53,7 @@ fn test_mixed_three_thread_deadlock_mutex_rwlock_condvar() {
         let m2 = Arc::clone(&m2);
         let cv = Arc::clone(&cv);
         let ready = Arc::clone(&ready);
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let _c = m1.lock();
             // Let A start waiting and B acquire read lock
             std::thread::sleep(Duration::from_millis(20));
