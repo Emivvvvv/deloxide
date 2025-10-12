@@ -55,7 +55,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
    - Provides automatic visualization when deadlocks are detected
 
 4. **Cross-Language Support**
-   - Rust API with `Mutex`, `RwLock`, and `Thread` types
+   - Rust API with `Mutex`, `RwLock`, `Condvar`, and `thread` module
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
 
@@ -70,40 +70,59 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 Deloxide provides drop-in replacements for standard synchronization primitives with deadlock detection capabilities. All primitives wrap parking_lot implementations and add unique identifiers for tracking and visualization.
 
-#### Deloxide::Thread
+#### deloxide::thread
 
-A wrapper around `std::thread::JoinHandle` that automatically tracks thread lifecycle events:
+A drop-in replacement for `std::thread` that automatically tracks thread lifecycle events. All `std::thread` functions and types are available with added deadlock detection:
 
 ```rust
-pub struct Thread<T>(JoinHandle<T>);
+// All std::thread items are re-exported
+pub use std::thread::{
+    JoinHandle, Thread, ThreadId, Result, Builder, Scope, 
+    ScopedJoinHandle, current, yield_now, sleep, park, 
+    available_parallelism, ...
+};
 
-impl<T> Thread<T> where T: Send + 'static {
-    pub fn spawn<F>(f: F) -> Self where F: FnOnce() -> T + Send + 'static;
-    pub fn join(self) -> thread::Result<T>;
-}
+// Custom spawn function with tracking
+pub fn spawn<F, T>(f: F) -> JoinHandle<T> 
+    where F: FnOnce() -> T + Send + 'static, T: Send + 'static;
+
+// Custom Builder with tracking
+pub struct Builder { /* ... */ }
 ```
 
-Creating tracked threads is identical to standard threads:
+Using tracked threads is identical to using `std::thread`:
 
 ```rust
-use deloxide::Thread;
+use deloxide::thread;
 
-// Spawn a tracked thread - just like std::thread::spawn
-let handle = Thread::spawn(|| {
+// Spawn a tracked thread - exactly like std::thread::spawn
+let handle = thread::spawn(|| {
     println!("Hello from tracked thread!");
     42
 });
+
+// All std::thread functions work
+thread::yield_now();
+thread::sleep(Duration::from_millis(100));
+let current = thread::current();
+
+// Builder pattern supported
+let handle = thread::Builder::new()
+    .name("worker".to_string())
+    .stack_size(32 * 1024)
+    .spawn(|| { /* ... */ })
+    .unwrap();
 
 // Join works the same way
 let result = handle.join().unwrap();
 assert_eq!(result, 42);
 ```
 
-It additionally generates a thread ID for deadlock detection, visualization and debugging purposes.
+It automatically registers thread spawn/exit events for deadlock detection, visualization, and debugging purposes.
 
 #### Deloxide::Mutex
 
-A wrapper around `parking_lot::Mutex` that tracks lock operations:
+A drop-in replacement for `std::sync::Mutex` (based on `parking_lot::Mutex`) with tracking:
 
 ```rust
 pub struct Mutex<T> {
@@ -116,13 +135,20 @@ impl<T> Mutex<T> {
     pub fn new(data: T) -> Self;
     pub fn lock(&self) -> MutexGuard<'_, T>;
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>>;
+    pub fn into_inner(self) -> T where T: Sized;
+    pub fn get_mut(&mut self) -> &mut T;
     pub fn id(&self) -> LockId;
 }
+
+impl<T: Default> Default for Mutex<T> { /* ... */ }
+impl<T> From<T> for Mutex<T> { /* ... */ }
 ```
+
+All `std::sync::Mutex` methods are supported (except poisoning-related ones, as parking_lot doesn't use poisoning).
 
 #### Deloxide::RwLock
 
-A wrapper around `parking_lot::RwLock` supporting both read and write operations:
+A drop-in replacement for `std::sync::RwLock` (based on `parking_lot::RwLock`) with tracking:
 
 ```rust
 pub struct RwLock<T> {
@@ -137,13 +163,20 @@ impl<T> RwLock<T> {
     pub fn write(&self) -> RwLockWriteGuard<'_, T>;
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>>;
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>>;
+    pub fn into_inner(self) -> T where T: Sized;
+    pub fn get_mut(&mut self) -> &mut T;
     pub fn id(&self) -> LockId;
 }
+
+impl<T: Default> Default for RwLock<T> { /* ... */ }
+impl<T> From<T> for RwLock<T> { /* ... */ }
 ```
+
+All `std::sync::RwLock` methods are supported (except poisoning-related ones).
 
 #### Deloxide::Condvar
 
-A wrapper around `parking_lot::Condvar` for condition-based synchronization:
+A drop-in replacement for `std::sync::Condvar` (based on `parking_lot::Condvar`) with tracking:
 
 ```rust
 pub struct Condvar {
@@ -154,22 +187,30 @@ pub struct Condvar {
 impl Condvar {
     pub fn new() -> Self;
     pub fn wait<T>(&self, guard: &mut MutexGuard<'_, T>);
+    pub fn wait_while<T, F>(&self, guard: &mut MutexGuard<'_, T>, condition: F)
+        where F: FnMut(&mut T) -> bool;
     pub fn wait_timeout<T>(&self, guard: &mut MutexGuard<'_, T>, timeout: Duration) -> bool;
+    pub fn wait_timeout_while<T, F>(&self, guard: &mut MutexGuard<'_, T>, 
+        timeout: Duration, condition: F) -> bool
+        where F: FnMut(&mut T) -> bool;
     pub fn notify_one(&self);
     pub fn notify_all(&self);
     pub fn id(&self) -> CondvarId;
 }
+
+impl Default for Condvar { /* ... */ }
 ```
+
+All `std::sync::Condvar` methods are supported.
 
 #### Complete Usage Example
 
 Here's a comprehensive example demonstrating all Deloxide primitives in a single scenario:
 
 ```rust
-use deloxide::{Deloxide, Mutex, RwLock, Condvar, Thread};
+use deloxide::{Deloxide, Mutex, RwLock, Condvar, thread};
 use std::sync::Arc;
 use std::time::Duration;
-use std::thread;
 
 fn main() {
     // Initialize the detector with logging and visualization
@@ -194,14 +235,14 @@ fn main() {
     let mutex_b_clone = Arc::clone(&mutex_b);
 
     // Thread 1: Lock counter, then mutex_b (deadlock scenario)
-    Thread::spawn(move || {
+    thread::spawn(move || {
         let _count = counter_clone1.lock();
         thread::sleep(Duration::from_millis(100));
         let _b = mutex_b.lock();
     });
 
     // Thread 2: Lock mutex_b, then counter (deadlock scenario) 
-    Thread::spawn(move || {
+    thread::spawn(move || {
         let _b = mutex_b_clone.lock();
         thread::sleep(Duration::from_millis(100));
         let _count = counter_clone2.lock();
@@ -214,7 +255,7 @@ fn main() {
     // Multiple reader threads
     for i in 0..3 {
         let shared_clone = Arc::clone(&shared_data);
-        Thread::spawn(move || {
+        thread::spawn(move || {
             let data = shared_clone.read();
             println!("Reader {}: {:?}", i, *data);
             thread::sleep(Duration::from_millis(50));
@@ -222,7 +263,7 @@ fn main() {
     }
 
     // Writer thread attempting upgrade (potential deadlock)
-    Thread::spawn(move || {
+    thread::spawn(move || {
         let _read_guard = shared_clone1.read();
         println!("Writer acquired read lock, attempting upgrade...");
         thread::sleep(Duration::from_millis(25));
@@ -230,22 +271,21 @@ fn main() {
         println!("Writer acquired write lock");
     });
 
-    // Example 3: Condvar usage
+    // Example 3: Condvar usage with wait_while
     let pair_clone = Arc::clone(&condition_pair);
     
-    // Waiter thread
-    Thread::spawn(move || {
+    // Waiter thread using convenient wait_while method
+    thread::spawn(move || {
         let (mutex, condvar) = (&pair_clone.0, &pair_clone.1);
         let mut ready = mutex.lock();
-        while !*ready {
-            condvar.wait(&mut ready);
-        }
+        // wait_while is more convenient than a manual loop!
+        condvar.wait_while(&mut ready, |ready| !*ready);
         println!("Condition met, thread proceeding");
     });
 
     // Notifier thread
     let pair_clone2 = Arc::clone(&condition_pair);
-    Thread::spawn(move || {
+    thread::spawn(move || {
         thread::sleep(Duration::from_millis(200));
         let (mutex, condvar) = (&pair_clone2.0, &pair_clone2.1);
         let mut ready = mutex.lock();
