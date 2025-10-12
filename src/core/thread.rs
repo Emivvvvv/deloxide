@@ -1,76 +1,186 @@
+//! Native threads with deadlock detection.
+//!
+//! This module provides a drop-in replacement for `std::thread` with additional
+//! deadlock detection capabilities. It re-exports all items from `std::thread`
+//! and overrides key functions like `spawn` to include tracking.
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use deloxide::thread;
+//!
+//! let handle = thread::spawn(|| {
+//!     println!("Hello from a tracked thread!");
+//!     42
+//! });
+//!
+//! let result = handle.join().unwrap();
+//! assert_eq!(result, 42);
+//!
+//! // All std::thread functions are available
+//! thread::yield_now();
+//! thread::sleep(std::time::Duration::from_millis(100));
+//! let current = thread::current();
+//! ```
+
 use crate::core::detector;
 use crate::core::types::get_current_thread_id;
-use std::thread::{self, JoinHandle};
 
-/// A wrapper around std::thread::JoinHandle that logs spawn and exit events
+// Re-export all items from std::thread
+pub use std::thread::{
+    available_parallelism, current, panicking, park, park_timeout, sleep, yield_now, AccessError,
+    JoinHandle, LocalKey, Result, Scope, ScopedJoinHandle, Thread, ThreadId,
+};
+
+/// Spawns a new thread with deadlock detection, returning a [`JoinHandle`] for it.
 ///
-/// The Thread provides the same interface as a standard thread, but adds
-/// deadlock detection by tracking thread creation and termination. It's a drop-in
-/// replacement for std::thread that enables deadlock detection for threads.
+/// This function is a drop-in replacement for [`std::thread::spawn`] that adds
+/// deadlock detection by tracking thread creation and termination. It records
+/// the parent-child relationship between threads for proper resource tracking.
 ///
-/// When a Thread is spawned, it records the parent-child relationship between
-/// threads, which is important for proper resource tracking and cleanup. When the
-/// thread exits, it automatically notifies the deadlock detector.
+/// The join handle can be used to block on termination of the spawned thread.
 ///
-/// # Example
+/// # Panics
+///
+/// Panics if the OS fails to create a thread; use [`Builder::spawn`]
+/// to recover from such errors.
+///
+/// # Examples
 ///
 /// ```rust
-/// use deloxide::Thread;
-/// use std::time::Duration;
-/// use std::thread;
+/// use deloxide::thread;
 ///
-/// // Initialize detector (not shown here)
-///
-/// // Spawn a tracked thread
-/// let handle = Thread::spawn(|| {
-///     println!("Hello from a tracked thread!");
-///     thread::sleep(Duration::from_millis(100));
-///     42 // Return value
+/// let handle = thread::spawn(|| {
+///     println!("Hello from a spawned thread!");
+///     42
 /// });
 ///
-/// // Wait for the thread to complete
 /// let result = handle.join().unwrap();
 /// assert_eq!(result, 42);
 /// ```
-pub struct Thread<T>(JoinHandle<T>);
-
-impl<T> Thread<T>
+pub fn spawn<F, T>(f: F) -> JoinHandle<T>
 where
+    F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    /// Spawn a new tracked thread.
+    Builder::new().spawn(f).unwrap()
+}
+
+/// Thread factory, which can be used in order to configure the properties of a new thread.
+///
+/// This is a wrapper around [`std::thread::Builder`] that adds deadlock detection
+/// to spawned threads. It provides the same interface as `std::thread::Builder`.
+///
+/// # Examples
+///
+/// ```rust
+/// use deloxide::thread;
+///
+/// let builder = thread::Builder::new()
+///     .name("my-thread".to_string())
+///     .stack_size(32 * 1024);
+///
+/// let handle = builder.spawn(|| {
+///     println!("Hello from configured thread!");
+/// }).unwrap();
+///
+/// handle.join().unwrap();
+/// ```
+pub struct Builder {
+    inner: std::thread::Builder,
+}
+
+impl Builder {
+    /// Generates the base configuration for spawning a thread, from which
+    /// configuration methods can be chained.
     ///
-    /// This method spawns a new thread and automatically tracks it with the deadlock
-    /// detector. It logs a Spawn event when the thread begins, and an Exit event when
-    /// it ends. The parent-child relationship between threads is also recorded.
-    ///
-    /// # Arguments
-    /// * `f` - The function to run in the new thread
-    ///
-    /// # Returns
-    /// A Thread handle that can be used to join the thread later
-    ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
-    /// use deloxide::Thread;
+    /// use deloxide::thread;
     ///
-    /// let handle = Thread::spawn(|| {
-    ///     // Thread code here
-    ///     "Hello from tracked thread"
-    /// });
+    /// let builder = thread::Builder::new()
+    ///     .name("foo".to_string())
+    ///     .stack_size(32 * 1024);
     ///
-    /// let result = handle.join().unwrap();
-    /// assert_eq!(result, "Hello from tracked thread");
+    /// let handle = builder.spawn(|| {
+    ///     // thread code
+    /// }).unwrap();
+    ///
+    /// handle.join().unwrap();
     /// ```
-    pub fn spawn<F>(f: F) -> Self
+    pub fn new() -> Builder {
+        Builder {
+            inner: std::thread::Builder::new(),
+        }
+    }
+
+    /// Names the thread-to-be. Currently the name is used for identification
+    /// only in panic messages.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use deloxide::thread;
+    ///
+    /// let builder = thread::Builder::new()
+    ///     .name("foo".to_string());
+    ///
+    /// let handle = builder.spawn(|| {
+    ///     assert_eq!(thread::current().name(), Some("foo"));
+    /// }).unwrap();
+    ///
+    /// handle.join().unwrap();
+    /// ```
+    pub fn name(mut self, name: String) -> Builder {
+        self.inner = self.inner.name(name);
+        self
+    }
+
+    /// Sets the size of the stack (in bytes) for the new thread.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use deloxide::thread;
+    ///
+    /// let builder = thread::Builder::new()
+    ///     .stack_size(32 * 1024);
+    /// ```
+    pub fn stack_size(mut self, size: usize) -> Builder {
+        self.inner = self.inner.stack_size(size);
+        self
+    }
+
+    /// Spawns a new thread with deadlock detection by executing the provided
+    /// closure on it, returning a [`JoinHandle`] for it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the thread could not be spawned.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use deloxide::thread;
+    ///
+    /// let builder = thread::Builder::new();
+    ///
+    /// let handle = builder.spawn(|| {
+    ///     // thread code
+    /// }).unwrap();
+    ///
+    /// handle.join().unwrap();
+    /// ```
+    pub fn spawn<F, T>(self, f: F) -> std::io::Result<JoinHandle<T>>
     where
         F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
     {
         // Get the current thread ID (which will be the parent of the new thread)
         let parent_tid = get_current_thread_id();
 
-        let handle = thread::spawn(move || {
+        self.inner.spawn(move || {
             let tid = get_current_thread_id();
             // Register thread spawn with parent information
             detector::thread::on_thread_spawn(tid, Some(parent_tid));
@@ -84,28 +194,100 @@ where
                 Ok(val) => val,
                 Err(payload) => std::panic::resume_unwind(payload),
             }
-        });
-        Thread(handle)
+        })
     }
 
-    /// Wait for the thread to finish and return its result.
+    /// Spawns a new scoped thread with deadlock detection by executing the provided
+    /// closure on it, returning a [`ScopedJoinHandle`] for it.
     ///
-    /// This method joins the thread, waiting for it to complete and returning its
-    /// result. It has the same behavior as std::thread::JoinHandle::join().
+    /// # Errors
     ///
-    /// # Returns
-    /// A Result containing the thread's return value, or an error if the thread panicked
+    /// Returns an error if the thread could not be spawned.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
-    /// use deloxide::Thread;
+    /// use deloxide::thread;
     ///
-    /// let handle = Thread::spawn(|| 42);
-    /// let result = handle.join().unwrap();
-    /// assert_eq!(result, 42);
+    /// let mut x = 0;
+    ///
+    /// thread::scope(|s| {
+    ///     let builder = thread::Builder::new();
+    ///     
+    ///     builder.spawn_scoped(s, || {
+    ///         x += 1;
+    ///     }).unwrap();
+    ///
+    ///     builder.spawn_scoped(s, || {
+    ///         x += 1;
+    ///     }).unwrap();
+    /// });
+    ///
+    /// assert_eq!(x, 2);
     /// ```
-    pub fn join(self) -> thread::Result<T> {
-        self.0.join()
+    pub fn spawn_scoped<'scope, 'env, F, T>(
+        self,
+        scope: &'scope Scope<'scope, 'env>,
+        f: F,
+    ) -> std::io::Result<ScopedJoinHandle<'scope, T>>
+    where
+        F: FnOnce() -> T + Send + 'scope,
+        T: Send + 'scope,
+    {
+        // Get the current thread ID (which will be the parent of the new thread)
+        let parent_tid = get_current_thread_id();
+
+        self.inner.spawn_scoped(scope, move || {
+            let tid = get_current_thread_id();
+            // Register thread spawn with parent information
+            detector::thread::on_thread_spawn(tid, Some(parent_tid));
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+
+            // Register thread exit
+            detector::thread::on_thread_exit(tid);
+
+            match result {
+                Ok(val) => val,
+                Err(payload) => std::panic::resume_unwind(payload),
+            }
+        })
     }
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Creates a scope for spawning scoped threads with deadlock detection.
+///
+/// This is a wrapper around [`std::thread::scope`] that adds deadlock detection
+/// to scoped threads.
+///
+/// # Examples
+///
+/// ```rust
+/// use deloxide::thread;
+///
+/// let mut x = 0;
+///
+/// thread::scope(|s| {
+///     s.spawn(|| {
+///         x += 1;
+///     });
+///
+///     s.spawn(|| {
+///         x += 1;
+///     });
+/// });
+///
+/// assert_eq!(x, 2);
+/// ```
+pub fn scope<'env, F, T>(f: F) -> T
+where
+    F: for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> T,
+{
+    std::thread::scope(f)
 }

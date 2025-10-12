@@ -20,8 +20,7 @@ pub(crate) mod detector;
 #[allow(unused_imports)]
 pub(crate) use detector::*;
 
-mod thread;
-pub use thread::Thread;
+pub mod thread;
 
 pub(crate) mod locks;
 #[cfg(feature = "stress-test")]

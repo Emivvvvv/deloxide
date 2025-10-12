@@ -26,10 +26,9 @@
 //! ### Mutex Example
 //!
 //! ```rust
-//! use deloxide::{Deloxide, Mutex, Thread};
+//! use deloxide::{Deloxide, Mutex, thread};
 //! use std::sync::Arc;
 //! use std::time::Duration;
-//! use std::thread;
 //!
 //! // Initialize the detector with a deadlock callback
 //! Deloxide::new()
@@ -46,7 +45,7 @@
 //! // First thread: Lock A, then try to lock B
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
-//! let t1 = Thread::spawn(move || {
+//! let t1 = thread::spawn(move || {
 //!     let lock_a = a_clone.lock();
 //!     thread::sleep(Duration::from_millis(100));
 //!     let lock_b = b_clone.lock();
@@ -55,7 +54,7 @@
 //! // Second thread: Lock B, then try to lock A (potential deadlock)
 //! let a_clone = Arc::clone(&mutex_a);
 //! let b_clone = Arc::clone(&mutex_b);
-//! let t2 = Thread::spawn(move || {
+//! let t2 = thread::spawn(move || {
 //!     let lock_b = b_clone.lock();
 //!     thread::sleep(Duration::from_millis(100));
 //!     let lock_a = a_clone.lock();
@@ -65,10 +64,9 @@
 //! ### RwLock Example
 //!
 //! ```rust
-//! use deloxide::{Deloxide, RwLock, Thread};
+//! use deloxide::{Deloxide, RwLock, thread};
 //! use std::sync::Arc;
 //! use std::time::Duration;
-//! use std::thread;
 //!
 //! // Initialize the detector with a deadlock callback
 //! Deloxide::new()
@@ -84,7 +82,7 @@
 //! // Multiple reader threads
 //! for i in 0..3 {
 //!     let rwlock_clone = Arc::clone(&rwlock);
-//!     Thread::spawn(move || {
+//!     thread::spawn(move || {
 //!         let read_guard = rwlock_clone.read();
 //!         println!("Reader {} acquired read lock", i);
 //!         thread::sleep(Duration::from_millis(50));
@@ -94,7 +92,7 @@
 //!
 //! // Writer thread that tries to upgrade (potential deadlock with readers)
 //! let rwlock_clone = Arc::clone(&rwlock);
-//! Thread::spawn(move || {
+//! thread::spawn(move || {
 //!     let read_guard = rwlock_clone.read();
 //!     println!("Writer acquired read lock, attempting to upgrade...");
 //!     thread::sleep(Duration::from_millis(25));
@@ -106,10 +104,9 @@
 //! ### Condvar Example
 //!
 //! ```rust
-//! use deloxide::{Deloxide, Mutex, Condvar, Thread};
+//! use deloxide::{Deloxide, Mutex, Condvar, thread};
 //! use std::sync::Arc;
 //! use std::time::Duration;
-//! use std::thread;
 //!
 //! // Initialize the detector (omitted callback for brevity)
 //! let _ = Deloxide::new().start();
@@ -118,7 +115,7 @@
 //! let pair2 = pair.clone();
 //!
 //! // Thread waiting on condition
-//! Thread::spawn(move || {
+//! thread::spawn(move || {
 //!     let (mutex, condvar) = (&pair2.0, &pair2.1);
 //!     let mut ready = mutex.lock();
 //!     while !*ready {
@@ -128,7 +125,7 @@
 //!
 //! // Notifier thread
 //! let pair3 = pair.clone();
-//! Thread::spawn(move || {
+//! thread::spawn(move || {
 //!     thread::sleep(Duration::from_millis(50));
 //!     let (mutex, condvar) = (&pair3.0, &pair3.1);
 //!     let mut ready = mutex.lock();
@@ -200,7 +197,7 @@
 
 mod core;
 pub use core::{
-    Deloxide, Thread,
+    Deloxide, thread,
     locks::condvar::Condvar,
     locks::mutex::{Mutex, MutexGuard},
     locks::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -217,7 +214,7 @@ pub mod ffi;
 
 // Ascii art font name "miniwi"
 const BANNER: &str = r#"
-▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▗ 
-▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▜ 
-▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▙▖▗ ▟▖
+▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▄▖
+▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌
+▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▄▌▗ █▌
 "#;
