@@ -2,6 +2,18 @@ use crate::core::types::ThreadId;
 use fxhash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
+/// Cache entry for cycle detection results in wait-for graph
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Not currently used but available for future optimization
+struct WaitForCacheEntry {
+    /// Generation when this entry was created
+    generation: u64,
+    /// The result: true if there would create a cycle, false otherwise
+    would_cycle: bool,
+    /// The actual cycle path if one exists
+    cycle_path: Option<Vec<ThreadId>>,
+}
+
 /// Represents a directed graph of thread wait relationships with optimized cycle detection
 ///
 /// This implementation uses an incremental approach for cycle detection, which avoids
