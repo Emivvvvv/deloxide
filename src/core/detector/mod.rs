@@ -9,7 +9,7 @@ mod utils;
 use crate::core::StressConfig;
 #[cfg(feature = "stress-test")]
 use crate::core::StressMode;
-use crate::core::graph::WaitForGraph;
+use crate::core::graph::{LockOrderGraph, WaitForGraph};
 use crate::core::logger::EventLogger;
 
 use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
@@ -87,6 +87,8 @@ impl Dispatcher {
 pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
+    /// Lock order graph for detecting lock ordering violations
+    lock_order_graph: LockOrderGraph,
     /// Maps threads to the locks they're attempting to acquire
     thread_waits_for: FxHashMap<ThreadId, LockId>,
     /// Tracks, for each thread, which locks it currently holds
@@ -134,6 +136,7 @@ impl Detector {
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
+            lock_order_graph: LockOrderGraph::new(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
@@ -156,6 +159,7 @@ impl Detector {
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
+            lock_order_graph: LockOrderGraph::new(),
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
@@ -193,6 +197,22 @@ impl Detector {
     {
         let cb: Arc<dyn Fn(DeadlockInfo) + Send + Sync> = Arc::new(callback);
         CALLBACK.set(cb).ok();
+    }
+
+    /// Check for lock order violations when a thread attempts to acquire a lock
+    fn check_lock_order_violation(
+        &mut self,
+        thread_id: ThreadId,
+        lock_id: LockId,
+    ) -> Option<Vec<LockId>> {
+        if let Some(held_locks) = self.thread_holds.get(&thread_id) {
+            for &held_lock in held_locks {
+                if let Some(lock_cycle) = self.lock_order_graph.add_edge(held_lock, lock_id) {
+                    return Some(lock_cycle);
+                }
+            }
+        }
+        None
     }
 
     /// Flush all pending log entries to disk (method version)

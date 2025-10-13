@@ -49,6 +49,9 @@ impl Detector {
         for holds in self.thread_holds.values_mut() {
             holds.remove(&lock_id);
         }
+
+        // Remove from lock order graph
+        self.lock_order_graph.remove_lock(lock_id);
     }
 
     /// Register a mutex attempt by a thread
@@ -64,6 +67,15 @@ impl Detector {
         #[cfg(feature = "stress-test")]
         self.stress_on_lock_attempt(thread_id, lock_id);
 
+        // Only check lock order when holding 1+ locks
+        let lock_order_violation = if self.thread_holds.get(&thread_id).map_or(0, |h| h.len()) >= 1
+        {
+            self.check_lock_order_violation(thread_id, lock_id)
+        } else {
+            None
+        };
+
+        // Check for actual wait-for cycles (traditional detection)
         if let Some(&owner) = self.mutex_owners.get(&lock_id) {
             self.thread_waits_for.insert(thread_id, lock_id);
 
@@ -85,8 +97,16 @@ impl Detector {
                 // Only report if no common lock (i.e., false-alarm filter)
                 if intersection.is_empty() {
                     self.handle_detected_deadlock(cycle);
+                    return; // Reported via traditional detection
                 }
             }
+        }
+
+        // Report lock order violations when lock is available
+        if let Some(lock_cycle) = lock_order_violation
+            && !self.mutex_owners.contains_key(&lock_id)
+        {
+            self.handle_lock_order_violation(thread_id, lock_id, lock_cycle);
         }
     }
 
