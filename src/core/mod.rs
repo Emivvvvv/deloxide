@@ -12,7 +12,7 @@ pub(crate) use types::*;
 // Logging functionality
 pub(crate) mod logger;
 
-// Graph implementation
+// Graph implementations (wait-for and lock order graphs)
 pub(crate) mod graph;
 
 // Deadlock detector

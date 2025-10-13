@@ -197,10 +197,11 @@
 
 mod core;
 pub use core::{
-    Deloxide, thread,
+    Deloxide,
     locks::condvar::Condvar,
     locks::mutex::{Mutex, MutexGuard},
     locks::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    thread,
     types::{DeadlockInfo, LockId, ThreadId},
 };
 

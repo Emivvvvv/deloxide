@@ -28,8 +28,8 @@ use crate::core::types::get_current_thread_id;
 
 // Re-export all items from std::thread
 pub use std::thread::{
-    available_parallelism, current, panicking, park, park_timeout, sleep, yield_now, AccessError,
-    JoinHandle, LocalKey, Result, Scope, ScopedJoinHandle, Thread, ThreadId,
+    AccessError, JoinHandle, LocalKey, Result, Scope, ScopedJoinHandle, Thread, ThreadId,
+    available_parallelism, current, panicking, park, park_timeout, sleep, yield_now,
 };
 
 /// Spawns a new thread with deadlock detection, returning a [`JoinHandle`] for it.

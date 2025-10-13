@@ -199,10 +199,10 @@ impl<T> Mutex<T> {
         // We need to prevent Drop from running since we're manually extracting the value
         // First, manually drop the detector tracking
         detector::mutex::on_mutex_destroy(self.id);
-        
+
         // Use ManuallyDrop to prevent the automatic Drop implementation
         let mutex = std::mem::ManuallyDrop::new(self);
-        
+
         // Safety: We're taking ownership and preventing double-drop
         unsafe { std::ptr::read(&mutex.inner) }.into_inner()
     }
@@ -274,7 +274,7 @@ impl<T> Drop for MutexGuard<'_, T> {
 // Trait implementations for better compatibility with std
 
 impl<T: Default> Default for Mutex<T> {
-    /// Creates a Mutex<T>, with the Default value for T
+    /// Creates a `Mutex<T>`, with the Default value for T
     fn default() -> Mutex<T> {
         Mutex::new(Default::default())
     }

@@ -178,10 +178,10 @@ impl<T> RwLock<T> {
         // We need to prevent Drop from running since we're manually extracting the value
         // First, manually drop the detector tracking
         detector::rwlock::on_rwlock_destroy(self.id);
-        
+
         // Use ManuallyDrop to prevent the automatic Drop implementation
         let rwlock = std::mem::ManuallyDrop::new(self);
-        
+
         // Safety: We're taking ownership and preventing double-drop
         unsafe { std::ptr::read(&rwlock.inner) }.into_inner()
     }
@@ -245,14 +245,14 @@ impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
 // Trait implementations for better compatibility with std
 
 impl<T: Default> Default for RwLock<T> {
-    /// Creates a new RwLock<T>, with the Default value for T
+    /// Creates a new `RwLock<T>`, with the Default value for T
     fn default() -> RwLock<T> {
         RwLock::new(Default::default())
     }
 }
 
 impl<T> From<T> for RwLock<T> {
-    /// Creates a new instance of an RwLock<T> which is unlocked
+    /// Creates a new instance of an `RwLock<T>` which is unlocked
     /// This is equivalent to RwLock::new
     fn from(t: T) -> Self {
         RwLock::new(t)
