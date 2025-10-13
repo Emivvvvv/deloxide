@@ -125,6 +125,15 @@ pub struct DeadlockInfo {
     /// the cycle is waiting to acquire. Each tuple is (thread_id, lock_id).
     pub thread_waiting_for_locks: Vec<(ThreadId, LockId)>,
 
+    /// Lock order violation cycle (if detected via lock ordering)
+    ///
+    /// When a deadlock is detected via lock order violation rather than an actual
+    /// wait-for cycle, this field contains the cycle of locks that violates the
+    /// established lock ordering. For example, if lock 1 -> lock 2 -> lock 3 -> lock 1
+    /// forms a cycle, this would be Some(vec![1, 2, 3, 1]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lock_order_cycle: Option<Vec<LockId>>,
+
     /// Timestamp when the deadlock was detected
     ///
     /// ISO-8601 formatted a timestamp indicating when the deadlock was detected.
