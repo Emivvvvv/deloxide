@@ -1,4 +1,4 @@
-use crate::core::Detector;
+use crate::core::{DeadlockSource, Detector};
 use crate::core::detector::DISPATCHER;
 use crate::{DeadlockInfo, LockId, ThreadId};
 use chrono::Utc;
@@ -58,7 +58,20 @@ impl Detector {
     }
 
     pub fn handle_detected_deadlock(&self, cycle: Vec<ThreadId>) {
+        eprintln!("[DETECTOR] ========================================");
+        eprintln!("[DETECTOR] ACTUAL DEADLOCK DETECTED (Wait-For Graph)");
+        eprintln!("[DETECTOR] Cycle: {cycle:?}");
+        eprintln!(
+            "[DETECTOR] Thread waiting for locks: {:?}",
+            self.thread_waits_for
+                .iter()
+                .map(|(&t, &l)| (t, l))
+                .collect::<Vec<_>>()
+        );
+        eprintln!("[DETECTOR] ========================================");
+
         let info = DeadlockInfo {
+            source: crate::core::types::DeadlockSource::WaitForGraph,
             thread_cycle: cycle.clone(),
             thread_waiting_for_locks: self
                 .thread_waits_for
@@ -69,6 +82,7 @@ impl Detector {
             timestamp: Utc::now().to_rfc3339(),
         };
         // Dispatch callback asynchronously
+        eprintln!("[DETECTOR] Dispatching callback to background thread...");
         DISPATCHER.send(info.clone());
 
         // Also write terminal deadlock record to the log if enabled
@@ -84,7 +98,14 @@ impl Detector {
         lock_id: LockId,
         lock_cycle: Vec<LockId>,
     ) {
+        eprintln!("[DETECTOR] ========================================");
+        eprintln!("[DETECTOR] SUSPECTED DEADLOCK (Lock Order Violation)");
+        eprintln!("[DETECTOR] Lock cycle: {lock_cycle:?}");
+        eprintln!("[DETECTOR] Thread {} attempting lock {}", thread_id, lock_id);
+        eprintln!("[DETECTOR] ========================================");
+
         let info = DeadlockInfo {
+            source: DeadlockSource::LockOrderViolation,
             thread_cycle: vec![thread_id],
             thread_waiting_for_locks: vec![(thread_id, lock_id)],
             lock_order_cycle: Some(lock_cycle),
