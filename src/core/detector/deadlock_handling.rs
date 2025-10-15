@@ -1,4 +1,4 @@
-use crate::core::Detector;
+use crate::core::{DeadlockSource, Detector};
 use crate::core::detector::DISPATCHER;
 use crate::{DeadlockInfo, LockId, ThreadId};
 use chrono::Utc;
@@ -59,6 +59,7 @@ impl Detector {
 
     pub fn handle_detected_deadlock(&self, cycle: Vec<ThreadId>) {
         let info = DeadlockInfo {
+            source: DeadlockSource::WaitForGraph,
             thread_cycle: cycle.clone(),
             thread_waiting_for_locks: self
                 .thread_waits_for
@@ -85,6 +86,7 @@ impl Detector {
         lock_cycle: Vec<LockId>,
     ) {
         let info = DeadlockInfo {
+            source: DeadlockSource::LockOrderViolation,
             thread_cycle: vec![thread_id],
             thread_waiting_for_locks: vec![(thread_id, lock_id)],
             lock_order_cycle: Some(lock_cycle),

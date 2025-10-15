@@ -104,6 +104,26 @@ pub enum NotifyKind {
     All,
 }
 
+/// Source of deadlock detection
+///
+/// Indicates which detection mechanism identified the deadlock and the
+/// level of certainty about the deadlock.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DeadlockSource {
+    /// Deadlock detected via wait-for graph (actual runtime deadlock)
+    ///
+    /// This indicates threads are actually blocked waiting for each other.
+    /// This is a CERTAIN deadlock - the program is deadlocked right now.
+    WaitForGraph,
+
+    /// Deadlock detected via lock order violation (potential deadlock)
+    ///
+    /// This indicates an inconsistent lock ordering pattern that COULD
+    /// lead to a deadlock under different timing. This is a SUSPECTED
+    /// deadlock - the pattern is dangerous but may not deadlock in practice.
+    LockOrderViolation,
+}
+
 /// Represents the result of deadlock detection
 ///
 /// This structure contains detailed information about a detected deadlock,
@@ -112,6 +132,12 @@ pub enum NotifyKind {
 /// be used to diagnose the root cause of the deadlock.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeadlockInfo {
+    /// Source of the deadlock detection
+    ///
+    /// Indicates whether this is a certain deadlock (WaitForGraph) or a
+    /// suspected deadlock pattern (LockOrderViolation).
+    pub source: DeadlockSource,
+
     /// List of threads involved in the deadlock cycle
     ///
     /// This is the ordered list of threads that form a cycle in the wait-for graph.
@@ -136,7 +162,7 @@ pub struct DeadlockInfo {
 
     /// Timestamp when the deadlock was detected
     ///
-    /// ISO-8601 formatted a timestamp indicating when the deadlock was detected.
+    /// ISO-8601 formatted timestamp indicating when the deadlock was detected.
     pub timestamp: String,
 }
 

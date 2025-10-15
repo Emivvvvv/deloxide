@@ -178,10 +178,14 @@ impl Deloxide {
     /// Deloxide::new()
     ///     .with_lock_order_checking()
     ///     .callback(|info| {
-    ///         if info.lock_order_cycle.is_some() {
-    ///             println!("⚠️  Lock order violation detected");
-    ///         } else {
-    ///             println!("🚨 Actual deadlock!");
+    ///         use deloxide::DeadlockSource;
+    ///         match info.source {
+    ///             DeadlockSource::WaitForGraph => {
+    ///                 println!("🚨 ACTUAL DEADLOCK! Threads are blocked.");
+    ///             }
+    ///             DeadlockSource::LockOrderViolation => {
+    ///                 println!("⚠️  SUSPECTED DEADLOCK! Dangerous lock ordering pattern.");
+    ///             }
     ///         }
     ///     })
     ///     .start()

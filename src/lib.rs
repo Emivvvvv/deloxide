@@ -202,7 +202,7 @@ pub use core::{
     locks::mutex::{Mutex, MutexGuard},
     locks::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard},
     thread,
-    types::{DeadlockInfo, LockId, ThreadId},
+    types::{DeadlockInfo, DeadlockSource, LockId, ThreadId},
 };
 
 #[cfg(feature = "stress-test")]
