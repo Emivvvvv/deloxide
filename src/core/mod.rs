@@ -62,6 +62,9 @@ pub struct Deloxide {
     /// Callback function to invoke when a deadlock is detected
     callback: Box<dyn Fn(DeadlockInfo) + Send + Sync + 'static>,
 
+    /// Enable lock order checking for potential deadlock detection
+    check_lock_order: bool,
+
     /// Stress testing mode (only available with "stress-test" feature)
     #[cfg(feature = "stress-test")]
     stress_mode: StressMode,
@@ -83,6 +86,7 @@ impl Deloxide {
     /// By default:
     /// - Logging is disabled
     /// - Callback is set to panic with deadlock information
+    /// - Lock order checking is disabled (only actual deadlocks detected)
     pub fn new() -> Self {
         Deloxide {
             log_path: None,
@@ -92,6 +96,7 @@ impl Deloxide {
                     serde_json::to_string_pretty(&info).unwrap_or_else(|_| format!("{info:?}"))
                 );
             }),
+            check_lock_order: false,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
             #[cfg(feature = "stress-test")]
@@ -152,6 +157,41 @@ impl Deloxide {
         self
     }
 
+    /// Enable lock order checking for potential deadlock detection
+    ///
+    /// When enabled, the detector will check for inconsistent lock ordering patterns
+    /// that could lead to deadlocks, even if no actual deadlock has occurred yet.
+    /// This provides early warning of potential deadlock bugs.
+    ///
+    /// **Note**: This may report patterns that never actually deadlock (false positives).
+    /// Recommended for development and testing, not production.
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::Deloxide;
+    ///
+    /// // Enable lock order checking for development
+    /// Deloxide::new()
+    ///     .with_lock_order_checking()
+    ///     .callback(|info| {
+    ///         if info.lock_order_cycle.is_some() {
+    ///             println!("⚠️  Lock order violation detected");
+    ///         } else {
+    ///             println!("🚨 Actual deadlock!");
+    ///         }
+    ///     })
+    ///     .start()
+    ///     .expect("Failed to start detector");
+    /// ```
+    pub fn with_lock_order_checking(mut self) -> Self {
+        self.check_lock_order = true;
+        self
+    }
+
     /// Initialize the deloxide deadlock detector with the configured settings
     ///
     /// This finalizes the configuration and starts the deadlock detector.
@@ -188,7 +228,7 @@ impl Deloxide {
         // Initialize the detector
         #[cfg(not(feature = "stress-test"))]
         {
-            init_detector(self.callback, logger);
+            init_detector(self.callback, self.check_lock_order, logger);
         }
 
         #[cfg(feature = "stress-test")]
@@ -196,6 +236,7 @@ impl Deloxide {
             // Initialize detector with stress settings
             detector::init_detector_with_stress(
                 self.callback,
+                self.check_lock_order,
                 self.stress_mode,
                 self.stress_config,
                 logger,

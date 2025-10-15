@@ -98,8 +98,10 @@ pub unsafe extern "C" fn deloxide_init(
             let stress_config = STRESS_CONFIG.take();
 
             // Initialize detector with stress settings
-            detector::init_detector_with_stress(
+            // FFI doesn't support lock order checking (use Rust API for that)
+            crate::core::detector::init_detector_with_stress(
                 deadlock_callback,
+                false,
                 stress_mode,
                 stress_config,
                 logger,
@@ -109,7 +111,8 @@ pub unsafe extern "C" fn deloxide_init(
         #[cfg(not(feature = "stress-test"))]
         {
             // Standard initialization without stress testing
-            detector::init_detector(deadlock_callback, logger);
+            // FFI doesn't support lock order checking (use Rust API for that)
+            detector::init_detector(deadlock_callback, false, logger);
         }
 
         INITIALIZED.store(true, Ordering::SeqCst);

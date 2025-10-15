@@ -1,4 +1,4 @@
-use crate::core::mutex::on_mutex_create;
+use crate::core::detector::mutex::create_mutex;
 use crate::ffi::FFI_GUARD;
 use crate::{Mutex, ThreadId};
 use std::ffi::c_void;
@@ -42,7 +42,7 @@ pub unsafe extern "C" fn deloxide_create_mutex_with_creator(
     let mutex = Box::new(Mutex::new(()));
 
     // Register the specified thread as the creator
-    on_mutex_create(mutex.id(), Some(creator_thread_id as ThreadId));
+    create_mutex(mutex.id(), Some(creator_thread_id as ThreadId));
 
     Box::into_raw(mutex) as *mut c_void
 }

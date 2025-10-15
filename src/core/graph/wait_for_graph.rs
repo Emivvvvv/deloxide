@@ -2,18 +2,6 @@ use crate::core::types::ThreadId;
 use fxhash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
-/// Cache entry for cycle detection results in wait-for graph
-#[derive(Debug, Clone)]
-#[allow(dead_code)] // Not currently used but available for future optimization
-struct WaitForCacheEntry {
-    /// Generation when this entry was created
-    generation: u64,
-    /// The result: true if there would create a cycle, false otherwise
-    would_cycle: bool,
-    /// The actual cycle path if one exists
-    cycle_path: Option<Vec<ThreadId>>,
-}
-
 /// Represents a directed graph of thread wait relationships with optimized cycle detection
 ///
 /// This implementation uses an incremental approach for cycle detection, which avoids
@@ -25,9 +13,6 @@ pub struct WaitForGraph {
 
     /// Reverse mapping for efficient backward traversal (maps thread to threads waiting for it)
     reverse_edges: FxHashMap<ThreadId, FxHashSet<ThreadId>>,
-
-    /// Tracks which nodes are known to be part of at least one cycle
-    nodes_in_cycles: FxHashSet<ThreadId>,
 
     /// Cached reachability information for fast cycle detection
     /// Maps each node to the set of nodes reachable from it
@@ -46,7 +31,6 @@ impl WaitForGraph {
         WaitForGraph {
             edges: FxHashMap::default(),
             reverse_edges: FxHashMap::default(),
-            nodes_in_cycles: FxHashSet::default(),
             reachability: FxHashMap::default(),
         }
     }
@@ -65,18 +49,12 @@ impl WaitForGraph {
     /// * `Some(Vec<ThreadId>)` - The cycle if adding this edge would create one
     /// * `None` - If no cycle would be created
     pub fn add_edge(&mut self, from: ThreadId, to: ThreadId) -> Option<Vec<ThreadId>> {
-        // Short circuit if we already know this would create a cycle
-        if self.would_create_cycle(from, to) {
-            // Find and return the actual cycle
-            let cycle = self.find_cycle_path(from, to);
-            if let Some(ref _cycle) = cycle {
-                // Update nodes in cycles
-                self.update_cycle_nodes(_cycle);
-            }
-            return cycle;
+        // Check if adding this edge would create a cycle
+        if self.can_reach(to, from) {
+            return self.find_cycle_path(from, to);
         }
 
-        // Add edge and update reverse edges
+        // No cycle - add the edge
         self.edges.entry(from).or_default().insert(to);
         self.reverse_edges.entry(to).or_default().insert(from);
 
@@ -90,33 +68,14 @@ impl WaitForGraph {
         None
     }
 
-    /// Check if adding an edge would create a cycle
-    ///
-    /// Uses cached reachability information to efficiently determine if
-    /// adding an edge from `from` to `to` would create a cycle.
-    fn would_create_cycle(&self, from: ThreadId, to: ThreadId) -> bool {
-        // If 'to' can reach 'from', adding this edge would create a cycle
-        if let Some(reachable) = self.reachability.get(&to)
-            && reachable.contains(&from)
-        {
-            return true;
-        }
-
-        // Check if both nodes are already in a cycle
-        if self.nodes_in_cycles.contains(&from) && self.nodes_in_cycles.contains(&to) {
-            // Perform a quick check to see if they're in the same cycle
-            return self.are_in_same_cycle(from, to);
-        }
-
-        false
-    }
-
     /// Update reachability information after adding a new edge
-    ///
-    /// Efficiently updates the reachability cache to reflect the new
-    /// connection between `from` and `to` threads.
     fn update_reachability(&mut self, from: ThreadId, to: ThreadId) {
-        // BFS to update reachability from 'from' node
+        let to_reachable: Vec<ThreadId> = self
+            .reachability
+            .get(&to)
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default();
+
         let mut queue = VecDeque::new();
         queue.push_back(from);
 
@@ -124,19 +83,10 @@ impl WaitForGraph {
         visited.insert(from);
 
         while let Some(current) = queue.pop_front() {
-            // First collect all nodes that 'to' can reach
-            let to_reachable: Vec<ThreadId> = self
-                .reachability
-                .get(&to)
-                .map(|set| set.iter().copied().collect())
-                .unwrap_or_default();
-
-            // Then update reachability for current node
             let reachable = self.reachability.entry(current).or_default();
             reachable.insert(to);
-            reachable.extend(to_reachable);
+            reachable.extend(&to_reachable);
 
-            // Propagate to predecessors
             if let Some(predecessors) = self.reverse_edges.get(&current) {
                 for &pred in predecessors {
                     if !visited.contains(&pred) {
@@ -193,23 +143,38 @@ impl WaitForGraph {
         None
     }
 
-    /// Update nodes in cycles tracking
-    fn update_cycle_nodes(&mut self, cycle: &[ThreadId]) {
-        for &node in cycle {
-            self.nodes_in_cycles.insert(node);
+    /// Check if one node can reach another using the reachability cache
+    fn can_reach(&self, from: ThreadId, to: ThreadId) -> bool {
+        if from == to {
+            return true;
+        }
+
+        if let Some(reachable) = self.reachability.get(&from) {
+            reachable.contains(&to)
+        } else {
+            false
         }
     }
 
-    /// Check if two nodes are in the same cycle
-    fn are_in_same_cycle(&self, node1: ThreadId, node2: ThreadId) -> bool {
-        // Simple check - if both can reach each other, they're in the same cycle
-        if let Some(reachable1) = self.reachability.get(&node1)
-            && reachable1.contains(&node2)
-            && let Some(reachable2) = self.reachability.get(&node2)
-        {
-            return reachable2.contains(&node1);
+    /// Clear the wait edges for a thread (what it's waiting for)
+    ///
+    /// Called when a thread successfully acquires a lock and is no longer waiting.
+    /// Other threads may still be waiting for this thread, so we keep the thread
+    /// in the graph and only clear its outgoing edges.
+    pub fn clear_wait_edges(&mut self, thread_id: ThreadId) {
+        // Remove outgoing edges and update reverse edges
+        if let Some(outgoing) = self.edges.get_mut(&thread_id) {
+            for neighbor in outgoing.iter() {
+                if let Some(reverse) = self.reverse_edges.get_mut(neighbor) {
+                    reverse.remove(&thread_id);
+                }
+            }
+            outgoing.clear();
         }
-        false
+
+        // Clear reachability for this thread since it no longer waits for anyone
+        // Reachability for other threads will be updated incrementally on next add_edge()
+        self.reachability.remove(&thread_id);
     }
 
     /// Remove all edges for the specified thread
@@ -218,9 +183,6 @@ impl WaitForGraph {
     /// related data structures including edges, reverse edges,
     /// cycle tracking, and reachability information.
     pub fn remove_thread(&mut self, thread_id: ThreadId) {
-        // Remove from cycle tracking
-        self.nodes_in_cycles.remove(&thread_id);
-
         // Remove outgoing edges and update reverse edges
         if let Some(outgoing) = self.edges.remove(&thread_id) {
             for neighbor in outgoing {

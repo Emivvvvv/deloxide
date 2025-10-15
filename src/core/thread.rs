@@ -183,12 +183,12 @@ impl Builder {
         self.inner.spawn(move || {
             let tid = get_current_thread_id();
             // Register thread spawn with parent information
-            detector::thread::on_thread_spawn(tid, Some(parent_tid));
+            detector::thread::spawn_thread(tid, Some(parent_tid));
 
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 
             // Register thread exit
-            detector::thread::on_thread_exit(tid);
+            detector::thread::exit_thread(tid);
 
             match result {
                 Ok(val) => val,
@@ -241,12 +241,12 @@ impl Builder {
         self.inner.spawn_scoped(scope, move || {
             let tid = get_current_thread_id();
             // Register thread spawn with parent information
-            detector::thread::on_thread_spawn(tid, Some(parent_tid));
+            detector::thread::spawn_thread(tid, Some(parent_tid));
 
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 
             // Register thread exit
-            detector::thread::on_thread_exit(tid);
+            detector::thread::exit_thread(tid);
 
             match result {
                 Ok(val) => val,

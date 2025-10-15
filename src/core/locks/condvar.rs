@@ -61,7 +61,7 @@ impl Condvar {
         let id = NEXT_LOCK_ID.fetch_add(1, Ordering::SeqCst);
 
         // Register the condvar with the detector
-        detector::condvar::on_condvar_create(id);
+        detector::condvar::create_condvar(id);
 
         Condvar {
             id,
@@ -108,17 +108,17 @@ impl Condvar {
         let mutex_id = guard.lock_id();
 
         // Report wait begin - this logs the condvar wait and simulates mutex release
-        detector::condvar::on_wait_begin(thread_id, self.id, mutex_id);
+        crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
 
         // Explicitly report mutex release since parking_lot will unlock it internally
-        detector::mutex::on_mutex_release(thread_id, mutex_id);
+        crate::core::detector::mutex::release_mutex(thread_id, mutex_id);
 
         // Perform the actual wait operation
         self.inner.wait(guard.inner_guard());
 
         // Report wait end and mutex reacquisition
-        detector::condvar::on_wait_end(thread_id, self.id, mutex_id);
-        detector::mutex::on_mutex_acquired(thread_id, mutex_id);
+        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+        detector::mutex::complete_acquire(thread_id, mutex_id);
     }
 
     /// Wait on this condition variable with a timeout
@@ -156,18 +156,18 @@ impl Condvar {
         let mutex_id = guard.lock_id();
 
         // Report wait begin - this logs the condvar wait and simulates mutex release
-        detector::condvar::on_wait_begin(thread_id, self.id, mutex_id);
+        crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
 
         // Explicitly report mutex release since parking_lot will unlock it internally
-        detector::mutex::on_mutex_release(thread_id, mutex_id);
+        crate::core::detector::mutex::release_mutex(thread_id, mutex_id);
 
         // Perform the actual wait operation with timeout
         let wait_result = self.inner.wait_for(guard.inner_guard(), timeout);
         let timed_out = wait_result.timed_out();
 
         // Report wait end and mutex reacquisition
-        detector::condvar::on_wait_end(thread_id, self.id, mutex_id);
-        detector::mutex::on_mutex_acquired(thread_id, mutex_id);
+        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+        detector::mutex::complete_acquire(thread_id, mutex_id);
 
         timed_out
     }
@@ -281,7 +281,7 @@ impl Condvar {
         let thread_id = get_current_thread_id();
 
         // Report the notify operation to the detector first (for synthetic mutex attempts)
-        detector::condvar::on_notify_one(self.id, thread_id);
+        detector::condvar::notify_one(self.id, thread_id);
 
         // Perform the actual notification
         self.inner.notify_one();
@@ -312,7 +312,7 @@ impl Condvar {
         let thread_id = get_current_thread_id();
 
         // Report the notify operation to the detector first (for synthetic mutex attempts)
-        detector::condvar::on_notify_all(self.id, thread_id);
+        detector::condvar::notify_all(self.id, thread_id);
 
         // Perform the actual notification
         self.inner.notify_all();
@@ -328,6 +328,6 @@ impl Default for Condvar {
 impl Drop for Condvar {
     fn drop(&mut self) {
         // Register the condvar destruction with the detector
-        detector::condvar::on_condvar_destroy(self.id);
+        detector::condvar::destroy_condvar(self.id);
     }
 }

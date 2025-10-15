@@ -1,4 +1,4 @@
-use crate::core::detector::rwlock::on_rwlock_create;
+use crate::core::detector::rwlock::create_rwlock;
 use crate::core::locks::rwlock::RwLock;
 use crate::core::types::ThreadId;
 use std::cell::RefCell;
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn deloxide_create_rwlock_with_creator(
     creator_thread_id: usize,
 ) -> *mut c_void {
     let rwlock = Box::new(RwLock::new(()));
-    on_rwlock_create(rwlock.id(), Some(creator_thread_id as ThreadId));
+    create_rwlock(rwlock.id(), Some(creator_thread_id as ThreadId));
     Box::into_raw(rwlock) as *mut c_void
 }
 

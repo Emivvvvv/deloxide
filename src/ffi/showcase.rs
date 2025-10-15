@@ -15,7 +15,7 @@ use std::os::raw::{c_char, c_int};
 /// This function accesses global state and should be called from a single thread at a time.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_flush_logs() -> c_int {
-    match detector::flush_global_detector_logs() {
+    match crate::core::detector::flush_global_detector_logs() {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("Failed to flush logs: {e:#}");

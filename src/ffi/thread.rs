@@ -1,5 +1,5 @@
 use crate::ThreadId;
-use crate::core::detector::thread::{on_thread_exit, on_thread_spawn};
+use crate::core::detector::thread::{exit_thread, spawn_thread};
 use crate::core::get_current_thread_id;
 use std::os::raw::c_int;
 
@@ -28,7 +28,7 @@ pub unsafe extern "C" fn deloxide_register_thread_spawn(
     } else {
         Some(parent_id as ThreadId)
     };
-    on_thread_spawn(thread_id as ThreadId, parent);
+    spawn_thread(thread_id as ThreadId, parent);
     0 // Success
 }
 
@@ -48,7 +48,7 @@ pub unsafe extern "C" fn deloxide_register_thread_spawn(
 /// - This function is normally called automatically by the CREATE_TRACKED_THREAD macro.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn deloxide_register_thread_exit(thread_id: usize) -> c_int {
-    on_thread_exit(thread_id as ThreadId);
+    exit_thread(thread_id as ThreadId);
     0 // Success
 }
 

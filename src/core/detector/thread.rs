@@ -12,7 +12,7 @@ impl Detector {
     /// # Arguments
     /// * `thread_id` - ID of the newly spawned thread
     /// * `parent_id` - Optional ID of the parent thread that created this thread
-    pub fn on_thread_spawn(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
+    pub fn spawn_thread(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
         if let Some(logger) = &self.logger {
             logger.log_thread_event(thread_id, parent_id, Events::ThreadSpawn);
         }
@@ -28,7 +28,7 @@ impl Detector {
     ///
     /// # Arguments
     /// * `thread_id` - ID of the exiting thread
-    pub fn on_thread_exit(&mut self, thread_id: ThreadId) {
+    pub fn exit_thread(&mut self, thread_id: ThreadId) {
         if let Some(logger) = &self.logger {
             logger.log_thread_event(thread_id, None, Events::ThreadExit);
         }
@@ -49,16 +49,16 @@ impl Detector {
 /// # Arguments
 /// * `thread_id` - ID of the spawned thread
 /// * `parent_id` - Optional ID of the parent thread that created this thread
-pub fn on_thread_spawn(thread_id: ThreadId, parent_id: Option<ThreadId>) {
+pub fn spawn_thread(thread_id: ThreadId, parent_id: Option<ThreadId>) {
     let mut detector = GLOBAL_DETECTOR.lock();
-    detector.on_thread_spawn(thread_id, parent_id);
+    detector.spawn_thread(thread_id, parent_id);
 }
 
 /// Register a thread exit with the global detector
 ///
 /// # Arguments
 /// * `thread_id` - ID of the exiting thread
-pub fn on_thread_exit(thread_id: ThreadId) {
+pub fn exit_thread(thread_id: ThreadId) {
     let mut detector = GLOBAL_DETECTOR.lock();
-    detector.on_thread_exit(thread_id);
+    detector.exit_thread(thread_id);
 }

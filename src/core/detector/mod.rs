@@ -3,7 +3,7 @@ pub mod mutex;
 pub mod rwlock;
 mod stress;
 pub mod thread;
-mod utils;
+mod deadlock_handling;
 
 #[cfg(feature = "stress-test")]
 use crate::core::StressConfig;
@@ -87,8 +87,8 @@ impl Dispatcher {
 pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
-    /// Lock order graph for detecting lock ordering violations
-    lock_order_graph: LockOrderGraph,
+    /// Lock order graph for detecting lock ordering violations (only created if enabled)
+    lock_order_graph: Option<LockOrderGraph>,
     /// Maps threads to the locks they're attempting to acquire
     thread_waits_for: FxHashMap<ThreadId, LockId>,
     /// Tracks, for each thread, which locks it currently holds
@@ -132,11 +132,13 @@ impl Detector {
         }
     }
 
-    /// Create a new deadlock detector
+    /// Create a new deadlock detector with default settings
+    ///
+    /// By default, lock order checking is disabled.
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_order_graph: LockOrderGraph::new(),
+            lock_order_graph: None,  // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
@@ -153,13 +155,15 @@ impl Detector {
         }
     }
 
+
+
     #[cfg(feature = "stress-test")]
     #[allow(dead_code)]
     /// Create a new deadlock detector with stress testing config
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_order_graph: LockOrderGraph::new(),
+            lock_order_graph: None,  // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
@@ -205,9 +209,12 @@ impl Detector {
         thread_id: ThreadId,
         lock_id: LockId,
     ) -> Option<Vec<LockId>> {
+        // Only check if lock order graph is enabled
+        let graph = self.lock_order_graph.as_mut()?;
+
         if let Some(held_locks) = self.thread_holds.get(&thread_id) {
             for &held_lock in held_locks {
-                if let Some(lock_cycle) = self.lock_order_graph.add_edge(held_lock, lock_id) {
+                if let Some(lock_cycle) = graph.add_edge(held_lock, lock_id) {
                     return Some(lock_cycle);
                 }
             }
@@ -247,15 +254,21 @@ lazy_static::lazy_static! {
 ///
 /// # Arguments
 /// * `callback` - Function to call when a deadlock is detected
+/// * `check_lock_order` - Whether to enable lock order checking
 /// * `logger` - Optional EventLogger for recording thread and lock events
 #[allow(dead_code)]
-pub fn init_detector<F>(callback: F, logger: Option<EventLogger>)
+pub fn init_detector<F>(callback: F, check_lock_order: bool, logger: Option<EventLogger>)
 where
     F: Fn(DeadlockInfo) + Send + Sync + 'static,
 {
     let mut detector = GLOBAL_DETECTOR.lock();
     detector.set_logger(logger);
     detector.set_deadlock_callback(callback);
+
+    // Create lock order graph if enabled
+    if check_lock_order {
+        detector.lock_order_graph = Some(LockOrderGraph::new());
+    }
 }
 
 /// Initialize the global detector with stress testing configuration and logger
@@ -265,12 +278,14 @@ where
 ///
 /// # Arguments
 /// * `callback` - Function to call when a deadlock is detected
+/// * `check_lock_order` - Whether to enable lock order checking
 /// * `stress_mode` - The stress testing mode to use
 /// * `stress_config` - Optional stress testing configuration
 /// * `logger` - Optional EventLogger for recording thread and lock events
 #[cfg(feature = "stress-test")]
 pub fn init_detector_with_stress<F>(
     callback: F,
+    check_lock_order: bool,
     stress_mode: StressMode,
     stress_config: Option<StressConfig>,
     logger: Option<EventLogger>,
@@ -280,6 +295,12 @@ pub fn init_detector_with_stress<F>(
     let mut detector = GLOBAL_DETECTOR.lock();
     detector.set_logger(logger);
     detector.set_deadlock_callback(callback);
+
+    // Create lock order graph if enabled
+    if check_lock_order {
+        detector.lock_order_graph = Some(LockOrderGraph::new());
+    }
+
     detector.stress_mode = stress_mode;
     detector.stress_config = stress_config;
 }

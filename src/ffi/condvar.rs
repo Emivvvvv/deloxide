@@ -1,4 +1,4 @@
-use crate::core::detector::condvar::on_condvar_create;
+use crate::core::detector::condvar::create_condvar;
 use crate::core::locks::condvar::Condvar;
 use crate::ffi::FFI_GUARD;
 use std::cell::RefCell;
@@ -49,7 +49,7 @@ pub unsafe extern "C" fn deloxide_create_condvar_with_creator(
 
     // Register the specified thread as the creator
     // so we just create the condvar normally
-    on_condvar_create(condvar.id());
+    create_condvar(condvar.id());
 
     Box::into_raw(condvar) as *mut c_void
 }

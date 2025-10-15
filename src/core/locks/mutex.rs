@@ -78,7 +78,7 @@ impl<T> Mutex<T> {
         let creator_thread_id = get_current_thread_id();
 
         // Register the lock with the detector, including creator thread info
-        detector::mutex::on_mutex_create(id, Some(creator_thread_id));
+        detector::mutex::create_mutex(id, Some(creator_thread_id));
 
         Mutex {
             id,
@@ -103,14 +103,9 @@ impl<T> Mutex<T> {
         self.creator_thread_id
     }
 
-    /// Attempt to acquire the lock, tracking the attempt for deadlock detection
+    /// Acquire the lock, blocking if necessary
     ///
-    /// This method records the lock attempt with the deadlock detector before
-    /// trying to acquire the lock. If a deadlock occurs, the detector can
-    /// identify it before the lock is actually acquired.
-    ///
-    /// # Returns
-    /// A Result containing a MutexGuard if the lock was acquired successfully
+    /// Uses atomic deadlock detection to prevent race conditions.
     ///
     /// # Example
     ///
@@ -126,12 +121,19 @@ impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<'_, T> {
         let thread_id = get_current_thread_id();
 
-        // Report lock attempt
-        detector::mutex::on_mutex_attempt(thread_id, self.id);
+        let guard = crate::core::detector::mutex::attempt_acquire(thread_id, self.id, || {
+            self.inner.try_lock()
+        });
 
-        let guard = self.inner.lock();
+        let guard = match guard {
+            Some(g) => g,
+            None => {
+                let g = self.inner.lock();
+                detector::mutex::complete_acquire(thread_id, self.id);
+                g
+            }
+        };
 
-        detector::mutex::on_mutex_acquired(thread_id, self.id);
         MutexGuard {
             thread_id,
             lock_id: self.id,
@@ -141,11 +143,7 @@ impl<T> Mutex<T> {
 
     /// Try to acquire the lock without blocking
     ///
-    /// This method attempts to acquire the lock without blocking, similar to
-    /// std::sync::Mutex::try_lock(). It records the attempt with the deadlock detector.
-    ///
-    /// # Returns
-    /// Some(MutexGuard) if the lock was acquired, None if the lock was already held
+    /// Returns Some(guard) if successful, None if the lock is held.
     ///
     /// # Example
     ///
@@ -165,20 +163,13 @@ impl<T> Mutex<T> {
     /// ```
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
         let thread_id = get_current_thread_id();
+        let guard = detector::mutex::attempt_acquire(thread_id, self.id, || self.inner.try_lock());
 
-        // Report lock attempt
-        detector::mutex::on_mutex_attempt(thread_id, self.id);
-
-        if let Some(guard) = self.inner.try_lock() {
-            detector::mutex::on_mutex_acquired(thread_id, self.id);
-            Some(MutexGuard {
-                thread_id,
-                lock_id: self.id,
-                guard,
-            })
-        } else {
-            None
-        }
+        guard.map(|g| MutexGuard {
+            thread_id,
+            lock_id: self.id,
+            guard: g,
+        })
     }
 
     /// Consumes this mutex, returning the underlying data
@@ -198,7 +189,7 @@ impl<T> Mutex<T> {
     {
         // We need to prevent Drop from running since we're manually extracting the value
         // First, manually drop the detector tracking
-        detector::mutex::on_mutex_destroy(self.id);
+        detector::mutex::destroy_mutex(self.id);
 
         // Use ManuallyDrop to prevent the automatic Drop implementation
         let mutex = std::mem::ManuallyDrop::new(self);
@@ -229,7 +220,7 @@ impl<T> Mutex<T> {
 impl<T> Drop for Mutex<T> {
     fn drop(&mut self) {
         // Register the lock destruction with the detector
-        detector::mutex::on_mutex_destroy(self.id);
+        detector::mutex::destroy_mutex(self.id);
     }
 }
 
@@ -267,7 +258,7 @@ impl<'a, T> MutexGuard<'a, T> {
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // Report lock release
-        detector::mutex::on_mutex_release(self.thread_id, self.lock_id);
+        detector::mutex::release_mutex(self.thread_id, self.lock_id);
     }
 }
 

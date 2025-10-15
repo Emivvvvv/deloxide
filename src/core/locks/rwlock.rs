@@ -78,7 +78,7 @@ impl<T> RwLock<T> {
     pub fn new(value: T) -> Self {
         let id = NEXT_LOCK_ID.fetch_add(1, Ordering::SeqCst);
         let creator_thread_id = get_current_thread_id();
-        detector::rwlock::on_rwlock_create(id, Some(creator_thread_id));
+        detector::rwlock::create_rwlock(id, Some(creator_thread_id));
         RwLock {
             id,
             inner: ParkingLotRwLock::new(value),
@@ -98,13 +98,29 @@ impl<T> RwLock<T> {
 
     /// Acquire a shared (read) lock, tracking the attempt and acquisition
     ///
+    /// Uses two-phase locking protocol to eliminate race conditions between
+    /// deadlock detection and lock acquisition.
+    ///
     /// # Returns
     /// A guard which releases the lock when dropped
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         let thread_id = get_current_thread_id();
-        detector::rwlock::on_rw_read_attempt(thread_id, self.id);
-        let guard = self.inner.read();
-        detector::rwlock::on_rw_read_acquired(thread_id, self.id);
+
+        // Phase 1: Atomic detection and try-acquire
+        let guard = crate::core::detector::rwlock::attempt_read(thread_id, self.id, || {
+            self.inner.try_read()
+        });
+
+        // Phase 2: If try-acquire failed, use blocking read
+        let guard = match guard {
+            Some(g) => g,
+            None => {
+                let g = self.inner.read();
+                detector::rwlock::complete_read(thread_id, self.id);
+                g
+            }
+        };
+
         RwLockReadGuard {
             thread_id,
             lock_id: self.id,
@@ -114,13 +130,29 @@ impl<T> RwLock<T> {
 
     /// Acquire an exclusive (write) lock, tracking the attempt and acquisition
     ///
+    /// Uses two-phase locking protocol to eliminate race conditions between
+    /// deadlock detection and lock acquisition.
+    ///
     /// # Returns
     /// A guard which releases the lock when dropped
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         let thread_id = get_current_thread_id();
-        detector::rwlock::on_rw_write_attempt(thread_id, self.id);
-        let guard = self.inner.write();
-        detector::rwlock::on_rw_write_acquired(thread_id, self.id);
+
+        // Phase 1: Atomic detection and try-acquire
+        let guard = crate::core::detector::rwlock::attempt_write(thread_id, self.id, || {
+            self.inner.try_write()
+        });
+
+        // Phase 2: If try-acquire failed, use blocking write
+        let guard = match guard {
+            Some(g) => g,
+            None => {
+                let g = self.inner.write();
+                detector::rwlock::complete_write(thread_id, self.id);
+                g
+            }
+        };
+
         RwLockWriteGuard {
             thread_id,
             lock_id: self.id,
@@ -129,35 +161,37 @@ impl<T> RwLock<T> {
     }
 
     /// Try to acquire a shared (read) lock, tracking the attempt
+    ///
+    /// Uses atomic detection to ensure deadlock detection and acquisition
+    /// happen together.
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
         let thread_id = get_current_thread_id();
-        detector::rwlock::on_rw_read_attempt(thread_id, self.id);
-        if let Some(guard) = self.inner.try_read() {
-            detector::rwlock::on_rw_read_acquired(thread_id, self.id);
-            Some(RwLockReadGuard {
-                thread_id,
-                lock_id: self.id,
-                guard,
-            })
-        } else {
-            None
-        }
+
+        // Use atomic detection and try-acquire
+        let guard = detector::rwlock::attempt_read(thread_id, self.id, || self.inner.try_read());
+
+        guard.map(|g| RwLockReadGuard {
+            thread_id,
+            lock_id: self.id,
+            guard: g,
+        })
     }
 
     /// Try to acquire an exclusive (write) lock, tracking the attempt
+    ///
+    /// Uses atomic detection to ensure deadlock detection and acquisition
+    /// happen together.
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
         let thread_id = get_current_thread_id();
-        detector::rwlock::on_rw_write_attempt(thread_id, self.id);
-        if let Some(guard) = self.inner.try_write() {
-            detector::rwlock::on_rw_write_acquired(thread_id, self.id);
-            Some(RwLockWriteGuard {
-                thread_id,
-                lock_id: self.id,
-                guard,
-            })
-        } else {
-            None
-        }
+
+        // Use atomic detection and try-acquire
+        let guard = detector::rwlock::attempt_write(thread_id, self.id, || self.inner.try_write());
+
+        guard.map(|g| RwLockWriteGuard {
+            thread_id,
+            lock_id: self.id,
+            guard: g,
+        })
     }
 
     /// Consumes this RwLock, returning the underlying data
@@ -177,7 +211,7 @@ impl<T> RwLock<T> {
     {
         // We need to prevent Drop from running since we're manually extracting the value
         // First, manually drop the detector tracking
-        detector::rwlock::on_rwlock_destroy(self.id);
+        detector::rwlock::destroy_rwlock(self.id);
 
         // Use ManuallyDrop to prevent the automatic Drop implementation
         let rwlock = std::mem::ManuallyDrop::new(self);
@@ -207,7 +241,7 @@ impl<T> RwLock<T> {
 
 impl<T> Drop for RwLock<T> {
     fn drop(&mut self) {
-        detector::rwlock::on_rwlock_destroy(self.id);
+        detector::rwlock::destroy_rwlock(self.id);
     }
 }
 
@@ -221,7 +255,7 @@ impl<'a, T> Deref for RwLockReadGuard<'a, T> {
 }
 impl<'a, T> Drop for RwLockReadGuard<'a, T> {
     fn drop(&mut self) {
-        detector::rwlock::on_rw_read_release(self.thread_id, self.lock_id);
+        detector::rwlock::release_read(self.thread_id, self.lock_id);
     }
 }
 
@@ -238,7 +272,7 @@ impl<'a, T> DerefMut for RwLockWriteGuard<'a, T> {
 }
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
-        detector::rwlock::on_rw_write_release(self.thread_id, self.lock_id);
+        detector::rwlock::release_write(self.thread_id, self.lock_id);
     }
 }
 
