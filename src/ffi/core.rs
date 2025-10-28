@@ -1,4 +1,5 @@
-use crate::core::{detector, logger};
+use crate::core::detector;
+use crate::core::logger;
 use crate::ffi::{DEADLOCK_CALLBACK, DEADLOCK_DETECTED, INITIALIZED, IS_LOGGING_ENABLED};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -99,7 +100,7 @@ pub unsafe extern "C" fn deloxide_init(
 
             // Initialize detector with stress settings
             // FFI doesn't support lock order checking (use Rust API for that)
-            crate::core::detector::init_detector_with_stress(
+            detector::init_detector_with_stress(
                 deadlock_callback,
                 false,
                 stress_mode,

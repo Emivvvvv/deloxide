@@ -1,5 +1,5 @@
-use crate::core::{DeadlockSource, Detector};
 use crate::core::detector::DISPATCHER;
+use crate::core::{DeadlockSource, Detector};
 use crate::{DeadlockInfo, LockId, ThreadId};
 use chrono::Utc;
 

@@ -1,9 +1,9 @@
 pub mod condvar;
+mod deadlock_handling;
 pub mod mutex;
 pub mod rwlock;
 mod stress;
 pub mod thread;
-mod deadlock_handling;
 
 #[cfg(feature = "stress-test")]
 use crate::core::StressConfig;
@@ -138,7 +138,7 @@ impl Detector {
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_order_graph: None,  // Not created by default
+            lock_order_graph: None, // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
@@ -155,15 +155,13 @@ impl Detector {
         }
     }
 
-
-
     #[cfg(feature = "stress-test")]
     #[allow(dead_code)]
     /// Create a new deadlock detector with stress testing config
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
-            lock_order_graph: None,  // Not created by default
+            lock_order_graph: None, // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
             mutex_owners: FxHashMap::default(),
