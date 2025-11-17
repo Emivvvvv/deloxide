@@ -1,6 +1,6 @@
 [package]
 name = "deloxide"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Emirhan Tala <tala.emirhan@gmail.com>", "Ulaş Can Demirbağ <ulascandemirbag@gmail.com>"]
 edition = "2024"
 description = "Deloxide scrubs your threads clean by detecting deadlocks in real time—keeping your system smooth, safe, and corrosion-free. 🦀🧼🔒"
@@ -22,6 +22,7 @@ path = "src/main.rs"
 [features]
 default = []
 stress-test = [] # for stress testing functionality
+lock-order-graph = [] # for lock order graph functionality
 
 [dependencies]
 parking_lot = "0.12.4"  # Alternative to std mutex with better performance

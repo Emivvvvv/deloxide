@@ -159,6 +159,41 @@
 //! showcase("logs/deadlock_20250101_120000.json").unwrap();
 //! ```
 //!
+//! ## Lock Order Graph (optional feature)
+//!
+//! Enable the `lock-order-graph` feature to detect potential deadlocks by tracking
+//! lock acquisition ordering patterns, even when threads don't actually block.
+//!
+//! ```toml
+//! # Cargo.toml
+//! [dependencies]
+//! deloxide = { version = "0.4.0", features = ["lock-order-graph"] }
+//! ```
+//!
+//! ```rust
+//! #[cfg(feature = "lock-order-graph")]
+//! {
+//! use deloxide::Deloxide;
+//!
+//! // Enable lock order checking for development
+//! Deloxide::new()
+//!     .with_lock_order_checking()
+//!     .callback(|info| {
+//!         use deloxide::DeadlockSource;
+//!         match info.source {
+//!             DeadlockSource::WaitForGraph => {
+//!                 println!("🚨 ACTUAL DEADLOCK! Threads are blocked.");
+//!             }
+//!             DeadlockSource::LockOrderViolation => {
+//!                 println!("⚠️  SUSPECTED DEADLOCK! Dangerous lock ordering pattern.");
+//!             }
+//!         }
+//!     })
+//!     .start()
+//!     .unwrap();
+//! }
+//! ```
+//!
 //! ## Stress Testing (optional feature)
 //!
 //! Enable the `stress-test` feature to increase the probability of deadlocks by
@@ -167,7 +202,7 @@
 //! ```toml
 //! # Cargo.toml
 //! [dependencies]
-//! deloxide = { version = "0.2.1", features = ["stress-test"] }
+//! deloxide = { version = "0.4.0", features = ["stress-test"] }
 //! ```
 //!
 //! ```rust

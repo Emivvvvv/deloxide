@@ -63,6 +63,7 @@ pub struct Deloxide {
     callback: Box<dyn Fn(DeadlockInfo) + Send + Sync + 'static>,
 
     /// Enable lock order checking for potential deadlock detection
+    #[cfg(feature = "lock-order-graph")]
     check_lock_order: bool,
 
     /// Stress testing mode (only available with "stress-test" feature)
@@ -96,6 +97,7 @@ impl Deloxide {
                     serde_json::to_string_pretty(&info).unwrap_or_else(|_| format!("{info:?}"))
                 );
             }),
+            #[cfg(feature = "lock-order-graph")]
             check_lock_order: false,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
@@ -169,9 +171,14 @@ impl Deloxide {
     /// # Returns
     /// The builder for method chaining
     ///
+    /// # Note
+    /// This method is only available when the "lock-order-graph" feature is enabled.
+    ///
     /// # Example
     ///
     /// ```rust
+    /// #[cfg(feature = "lock-order-graph")]
+    /// {
     /// use deloxide::Deloxide;
     ///
     /// // Enable lock order checking for development
@@ -190,7 +197,9 @@ impl Deloxide {
     ///     })
     ///     .start()
     ///     .expect("Failed to start detector");
+    /// }
     /// ```
+    #[cfg(feature = "lock-order-graph")]
     pub fn with_lock_order_checking(mut self) -> Self {
         self.check_lock_order = true;
         self
@@ -232,15 +241,27 @@ impl Deloxide {
         // Initialize the detector
         #[cfg(not(feature = "stress-test"))]
         {
+            #[cfg(feature = "lock-order-graph")]
             init_detector(self.callback, self.check_lock_order, logger);
+            #[cfg(not(feature = "lock-order-graph"))]
+            init_detector(self.callback, false, logger);
         }
 
         #[cfg(feature = "stress-test")]
         {
             // Initialize detector with stress settings
+            #[cfg(feature = "lock-order-graph")]
             detector::init_detector_with_stress(
                 self.callback,
                 self.check_lock_order,
+                self.stress_mode,
+                self.stress_config,
+                logger,
+            );
+            #[cfg(not(feature = "lock-order-graph"))]
+            detector::init_detector_with_stress(
+                self.callback,
+                false,
                 self.stress_mode,
                 self.stress_config,
                 logger,

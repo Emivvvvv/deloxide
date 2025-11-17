@@ -45,6 +45,7 @@ impl Detector {
         }
 
         // Remove from lock order graph if it exists
+        #[cfg(feature = "lock-order-graph")]
         if let Some(graph) = &mut self.lock_order_graph {
             graph.remove_lock(lock_id);
         }
@@ -75,6 +76,7 @@ impl Detector {
         self.stress_on_lock_attempt(thread_id, lock_id);
 
         // Check for lock order violations (only if graph exists and holding other locks)
+        #[cfg(feature = "lock-order-graph")]
         let lock_order_violation = if self.lock_order_graph.is_some()
             && self.thread_holds.get(&thread_id).map_or(0, |h| h.len()) >= 1
         {
@@ -82,6 +84,8 @@ impl Detector {
         } else {
             None
         };
+        #[cfg(not(feature = "lock-order-graph"))]
+        let _lock_order_violation: Option<Vec<LockId>> = None;
 
         if let Some(&owner) = self.mutex_owners.get(&lock_id) {
             self.thread_waits_for.insert(thread_id, lock_id);
@@ -99,6 +103,7 @@ impl Detector {
         }
 
         // Report lock order violation if detected
+        #[cfg(feature = "lock-order-graph")]
         if let Some(lock_cycle) = lock_order_violation {
             self.handle_lock_order_violation(thread_id, lock_id, lock_cycle);
         }

@@ -156,6 +156,7 @@ impl Detector {
     /// happen when the woken thread calls the mutex wrapper's lock() method.
     fn on_mutex_attempt_synthetic_immediate(&mut self, thread_id: ThreadId, lock_id: LockId) {
         // Check for lock order violations (only if graph exists and holding other locks)
+        #[cfg(feature = "lock-order-graph")]
         let lock_order_violation = if self.lock_order_graph.is_some()
             && self.thread_holds.get(&thread_id).map_or(0, |h| h.len()) >= 1
         {
@@ -163,6 +164,8 @@ impl Detector {
         } else {
             None
         };
+        #[cfg(not(feature = "lock-order-graph"))]
+        let _lock_order_violation: Option<Vec<LockId>> = None;
 
         if let Some(&owner) = self.mutex_owners.get(&lock_id) {
             // Mutex is owned - set up wait-for edge
@@ -180,6 +183,7 @@ impl Detector {
         }
 
         // Report lock order violation if detected
+        #[cfg(feature = "lock-order-graph")]
         if let Some(lock_cycle) = lock_order_violation {
             self.handle_lock_order_violation(thread_id, lock_id, lock_cycle);
         }

@@ -14,6 +14,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
   ) here)
 - **Low overhead** - Designed to be lightweight for use in production systems
 - **Easy integration** - Simple API for both Rust and C
+- **Lock order graph** - Optional feature to detect potential deadlocks via lock ordering patterns
 - **Stress testing** - Optional feature to increase deadlock manifestation during testing
 
 > [!NOTE]
@@ -59,7 +60,13 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
 
-5. **Stress Testing** (Optional with stress-testing feature)
+5. **Lock Order Graph** (Optional with lock-order-graph feature)
+   - Tracks lock acquisition ordering patterns across threads
+   - Detects potential deadlocks even when threads don't actually block
+   - Provides early warning of dangerous lock ordering patterns
+   - Available as an opt-in feature for development and testing
+
+6. **Stress Testing** (Optional with stress-testing feature)
    - Strategically delays threads to increase deadlock probability
    - Multiple strategies for different testing scenarios
    - Available as an opt-in feature for testing environments
@@ -553,6 +560,52 @@ int main() {
 - **Linux/macOS**: Full pthread support, all features available
 - **Windows**: Requires pthread-compatible library. Refer to [C API portability notes]
 
+## Lock Order Graph
+
+Deloxide includes an optional lock order graph feature that detects potential deadlocks by tracking lock acquisition ordering patterns, even when threads don't actually block. This provides early warning of dangerous lock ordering patterns that could lead to deadlocks.
+
+### Enabling Lock Order Graph
+
+#### In Rust:
+
+Enable the feature in your `Cargo.toml`:
+
+```toml
+[dependencies]
+deloxide = { version = "0.4", features = ["lock-order-graph"] }
+```
+
+Then use the lock order checking API:
+
+```rust
+use deloxide::{Deloxide, DeadlockSource};
+
+Deloxide::new()
+    .with_log("deadlock.log")
+    .with_lock_order_checking()
+    .callback(|info| {
+        match info.source {
+            DeadlockSource::WaitForGraph => {
+                eprintln!("🚨 ACTUAL DEADLOCK! Threads are blocked.");
+            }
+            DeadlockSource::LockOrderViolation => {
+                eprintln!("⚠️  SUSPECTED DEADLOCK! Dangerous lock ordering pattern.");
+                if let Some(cycle) = &info.lock_order_cycle {
+                    eprintln!("Lock order cycle: {:?}", cycle);
+                }
+            }
+        }
+    })
+    .start()
+    .expect("Failed to initialize detector");
+```
+
+### How Lock Order Graph Works
+
+When a thread holds lock A and then acquires lock B, the system records that A < B (A must be acquired before B). If later the system sees an attempt to acquire A while holding B (B < A), this creates a cycle in the lock order graph and indicates a potential deadlock.
+
+**Note:** Lock order graph detection may report patterns that never actually deadlock (false positives). It's recommended for development and testing, not production.
+
 ## Stress Testing
 
 Deloxide includes an optional stress testing feature to increase the probability of deadlock manifestation during testing. This feature helps expose potential deadlocks by strategically delaying threads at critical points.
@@ -565,7 +618,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.3", features = ["stress-test"] }
+deloxide = { version = "0.4", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -628,14 +681,28 @@ Deloxide is available on crates.io. You can add it as a dependency in your `Carg
 
 ```toml
 [dependencies]
-deloxide = "0.3"
+deloxide = "0.4"
+```
+
+With lock order graph:
+
+```toml
+[dependencies]
+deloxide = { version = "0.4", features = ["lock-order-graph"] }
 ```
 
 With stress testing:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.3", features = ["stress-test"] }
+deloxide = { version = "0.4", features = ["stress-test"] }
+```
+
+With both features:
+
+```toml
+[dependencies]
+deloxide = { version = "0.4", features = ["lock-order-graph", "stress-test"] }
 ```
 
 Or install the CLI tool to showcase deadlock logs directly:
@@ -651,8 +718,14 @@ For development builds:
 # Standard build
 cargo build --release
 
+# With lock order graph feature
+cargo build --release --features lock-order-graph
+
 # With stress testing feature
 cargo build --release --features stress-test
+
+# With both features
+cargo build --release --features lock-order-graph,stress-test
 ```
 
 ### C
@@ -663,8 +736,14 @@ For C programs, you'll need to compile the Rust library and link against it:
 # Build the Rust library
 cargo build --release
 
+# With lock order graph feature
+cargo build --release --features lock-order-graph
+
 # With stress testing feature
 cargo build --release --features stress-test
+
+# With both features
+cargo build --release --features lock-order-graph,stress-test
 
 # Compile your C program with Deloxide
 gcc -Iinclude your_program.c -Ltarget/release -ldeloxide -lpthread -o your_program
@@ -736,9 +815,9 @@ For more detailed documentation:
 
 ## Performance & Evaluation
 
-This section outlines the performance, deadlock detection capabilities, and robustness of `Deloxide` v0.3. We compare it against standard Rust mutexes (`std::sync::Mutex`), `parking_lot::Mutex` (with its `deadlock_detection` feature), and the `no_deadlocks` library.
+This section outlines the performance, deadlock detection capabilities, and robustness of `Deloxide` v0.4. We compare it against standard Rust mutexes (`std::sync::Mutex`), `parking_lot::Mutex` (with its `deadlock_detection` feature), and the `no_deadlocks` library.
 
-All benchmarks were run on a base M1 MacBook Pro with Rust 1.86.0-nightly (v0.3.0).
+All benchmarks were run on a base M1 MacBook Pro with Rust 1.86.0-nightly (v0.4.0).
 
 ### 1. Performance Overhead
 

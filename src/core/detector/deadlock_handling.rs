@@ -1,6 +1,9 @@
+use crate::DeadlockInfo;
+#[cfg(feature = "lock-order-graph")]
+use crate::LockId;
+use crate::ThreadId;
 use crate::core::detector::DISPATCHER;
 use crate::core::{DeadlockSource, Detector};
-use crate::{DeadlockInfo, LockId, ThreadId};
 use chrono::Utc;
 
 impl Detector {
@@ -79,6 +82,7 @@ impl Detector {
     }
 
     /// Handle a lock order violation detected via lock ordering analysis
+    #[cfg(feature = "lock-order-graph")]
     pub fn handle_lock_order_violation(
         &self,
         thread_id: ThreadId,

@@ -9,7 +9,9 @@ pub mod thread;
 use crate::core::StressConfig;
 #[cfg(feature = "stress-test")]
 use crate::core::StressMode;
-use crate::core::graph::{LockOrderGraph, WaitForGraph};
+#[cfg(feature = "lock-order-graph")]
+use crate::core::graph::LockOrderGraph;
+use crate::core::graph::WaitForGraph;
 use crate::core::logger::EventLogger;
 
 use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
@@ -88,6 +90,7 @@ pub struct Detector {
     /// Graph representing which threads are waiting for which other threads
     wait_for_graph: WaitForGraph,
     /// Lock order graph for detecting lock ordering violations (only created if enabled)
+    #[cfg(feature = "lock-order-graph")]
     lock_order_graph: Option<LockOrderGraph>,
     /// Maps threads to the locks they're attempting to acquire
     thread_waits_for: FxHashMap<ThreadId, LockId>,
@@ -138,6 +141,7 @@ impl Detector {
     pub fn new() -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
+            #[cfg(feature = "lock-order-graph")]
             lock_order_graph: None, // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
@@ -161,6 +165,7 @@ impl Detector {
     pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
         Detector {
             wait_for_graph: WaitForGraph::new(),
+            #[cfg(feature = "lock-order-graph")]
             lock_order_graph: None, // Not created by default
             thread_waits_for: FxHashMap::default(),
             thread_holds: FxHashMap::default(),
@@ -202,6 +207,7 @@ impl Detector {
     }
 
     /// Check for lock order violations when a thread attempts to acquire a lock
+    #[cfg(feature = "lock-order-graph")]
     fn check_lock_order_violation(
         &mut self,
         thread_id: ThreadId,
@@ -264,8 +270,13 @@ where
     detector.set_deadlock_callback(callback);
 
     // Create lock order graph if enabled
+    #[cfg(feature = "lock-order-graph")]
     if check_lock_order {
         detector.lock_order_graph = Some(LockOrderGraph::new());
+    }
+    #[cfg(not(feature = "lock-order-graph"))]
+    if check_lock_order {
+        panic!("lock-order-graph feature is required to enable lock order checking");
     }
 }
 
@@ -295,8 +306,13 @@ pub fn init_detector_with_stress<F>(
     detector.set_deadlock_callback(callback);
 
     // Create lock order graph if enabled
+    #[cfg(feature = "lock-order-graph")]
     if check_lock_order {
         detector.lock_order_graph = Some(LockOrderGraph::new());
+    }
+    #[cfg(not(feature = "lock-order-graph"))]
+    if check_lock_order {
+        panic!("lock-order-graph feature is required to enable lock order checking");
     }
 
     detector.stress_mode = stress_mode;

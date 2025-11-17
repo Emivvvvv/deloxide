@@ -106,14 +106,6 @@ type Event = (u64, u64, u8, f64, u64);
 
 type Events = Vec<Event>;
 
-/// Compact output structure for serialization
-#[derive(Serialize, Deserialize)]
-pub struct LogsData {
-    pub events: Events,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deadlock: Option<DeadlockCompact>,
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct DeadlockCompact {
     pub thread_cycle: Vec<u64>,
