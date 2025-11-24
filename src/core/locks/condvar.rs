@@ -107,18 +107,35 @@ impl Condvar {
         let thread_id = get_current_thread_id();
         let mutex_id = guard.lock_id();
 
-        // Report wait begin - this logs the condvar wait and simulates mutex release
+        // Report wait begin
         crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
 
-        // Explicitly report mutex release since parking_lot will unlock it internally
+        // 1. CLEAR OWNERSHIP (Fixes warning & Logic)
+        // We are about to sleep, so we logically release the atomic owner tracking
+        guard.clear_ownership();
+
+        // Explicitly report mutex release to detector
         crate::core::detector::mutex::release_mutex(thread_id, mutex_id);
 
         // Perform the actual wait operation
         self.inner.wait(guard.inner_guard());
 
-        // Report wait end and mutex reacquisition
-        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+        // 2. RESTORE OWNERSHIP (Fixes warning & Logic)
+        // We woke up and hold the lock again
+        guard.restore_ownership();
+
+        // Report mutex reacquisition (this logs MutexAcquired)
         detector::mutex::complete_acquire(thread_id, mutex_id);
+
+        // Report wait end (clears cv_woken flag, which allows complete_acquire to work correctly)
+        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+
+        // Log condvar wait end AFTER mutex acquisition for logical ordering
+        crate::core::logger::log_interaction_event(
+            thread_id,
+            self.id,
+            crate::core::Events::CondvarWaitEnd,
+        );
     }
 
     /// Wait on this condition variable with a timeout
@@ -155,19 +172,28 @@ impl Condvar {
         let thread_id = get_current_thread_id();
         let mutex_id = guard.lock_id();
 
-        // Report wait begin - this logs the condvar wait and simulates mutex release
         crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
 
-        // Explicitly report mutex release since parking_lot will unlock it internally
+        // 1. CLEAR OWNERSHIP
+        guard.clear_ownership();
+
         crate::core::detector::mutex::release_mutex(thread_id, mutex_id);
 
-        // Perform the actual wait operation with timeout
         let wait_result = self.inner.wait_for(guard.inner_guard(), timeout);
         let timed_out = wait_result.timed_out();
 
-        // Report wait end and mutex reacquisition
-        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+        // 2. RESTORE OWNERSHIP
+        guard.restore_ownership();
+
         detector::mutex::complete_acquire(thread_id, mutex_id);
+        crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
+
+        // Log condvar wait end AFTER mutex acquisition for logical ordering
+        crate::core::logger::log_interaction_event(
+            thread_id,
+            self.id,
+            crate::core::Events::CondvarWaitEnd,
+        );
 
         timed_out
     }

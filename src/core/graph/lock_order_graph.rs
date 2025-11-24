@@ -233,41 +233,6 @@ impl LockOrderGraph {
             }
         }
     }
-
-    /// Get all edges in the graph
-    ///
-    /// # Returns
-    /// Reference to the set of all edges
-    #[allow(dead_code)]
-    pub fn get_all_edges(&self) -> &FxHashSet<LockOrderEdge> {
-        &self.all_edges
-    }
-
-    /// Check if there's an edge from `before` to `after`
-    ///
-    /// # Arguments
-    /// * `before` - Starting lock
-    /// * `after` - Ending lock
-    ///
-    /// # Returns
-    /// `true` if there's a direct edge from `before` to `after`, `false` otherwise
-    #[allow(dead_code)]
-    pub fn has_edge(&self, before: LockId, after: LockId) -> bool {
-        self.edges
-            .get(&before)
-            .map(|succs| succs.contains(&after))
-            .unwrap_or(false)
-    }
-
-    /// Clear all edges from the graph
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        self.edges.clear();
-        self.reverse_edges.clear();
-        self.all_edges.clear();
-        self.cycle_cache.clear();
-        self.generation = 0;
-    }
 }
 
 impl Default for LockOrderGraph {

@@ -24,7 +24,7 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 ### How Deloxide Works
 
-1. **Initialization**: The application initializes Deloxide with optional logging and callback settings.
+1. **Initialization**: The application initializes Deloxide. Logging and lock order checking are enabled by default if their respective features are active.
 
 2. **Resource Creation**: When threads, mutexes, and reader-writer locks are created, they're registered with the deadlock detector.
 
@@ -221,8 +221,10 @@ use std::time::Duration;
 
 fn main() {
     // Initialize the detector with logging and visualization
+    // (requires the `logging-and-visualization` feature)
+    // Initialize the detector with logging and visualization
+    // (Logging is enabled by default to "deloxide.log" if the feature is active)
     Deloxide::new()
-        .with_log("deadlock_{timestamp}.json")
         .callback(|info| {
             eprintln!("Deadlock detected! Threads: {:?}", info.thread_cycle);
             deloxide::showcase_this().expect("Failed to launch visualization");
@@ -582,7 +584,8 @@ use deloxide::{Deloxide, DeadlockSource};
 
 Deloxide::new()
     .with_log("deadlock.log")
-    .with_lock_order_checking()
+    // Lock order checking is enabled by default if the feature is on,
+    // but you can explicitly enable it (no-op) or disable it with .no_lock_order_checking()
     .callback(|info| {
         match info.source {
             DeadlockSource::WaitForGraph => {
@@ -609,6 +612,9 @@ When a thread holds lock A and then acquires lock B, the system records that A <
 ## Stress Testing
 
 Deloxide includes an optional stress testing feature to increase the probability of deadlock manifestation during testing. This feature helps expose potential deadlocks by strategically delaying threads at critical points.
+
+> [!NOTE]
+> All stress delays are now specified in microseconds (`*_us`). If you previously configured `min_delay_ms` / `max_delay_ms`, update your code and FFI calls accordingly.
 
 ### Enabling Stress Testing
 
@@ -642,10 +648,18 @@ Deloxide::new()
     .with_component_stress()
     .with_stress_config(StressConfig {
         preemption_probability: 0.8,
-        min_delay_ms: 5,
-        max_delay_ms: 20,
+        min_delay_us: 500,
+        max_delay_us: 2000,
         preempt_after_release: true,
     })
+    .start()
+    .expect("Failed to initialize detector");
+
+// Or use one of the presets
+Deloxide::new()
+    .with_log("deadlock.log")
+    .with_component_stress()
+    .with_stress_config(StressConfig::aggressive())
     .start()
     .expect("Failed to initialize detector");
 ```
@@ -655,11 +669,11 @@ Deloxide::new()
 Build Deloxide with the stress-test feature enabled, then:
 
 ```c
-// Enable random preemption stress testing (70% probability, 1-10ms delays)
-deloxide_enable_random_stress(0.7, 1, 10);
+// Enable random preemption stress testing (70% probability, 100-1000us delays)
+deloxide_enable_random_stress(0.7, 100, 1000);
 
 // Or enable component-based stress testing
-deloxide_enable_component_stress(5, 15);
+deloxide_enable_component_stress(5000, 15000);
 
 // Initialize detector
 deloxide_init("deadlock.log", deadlock_callback);

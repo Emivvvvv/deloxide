@@ -23,13 +23,13 @@ pub(crate) use detector::*;
 pub mod thread;
 
 pub(crate) mod locks;
-#[cfg(feature = "stress-test")]
 pub mod stress;
 
-#[cfg(feature = "stress-test")]
+#[allow(unused_imports)]
 pub use stress::{StressConfig, StressMode};
 
 use anyhow::Result;
+#[cfg(feature = "logging-and-visualization")]
 use logger::EventLogger;
 
 /// Deloxide configuration builder struct
@@ -40,23 +40,29 @@ use logger::EventLogger;
 /// # Example
 ///
 /// ```no_run
-/// use deloxide::{showcase_this, Deloxide};
+/// use deloxide::Deloxide;
 ///
 /// // Initialize with default settings
 /// Deloxide::new().start().expect("Failed to initialize detector");
 ///
-/// // Initialize with logging and a custom callback
-/// Deloxide::new()
-///     .with_log("deadlock_logs.json")
-///     .callback(|info| {
-///         showcase_this().expect("Failed to launch visualization");
-///         eprintln!("Deadlock detected! Threads: {:?}", info.thread_cycle);
-///     })
-///     .start()
-///     .expect("Failed to initialize detector");
+/// # #[cfg(feature = "logging-and-visualization")]
+/// {
+///     use deloxide::showcase_this;
+///
+///     // Initialize with logging and a custom callback
+///     Deloxide::new()
+///         .with_log("deadlock_logs.json")
+///         .callback(|info| {
+///             showcase_this().expect("Failed to launch visualization");
+///             eprintln!("Deadlock detected! Threads: {:?}", info.thread_cycle);
+///         })
+///         .start()
+///         .expect("Failed to initialize detector");
+/// }
 /// ```
 pub struct Deloxide {
     /// Path to store log file, or None to disable logging
+    #[cfg(feature = "logging-and-visualization")]
     log_path: Option<String>,
 
     /// Callback function to invoke when a deadlock is detected
@@ -85,12 +91,13 @@ impl Deloxide {
     /// Create a new Deloxide configuration with default settings
     ///
     /// By default:
-    /// - Logging is disabled
+    /// - Logging is enabled (if feature is active) to "deloxide.log"
     /// - Callback is set to panic with deadlock information
-    /// - Lock order checking is disabled (only actual deadlocks detected)
+    /// - Lock order checking is enabled (if feature is active)
     pub fn new() -> Self {
         Deloxide {
-            log_path: None,
+            #[cfg(feature = "logging-and-visualization")]
+            log_path: Some("deloxide.log".to_string()),
             callback: Box::new(|info: DeadlockInfo| {
                 panic!(
                     "Deadlock detected: {}",
@@ -98,7 +105,7 @@ impl Deloxide {
                 );
             }),
             #[cfg(feature = "lock-order-graph")]
-            check_lock_order: false,
+            check_lock_order: true,
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
             #[cfg(feature = "stress-test")]
@@ -127,8 +134,39 @@ impl Deloxide {
     /// let config = Deloxide::new()
     ///     .with_log("logs/deadlock_{timestamp}.json");
     /// ```
+    /// Enable logging and set the path for the log file
+    ///
+    /// This function enables logging of all mutex operations and thread events
+    /// to a file at the specified path. This log can later be visualized using
+    /// the `showcase` function.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the log file. If the path contains "{timestamp}",
+    ///   it will be replaced with the current timestamp.
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use deloxide::Deloxide;
+    ///
+    /// let config = Deloxide::new()
+    ///     .with_log("logs/deadlock_{timestamp}.json");
+    /// ```
+    #[cfg(feature = "logging-and-visualization")]
     pub fn with_log<P: AsRef<std::path::Path>>(mut self, path: P) -> Self {
         self.log_path = Some(path.as_ref().to_string_lossy().into_owned());
+        self
+    }
+
+    /// Disable logging
+    ///
+    /// This function explicitly disables logging, even if the feature is enabled.
+    #[cfg(feature = "logging-and-visualization")]
+    pub fn no_logging(mut self) -> Self {
+        self.log_path = None;
         self
     }
 
@@ -199,9 +237,58 @@ impl Deloxide {
     ///     .expect("Failed to start detector");
     /// }
     /// ```
+    /// Enable lock order checking for potential deadlock detection
+    ///
+    /// When enabled, the detector will check for inconsistent lock ordering patterns
+    /// that could lead to deadlocks, even if no actual deadlock has occurred yet.
+    /// This provides early warning of potential deadlock bugs.
+    ///
+    /// **Note**: This may report patterns that never actually deadlock (false positives).
+    /// Recommended for development and testing, not production.
+    ///
+    /// # Returns
+    /// The builder for method chaining
+    ///
+    /// # Note
+    /// This method is only available when the "lock-order-graph" feature is enabled.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// #[cfg(feature = "lock-order-graph")]
+    /// {
+    /// use deloxide::Deloxide;
+    ///
+    /// // Enable lock order checking for development
+    /// Deloxide::new()
+    ///     .with_lock_order_checking()
+    ///     .callback(|info| {
+    ///         use deloxide::DeadlockSource;
+    ///         match info.source {
+    ///             DeadlockSource::WaitForGraph => {
+    ///                 println!("🚨 ACTUAL DEADLOCK! Threads are blocked.");
+    ///             }
+    ///             DeadlockSource::LockOrderViolation => {
+    ///                 println!("⚠️  SUSPECTED DEADLOCK! Dangerous lock ordering pattern.");
+    ///             }
+    ///         }
+    ///     })
+    ///     .start()
+    ///     .expect("Failed to start detector");
+    /// }
+    /// ```
     #[cfg(feature = "lock-order-graph")]
     pub fn with_lock_order_checking(mut self) -> Self {
         self.check_lock_order = true;
+        self
+    }
+
+    /// Disable lock order checking
+    ///
+    /// This function explicitly disables lock order checking, even if the feature is enabled.
+    #[cfg(feature = "lock-order-graph")]
+    pub fn no_lock_order_checking(mut self) -> Self {
+        self.check_lock_order = false;
         self
     }
 
@@ -222,51 +309,50 @@ impl Deloxide {
     /// ```no_run
     /// use deloxide::Deloxide;
     ///
+    /// // Start the detector with a custom callback
     /// Deloxide::new()
-    ///     .with_log("deadlock_log.json")
     ///     .callback(|info| {
     ///         println!("Deadlock detected: {:?}", info);
     ///     })
     ///     .start()
     ///     .expect("Failed to initialize deadlock detector");
+    ///
+    /// # #[cfg(feature = "logging-and-visualization")]
+    /// {
+    ///     // Same example but with logging enabled
+    ///     Deloxide::new()
+    ///         .with_log("deadlock_log.json")
+    ///         .callback(|info| {
+    ///             println!("Deadlock detected: {:?}", info);
+    ///         })
+    ///         .start()
+    ///         .expect("Failed to initialize deadlock detector");
+    /// }
     /// ```
     pub fn start(self) -> Result<()> {
-        // Initialize the logger if a path was provided
+        // Initialize the logger if enabled
+        #[cfg(feature = "logging-and-visualization")]
         let logger = if let Some(log_path) = self.log_path {
             Some(EventLogger::with_file(log_path)?)
         } else {
             None
         };
 
-        // Initialize the detector
-        #[cfg(not(feature = "stress-test"))]
-        {
+        // Create configuration object
+        let config = detector::DetectorConfig {
+            callback: self.callback,
             #[cfg(feature = "lock-order-graph")]
-            init_detector(self.callback, self.check_lock_order, logger);
-            #[cfg(not(feature = "lock-order-graph"))]
-            init_detector(self.callback, false, logger);
-        }
+            check_lock_order: self.check_lock_order,
+            #[cfg(feature = "stress-test")]
+            stress_mode: self.stress_mode,
+            #[cfg(feature = "stress-test")]
+            stress_config: self.stress_config,
+            #[cfg(feature = "logging-and-visualization")]
+            logger,
+        };
 
-        #[cfg(feature = "stress-test")]
-        {
-            // Initialize detector with stress settings
-            #[cfg(feature = "lock-order-graph")]
-            detector::init_detector_with_stress(
-                self.callback,
-                self.check_lock_order,
-                self.stress_mode,
-                self.stress_config,
-                logger,
-            );
-            #[cfg(not(feature = "lock-order-graph"))]
-            detector::init_detector_with_stress(
-                self.callback,
-                false,
-                self.stress_mode,
-                self.stress_config,
-                logger,
-            );
-        }
+        // Initialize the detector
+        detector::init_detector(config);
 
         // Print header
         println!("{}", crate::BANNER);

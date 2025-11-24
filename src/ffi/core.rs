@@ -1,4 +1,5 @@
 use crate::core::detector;
+#[cfg(feature = "logging-and-visualization")]
 use crate::core::logger;
 use crate::ffi::{DEADLOCK_CALLBACK, DEADLOCK_DETECTED, INITIALIZED, IS_LOGGING_ENABLED};
 use std::ffi::{CStr, CString};
@@ -24,6 +25,7 @@ use crate::ffi::{STRESS_CONFIG, STRESS_MODE};
 /// * `1` if the detector is already initialized
 /// * `-1` if the log path contains invalid UTF-8
 /// * `-2` if the logger failed to initialize
+/// * `-3` if logging was requested but the `logging-and-visualization` feature is disabled
 ///
 /// # Safety
 /// This function dereferences raw pointers (`log_path`) and writes to mutable global statics:
@@ -55,7 +57,7 @@ pub unsafe extern "C" fn deloxide_init(
         // Store callback for later use
         DEADLOCK_CALLBACK = callback;
 
-        // Create event logger if path is provided
+        #[cfg(feature = "logging-and-visualization")]
         let logger = if let Some(log_path) = log_path_option {
             match logger::EventLogger::with_file(log_path) {
                 Ok(logger) => {
@@ -68,6 +70,14 @@ pub unsafe extern "C" fn deloxide_init(
             IS_LOGGING_ENABLED.store(false, Ordering::SeqCst);
             None
         };
+
+        #[cfg(not(feature = "logging-and-visualization"))]
+        {
+            if log_path_option.is_some() {
+                return -3; // Logging requires the logging-and-visualization feature
+            }
+            IS_LOGGING_ENABLED.store(false, Ordering::SeqCst);
+        }
 
         // Create callback closure that sets flag and calls C callback
         let deadlock_callback = move |deadlock_info| {
@@ -86,35 +96,48 @@ pub unsafe extern "C" fn deloxide_init(
             }
         };
 
-        #[cfg(feature = "stress-test")]
-        {
-            // Get stress settings if the feature is enabled
-            let stress_mode = match STRESS_MODE.load(Ordering::SeqCst) {
-                1 => StressMode::RandomPreemption,
-                2 => StressMode::ComponentBased,
-                _ => StressMode::None,
-            };
+        // Create configuration object
+        let config = detector::DetectorConfig {
+            callback: Box::new(deadlock_callback),
+            #[cfg(feature = "lock-order-graph")]
+            check_lock_order: false, // FFI doesn't support lock order checking
+            #[cfg(feature = "stress-test")]
+            stress_mode: {
+                #[cfg(feature = "stress-test")]
+                {
+                    match STRESS_MODE.load(Ordering::SeqCst) {
+                        1 => StressMode::RandomPreemption,
+                        2 => StressMode::ComponentBased,
+                        _ => StressMode::None,
+                    }
+                }
+                #[cfg(not(feature = "stress-test"))]
+                {
+                    // This branch shouldn't be reachable if stress-test is disabled,
+                    // but we need to provide a value if the struct field exists.
+                    // However, the struct field only exists if feature is enabled.
+                    // So this block is only needed if feature is enabled.
+                    unreachable!()
+                }
+            },
+            #[cfg(feature = "stress-test")]
+            stress_config: {
+                #[cfg(feature = "stress-test")]
+                {
+                    #[allow(static_mut_refs)]
+                    STRESS_CONFIG.take()
+                }
+                #[cfg(not(feature = "stress-test"))]
+                {
+                    None
+                }
+            },
+            #[cfg(feature = "logging-and-visualization")]
+            logger,
+        };
 
-            #[allow(static_mut_refs)]
-            let stress_config = STRESS_CONFIG.take();
-
-            // Initialize detector with stress settings
-            // FFI doesn't support lock order checking (use Rust API for that)
-            detector::init_detector_with_stress(
-                deadlock_callback,
-                false,
-                stress_mode,
-                stress_config,
-                logger,
-            );
-        }
-
-        #[cfg(not(feature = "stress-test"))]
-        {
-            // Standard initialization without stress testing
-            // FFI doesn't support lock order checking (use Rust API for that)
-            detector::init_detector(deadlock_callback, false, logger);
-        }
+        // Initialize detector
+        detector::init_detector(config);
 
         INITIALIZED.store(true, Ordering::SeqCst);
         0 // Success

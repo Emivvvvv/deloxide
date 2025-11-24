@@ -87,6 +87,8 @@ pub(crate) fn process_log_for_url<P: AsRef<Path>>(log_path: P) -> Result<String>
 /// Log entry structure from the file (simplified - no graph data)
 #[derive(Debug, Deserialize)]
 struct LogEntry {
+    /// Sequence number for deterministic ordering
+    sequence: u64,
     /// ID of the thread involved in the event
     thread_id: u64,
     /// ID of the lock involved in the event
@@ -98,11 +100,14 @@ struct LogEntry {
     /// Optional parent/creator thread ID for Spawn events
     #[serde(default)]
     parent_id: Option<u64>,
+    /// Optional thread ID that was woken by condvar notify
+    #[serde(default)]
+    woken_thread: Option<u64>,
 }
 
-// Compact Event format: (thread_id, lock_id, event_code, timestamp, parent_id)
-// parent_id is Option<u64> stored as u64, with 0 indicating None
-type Event = (u64, u64, u8, f64, u64);
+// Compact Event format: (sequence, thread_id, lock_id, event_code, timestamp, parent_id, woken_thread)
+// parent_id and woken_thread are Option<u64> stored as u64, with 0 indicating None
+type Event = (u64, u64, u64, u8, f64, u64, u64);
 
 type Events = Vec<Event>;
 
@@ -167,15 +172,18 @@ fn parse_log_entry(entry: LogEntry) -> Result<Event> {
         other => anyhow::bail!("Invalid event type: '{}'", other),
     };
 
-    // Convert parent_id to u64, using 0 to represent None
+    // Convert parent_id and woken_thread to u64, using 0 to represent None
     let parent_id = entry.parent_id.unwrap_or(0);
+    let woken_thread = entry.woken_thread.unwrap_or(0);
 
     let compact_event = (
+        entry.sequence,
         entry.thread_id,
         entry.lock_id,
         event_code,
         entry.timestamp,
         parent_id,
+        woken_thread,
     );
 
     Ok(compact_event)
@@ -193,20 +201,24 @@ mod tests {
     #[test]
     fn test_parse_log_entry() {
         let log_entry = LogEntry {
+            sequence: 42,
             thread_id: 1,
             lock_id: 2,
             event: "ThreadSpawn".to_string(),
             timestamp: 1754931441.237695,
             parent_id: Some(5),
+            woken_thread: None,
         };
 
         let result = parse_log_entry(log_entry).expect("Failed to parse log entry");
 
-        // Should be (thread_id, lock_id, event_code, timestamp, parent_id)
-        assert_eq!(result.0, 1); // thread_id
-        assert_eq!(result.1, 2); // lock_id
-        assert_eq!(result.2, 0); // ThreadSpawn code
-        assert_eq!(result.4, 5); // parent_id
+        // Should be (sequence, thread_id, lock_id, event_code, timestamp, parent_id, woken_thread)
+        assert_eq!(result.0, 42); // sequence
+        assert_eq!(result.1, 1); // thread_id
+        assert_eq!(result.2, 2); // lock_id
+        assert_eq!(result.3, 0); // ThreadSpawn code
+        assert_eq!(result.5, 5); // parent_id
+        assert_eq!(result.6, 0); // woken_thread (None = 0)
     }
 
     #[test]
@@ -237,17 +249,19 @@ mod tests {
 
         for (event_name, expected_code) in events {
             let log_entry = LogEntry {
+                sequence: 0,
                 thread_id: 1,
                 lock_id: 2,
                 event: event_name.to_string(),
                 timestamp: 1754931441.237695,
                 parent_id: None,
+                woken_thread: None,
             };
 
             let result = parse_log_entry(log_entry)
                 .unwrap_or_else(|_| panic!("Failed to parse {event_name}"));
             assert_eq!(
-                result.2, expected_code,
+                result.3, expected_code,
                 "Event {event_name} should have code {expected_code}",
             );
         }

@@ -484,14 +484,14 @@ int deloxide_showcase_current();
  * deloxide_init().
  *
  * @param probability Probability of preemption (0.0-1.0)
- * @param min_delay_ms Minimum delay duration in milliseconds
- * @param max_delay_ms Maximum delay duration in milliseconds
+ * @param min_delay_us Minimum delay duration in microseconds
+ * @param max_delay_us Maximum delay duration in microseconds
  *
  * @return 0 on success, 1 if already initialized, -1 if stress-test feature not enabled
  *
  * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
  */
-int deloxide_enable_random_stress(double probability, unsigned long min_delay_ms, unsigned long max_delay_ms);
+int deloxide_enable_random_stress(double probability, unsigned long min_delay_us, unsigned long max_delay_us);
 
 /**
  * @brief Enable stress testing with component-based delays.
@@ -500,14 +500,14 @@ int deloxide_enable_random_stress(double probability, unsigned long min_delay_ms
  * graph analysis to increase deadlock probability. It should be called before
  * deloxide_init().
  *
- * @param min_delay_ms Minimum delay duration in milliseconds
- * @param max_delay_ms Maximum delay duration in milliseconds
+ * @param min_delay_us Minimum delay duration in microseconds
+ * @param max_delay_us Maximum delay duration in microseconds
  *
  * @return 0 on success, 1 if already initialized, -1 if stress-test feature not enabled
  *
  * @note This function is only available when Deloxide is compiled with the "stress-test" feature.
  */
-int deloxide_enable_component_stress(unsigned long min_delay_ms, unsigned long max_delay_ms);
+int deloxide_enable_component_stress(unsigned long min_delay_us, unsigned long max_delay_us);
 
 /**
  * @brief Disable stress testing.

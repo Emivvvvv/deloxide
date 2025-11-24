@@ -92,21 +92,6 @@ pub enum Events {
     CondvarNotifyAll,
 }
 
-/// Represents the type of notification sent to a condition variable
-///
-/// Used to track whether a condition variable notification was for one
-/// or all waiting threads.
-///
-/// Note: Currently unused but kept for potential future use.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum NotifyKind {
-    /// Notify only one waiting thread
-    One,
-    /// Notify all waiting threads
-    All,
-}
-
 /// Source of deadlock detection
 ///
 /// Indicates which detection mechanism identified the deadlock and the
@@ -167,6 +152,8 @@ pub struct DeadlockInfo {
     ///
     /// ISO-8601 formatted timestamp indicating when the deadlock was detected.
     pub timestamp: String,
+    /// Optional: Request for the lock wrapper to verify the deadlock
+    pub verification_request: Option<(LockId, ThreadId)>,
 }
 
 #[cfg(test)]

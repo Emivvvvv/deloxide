@@ -18,18 +18,21 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 [[bin]]
 name = "deloxide"
 path = "src/main.rs"
+required-features = ["logging-and-visualization"]
 
 [features]
-default = []
+default = [] # Fast production build: no logging overhead.
+logging-and-visualization = ["dep:crossbeam-channel"] # Enable structured logging + visualization support
 stress-test = [] # for stress testing functionality
 lock-order-graph = [] # for lock order graph functionality
+
 
 [dependencies]
 parking_lot = "0.12.4"  # Alternative to std mutex with better performance
 fxhash = "0.2.1" # Faster alternative for HashMap and HashSet
 chrono = "0.4"  # For timestamps in logging
 anyhow = "1.0.99" # For better error handling
-crossbeam-channel = "0.5.15"
+crossbeam-channel = { version = "0.5.15", optional = true }
 
 # For json stuff
 serde = { version = "1.0", features = ["derive"] }

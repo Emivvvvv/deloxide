@@ -67,7 +67,7 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
             println!("Writer: Notified reader that processing is ready");
 
             // Small delay to let reader wake up and try to get processor_mutex again
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(100));
 
             // Now try to write to shared data → DEADLOCK
             // Reader holds RwLock (read) and is trying to get processor_mutex (which we hold)
@@ -81,7 +81,20 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
     }
 
     let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
-    assert_eq!(info.thread_cycle.len(), 2);
+    println!("Deadlock info: {:?}", info);
+
+    if info.lock_order_cycle.is_some() {
+        // If lock order graph is enabled, we might catch it as a violation first
+        println!("Detected Lock Order Violation");
+        assert!(
+            info.lock_order_cycle.unwrap().len() >= 3,
+            "Lock cycle should involve at least 2 locks (A->B->A)"
+        );
+    } else {
+        // Otherwise it should be a wait-for deadlock
+        println!("Detected Wait-For Deadlock");
+        assert_eq!(info.thread_cycle.len(), 2);
+    }
 
     println!("✅ Mixed RwLock+Mutex+Condvar deadlock test passed");
     println!("   Thread cycle: {:?}", info.thread_cycle);

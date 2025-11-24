@@ -1,5 +1,5 @@
 pub mod condvar;
-mod deadlock_handling;
+pub mod deadlock_handling;
 pub mod mutex;
 pub mod rwlock;
 mod stress;
@@ -12,15 +12,35 @@ use crate::core::StressMode;
 #[cfg(feature = "lock-order-graph")]
 use crate::core::graph::LockOrderGraph;
 use crate::core::graph::WaitForGraph;
-use crate::core::logger::EventLogger;
+#[cfg(feature = "logging-and-visualization")]
+use crate::core::logger::{self, EventLogger};
 
 use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
+#[cfg(feature = "logging-and-visualization")]
 use anyhow::Result;
-use crossbeam_channel::{Sender, unbounded};
 use fxhash::{FxHashMap, FxHashSet};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
+use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, OnceLock};
+
+/// Configuration for the deadlock detector
+pub struct DetectorConfig {
+    /// Callback function to invoke when a deadlock is detected
+    pub callback: Box<dyn Fn(DeadlockInfo) + Send + Sync>,
+    /// Enable lock order checking
+    #[cfg(feature = "lock-order-graph")]
+    pub check_lock_order: bool,
+    /// Stress testing mode
+    #[cfg(feature = "stress-test")]
+    pub stress_mode: StressMode,
+    /// Stress testing configuration
+    #[cfg(feature = "stress-test")]
+    pub stress_config: Option<StressConfig>,
+    /// Logger for recording events
+    #[cfg(feature = "logging-and-visualization")]
+    pub logger: Option<EventLogger>,
+}
 
 // Global dispatcher for asynchronous deadlock callback execution
 // Ensures callbacks can execute even when the detecting thread is deadlocked.
@@ -49,7 +69,7 @@ struct Dispatcher {
 impl Dispatcher {
     /// Create a new dispatcher with a background thread and channel
     fn new() -> Self {
-        let (tx, rx) = unbounded::<DeadlockInfo>();
+        let (tx, rx) = channel::<DeadlockInfo>();
 
         // Background thread listens for events and executes callbacks
         let thread_handle = std::thread::spawn(move || {
@@ -108,8 +128,8 @@ pub struct Detector {
     thread_wait_cv: FxHashMap<ThreadId, (CondvarId, LockId)>,
     /// Set of threads that have been woken from condvar waits (for diagnostics)
     cv_woken: FxHashSet<ThreadId>,
-    /// Event logger for recording lock, thread operations, and interactions (logging is optional)
-    logger: Option<EventLogger>,
+    /// Maps locks to the set of threads waiting for them (for stale edge removal)
+    lock_waiters: FxHashMap<LockId, FxHashSet<ThreadId>>,
     #[cfg(feature = "stress-test")]
     /// Stress testing mode
     stress_mode: StressMode,
@@ -125,16 +145,6 @@ impl Default for Detector {
 }
 
 impl Detector {
-    /// Helper method to log events if logger is present
-    fn log_if_enabled<F>(&self, log_fn: F)
-    where
-        F: FnOnce(&EventLogger),
-    {
-        if let Some(logger) = &self.logger {
-            log_fn(logger);
-        }
-    }
-
     /// Create a new deadlock detector with default settings
     ///
     /// By default, lock order checking is disabled.
@@ -151,47 +161,12 @@ impl Detector {
             cv_waiters: FxHashMap::default(),
             thread_wait_cv: FxHashMap::default(),
             cv_woken: FxHashSet::default(),
-            logger: None,
+            lock_waiters: FxHashMap::default(),
             #[cfg(feature = "stress-test")]
             stress_mode: StressMode::None,
             #[cfg(feature = "stress-test")]
             stress_config: None,
         }
-    }
-
-    #[cfg(feature = "stress-test")]
-    #[allow(dead_code)]
-    /// Create a new deadlock detector with stress testing config
-    pub fn new_with_stress(mode: StressMode, config: Option<StressConfig>) -> Self {
-        Detector {
-            wait_for_graph: WaitForGraph::new(),
-            #[cfg(feature = "lock-order-graph")]
-            lock_order_graph: None, // Not created by default
-            thread_waits_for: FxHashMap::default(),
-            thread_holds: FxHashMap::default(),
-            mutex_owners: FxHashMap::default(),
-            rwlock_readers: Default::default(),
-            rwlock_writer: Default::default(),
-            cv_waiters: FxHashMap::default(),
-            thread_wait_cv: FxHashMap::default(),
-            cv_woken: FxHashSet::default(),
-            logger: None,
-            stress_mode: mode,
-            stress_config: config,
-        }
-    }
-
-    /// Set EventLogger for logging thread, lock, and interaction events
-    ///
-    /// The logger records events such as:
-    /// - Thread creation and exit
-    /// - Lock creation and destruction
-    /// - Thread-lock interactions (attempt, acquire, release)
-    ///
-    /// # Arguments
-    /// * `logger` - An optional EventLogger instance. Pass `None` to disable logging
-    pub fn set_logger(&mut self, logger: Option<EventLogger>) {
-        self.logger = logger;
     }
 
     /// Set callback to be invoked when a deadlock is detected
@@ -225,98 +200,44 @@ impl Detector {
         }
         None
     }
-
-    /// Flush all pending log entries to disk (method version)
-    ///
-    /// This method forces the associated logger (if enabled) to write all
-    /// buffered events to disk immediately. This is the instance method that
-    /// works on a specific detector instance.
-    ///
-    /// # Returns
-    /// `Ok(())` if the flush succeeded or no logger is configured
-    /// `Err` if the flush operation failed
-    pub fn flush_logs(&self) -> Result<()> {
-        if let Some(logger) = &self.logger {
-            return logger.flush();
-        }
-
-        Ok(())
-    }
 }
 
 // Global detector instance and logging info for ffi
 lazy_static::lazy_static! {
     static ref GLOBAL_DETECTOR: Mutex<Detector> = Mutex::new(Detector::new());
-    static ref IS_LOGGING_ENABLED: OnceLock<bool> = OnceLock::new();
 }
 
-/// Initialize the global detector with a deadlock callback and logger
+/// Initialize the global detector with the provided configuration
 ///
-/// This function sets up the global deadlock detector with a callback function
-/// that will be invoked when a deadlock is detected, and optionally enables logging
-/// for tracking thread and lock interactions.
+/// This function sets up the global deadlock detector with the specified
+/// callback, stress testing options, and logging configuration.
 ///
 /// # Arguments
-/// * `callback` - Function to call when a deadlock is detected
-/// * `check_lock_order` - Whether to enable lock order checking
-/// * `logger` - Optional EventLogger for recording thread and lock events
-#[allow(dead_code)]
-pub fn init_detector<F>(callback: F, check_lock_order: bool, logger: Option<EventLogger>)
-where
-    F: Fn(DeadlockInfo) + Send + Sync + 'static,
-{
+/// * `config` - The configuration object for the detector
+pub fn init_detector(config: DetectorConfig) {
     let mut detector = GLOBAL_DETECTOR.lock();
-    detector.set_logger(logger);
-    detector.set_deadlock_callback(callback);
+    detector.set_deadlock_callback(config.callback);
+
+    #[cfg(feature = "logging-and-visualization")]
+    if let Some(logger) = config.logger {
+        logger::init_logger(logger);
+    }
 
     // Create lock order graph if enabled
     #[cfg(feature = "lock-order-graph")]
-    if check_lock_order {
+    if config.check_lock_order {
         detector.lock_order_graph = Some(LockOrderGraph::new());
     }
     #[cfg(not(feature = "lock-order-graph"))]
-    if check_lock_order {
-        panic!("lock-order-graph feature is required to enable lock order checking");
-    }
-}
-
-/// Initialize the global detector with stress testing configuration and logger
-///
-/// This function sets up the global deadlock detector with a callback function,
-/// stress testing capabilities, and optional logging.
-///
-/// # Arguments
-/// * `callback` - Function to call when a deadlock is detected
-/// * `check_lock_order` - Whether to enable lock order checking
-/// * `stress_mode` - The stress testing mode to use
-/// * `stress_config` - Optional stress testing configuration
-/// * `logger` - Optional EventLogger for recording thread and lock events
-#[cfg(feature = "stress-test")]
-pub fn init_detector_with_stress<F>(
-    callback: F,
-    check_lock_order: bool,
-    stress_mode: StressMode,
-    stress_config: Option<StressConfig>,
-    logger: Option<EventLogger>,
-) where
-    F: Fn(DeadlockInfo) + Send + Sync + 'static,
-{
-    let mut detector = GLOBAL_DETECTOR.lock();
-    detector.set_logger(logger);
-    detector.set_deadlock_callback(callback);
-
-    // Create lock order graph if enabled
     #[cfg(feature = "lock-order-graph")]
-    if check_lock_order {
-        detector.lock_order_graph = Some(LockOrderGraph::new());
-    }
-    #[cfg(not(feature = "lock-order-graph"))]
-    if check_lock_order {
-        panic!("lock-order-graph feature is required to enable lock order checking");
-    }
+    // Only warn if the field exists in config but feature is off? No, field doesn't exist.
+    {} // No-op if feature is off
 
-    detector.stress_mode = stress_mode;
-    detector.stress_config = stress_config;
+    #[cfg(feature = "stress-test")]
+    {
+        detector.stress_mode = config.stress_mode;
+        detector.stress_config = config.stress_config;
+    }
 }
 
 /// Flush all pending log entries from the global detector to disk
@@ -332,7 +253,7 @@ pub fn init_detector_with_stress<F>(
 /// Returns an error if:
 /// - The global detector lock cannot be acquired
 /// - The logger flush operation fails
+#[cfg(feature = "logging-and-visualization")]
 pub fn flush_global_detector_logs() -> Result<()> {
-    let detector = GLOBAL_DETECTOR.lock();
-    detector.flush_logs()
+    logger::flush_logs()
 }

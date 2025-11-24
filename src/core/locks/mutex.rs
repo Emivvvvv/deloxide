@@ -1,9 +1,13 @@
 use crate::core::detector;
 use crate::core::locks::NEXT_LOCK_ID;
+
+
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
+#[cfg(feature = "logging-and-visualization")]
+use crate::core::{Events, logger};
 use parking_lot::{Mutex as ParkingLotMutex, MutexGuard as ParkingLotMutexGuard};
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A wrapper around a mutex that tracks lock operations for deadlock detection
 ///
@@ -41,6 +45,9 @@ pub struct Mutex<T> {
     inner: ParkingLotMutex<T>,
     /// Thread that created this mutex
     creator_thread_id: ThreadId,
+    /// Stores the ThreadId of the current owner (0 if unlocked).
+    /// This allows us to skip the global detector on the fast path.
+    owner: AtomicUsize,
 }
 
 /// Guard for a Mutex, reports lock release when dropped
@@ -55,6 +62,10 @@ pub struct MutexGuard<'a, T> {
     lock_id: LockId,
     /// The inner MutexGuard
     guard: ParkingLotMutexGuard<'a, T>,
+    /// Reference to the owner atomic to clear it on drop
+    owner_atomic: &'a AtomicUsize,
+    /// Whether this lock acquisition was tracked by the global detector
+    tracked_globally: bool,
 }
 
 impl<T> Mutex<T> {
@@ -84,6 +95,7 @@ impl<T> Mutex<T> {
             id,
             inner: ParkingLotMutex::new(value),
             creator_thread_id,
+            owner: AtomicUsize::new(0),
         }
     }
 
@@ -107,6 +119,9 @@ impl<T> Mutex<T> {
     ///
     /// Uses atomic deadlock detection to prevent race conditions.
     ///
+    /// Uses the Optimistic Fast Path: attempts to acquire the lock cheaply first.
+    /// Only interacts with the global deadlock detector if the lock is contented.
+    ///
     /// # Example
     ///
     /// ```rust
@@ -120,24 +135,83 @@ impl<T> Mutex<T> {
     /// ```
     pub fn lock(&self) -> MutexGuard<'_, T> {
         let thread_id = get_current_thread_id();
+        let tid_usize = thread_id;
 
-        let guard = crate::core::detector::mutex::attempt_acquire(thread_id, self.id, || {
-            self.inner.try_lock()
-        });
+        // Optimistic Fast Path (Disabled during stress testing to ensure full detector coverage)
+        #[cfg(not(feature = "stress-test"))]
+        if let Some(guard) = self.inner.try_lock() {
+            self.owner.store(tid_usize, Ordering::Release);
 
-        let guard = match guard {
-            Some(g) => g,
-            None => {
-                let g = self.inner.lock();
-                detector::mutex::complete_acquire(thread_id, self.id);
-                g
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::MutexAttempt);
+                }
             }
+
+            #[cfg(feature = "lock-order-graph")]
+            detector::mutex::complete_acquire(thread_id, self.id);
+
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::MutexAcquired);
+                }
+            }
+
+            return MutexGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                owner_atomic: &self.owner,
+                tracked_globally: cfg!(feature = "lock-order-graph"),
+            };
+        }
+
+        // Slow Path (Contention)
+        // Read the current owner to report the dependency.
+        let current_owner_val = self.owner.load(Ordering::Acquire);
+        let current_owner = if current_owner_val == 0 {
+            None
+        } else {
+            Some(current_owner_val as ThreadId)
         };
+
+        let deadlock_info = detector::mutex::acquire_slow(thread_id, self.id, current_owner);
+
+        if let Some(info) = deadlock_info {
+            // Verify the edge is still valid (it might be stale if the owner released the lock).
+            let is_stale = if let Some(expected_owner) = current_owner {
+                let actual_owner = self.owner.load(Ordering::Relaxed);
+                !detector::deadlock_handling::verify_deadlock_edges(
+                    &info,
+                    thread_id,
+                    self.id,
+                    expected_owner,
+                    actual_owner,
+                )
+            } else {
+                false
+            };
+
+            if !is_stale {
+                detector::deadlock_handling::process_deadlock(info);
+            }
+        }
+
+        // Block until we get the lock
+        let guard = self.inner.lock();
+
+        // Update state
+        detector::mutex::complete_acquire(thread_id, self.id);
+        self.owner.store(tid_usize, Ordering::Release);
 
         MutexGuard {
             thread_id,
             lock_id: self.id,
             guard,
+            owner_atomic: &self.owner,
+            tracked_globally: true,
         }
     }
 
@@ -163,13 +237,38 @@ impl<T> Mutex<T> {
     /// ```
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
         let thread_id = get_current_thread_id();
-        let guard = detector::mutex::attempt_acquire(thread_id, self.id, || self.inner.try_lock());
+        let tid_usize = thread_id;
 
-        guard.map(|g| MutexGuard {
-            thread_id,
-            lock_id: self.id,
-            guard: g,
-        })
+        if let Some(guard) = self.inner.try_lock() {
+            self.owner.store(tid_usize, Ordering::Release);
+
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::MutexAttempt);
+                }
+            }
+
+            #[cfg(feature = "lock-order-graph")]
+            detector::mutex::complete_acquire(thread_id, self.id);
+
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::MutexAcquired);
+                }
+            }
+
+            Some(MutexGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                owner_atomic: &self.owner,
+                tracked_globally: cfg!(feature = "lock-order-graph"),
+            })
+        } else {
+            None
+        }
     }
 
     /// Consumes this mutex, returning the underlying data
@@ -253,12 +352,34 @@ impl<'a, T> MutexGuard<'a, T> {
     pub(crate) fn lock_id(&self) -> LockId {
         self.lock_id
     }
+
+    /// Clear local ownership tracking (used internally by Condvar)
+    pub(crate) fn clear_ownership(&self) {
+        self.owner_atomic.store(0, Ordering::Release);
+    }
+
+    /// Restore local ownership tracking (used internally by Condvar)
+    pub(crate) fn restore_ownership(&self) {
+        self.owner_atomic.store(self.thread_id, Ordering::Release);
+    }
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        // Report lock release
-        detector::mutex::release_mutex(self.thread_id, self.lock_id);
+        // 1. Clear local ownership first
+        self.owner_atomic.store(0, Ordering::Release);
+
+        // 2. Report lock release (detector and/or logger)
+        if self.tracked_globally {
+            detector::mutex::release_mutex(self.thread_id, self.lock_id);
+        } else {
+            #[cfg(feature = "logging-and-visualization")]
+            if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                logger::log_interaction_event(self.thread_id, self.lock_id, Events::MutexReleased);
+            }
+        }
+
+
     }
 }
 

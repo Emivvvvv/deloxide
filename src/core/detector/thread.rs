@@ -1,5 +1,6 @@
 use crate::ThreadId;
 use crate::core::detector::GLOBAL_DETECTOR;
+use crate::core::logger;
 use crate::core::{Detector, Events};
 
 impl Detector {
@@ -13,9 +14,7 @@ impl Detector {
     /// * `thread_id` - ID of the newly spawned thread
     /// * `parent_id` - Optional ID of the parent thread that created this thread
     pub fn spawn_thread(&mut self, thread_id: ThreadId, parent_id: Option<ThreadId>) {
-        if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, parent_id, Events::ThreadSpawn);
-        }
+        logger::log_thread_event(thread_id, parent_id, Events::ThreadSpawn);
 
         // Ensure node exists in the wait-for graph
         self.wait_for_graph.edges.entry(thread_id).or_default();
@@ -29,9 +28,7 @@ impl Detector {
     /// # Arguments
     /// * `thread_id` - ID of the exiting thread
     pub fn exit_thread(&mut self, thread_id: ThreadId) {
-        if let Some(logger) = &self.logger {
-            logger.log_thread_event(thread_id, None, Events::ThreadExit);
-        }
+        logger::log_thread_event(thread_id, None, Events::ThreadExit);
 
         // remove thread and its edges from the wait-for graph
         self.wait_for_graph.remove_thread(thread_id);

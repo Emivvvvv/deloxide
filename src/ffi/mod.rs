@@ -10,6 +10,7 @@ mod condvar;
 mod core;
 mod mutex;
 mod rwlock;
+#[cfg(feature = "logging-and-visualization")]
 mod showcase;
 mod stress;
 mod thread;
