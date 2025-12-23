@@ -72,9 +72,12 @@ impl Detector {
 
         // Apply stress testing while holding detector lock
 
-
         // Check if there's a writer (Global State OR Atomic Hint)
-        let effective_writer = self.rwlock_writer.get(&lock_id).copied().or(potential_writer);
+        let effective_writer = self
+            .rwlock_writer
+            .get(&lock_id)
+            .copied()
+            .or(potential_writer);
 
         if let Some(writer) = effective_writer {
             self.thread_waits_for.insert(thread_id, lock_id);
@@ -198,6 +201,9 @@ impl Detector {
                 self.wait_for_graph.remove_edge(waiter, thread_id);
             }
         }
+
+        #[cfg(feature = "stress-test")]
+        self.stress_on_lock_release(thread_id, lock_id);
     }
 
     /// Register a write lock release by a thread
@@ -246,8 +252,6 @@ impl Detector {
     ) -> Option<DeadlockInfo> {
         // Log the attempt
         logger::log_interaction_event(thread_id, lock_id, Events::RwWriteAttempt);
-
-
 
         #[cfg(feature = "lock-order-graph")]
         if self.lock_order_graph.is_some()
@@ -429,8 +433,6 @@ pub fn acquire_write_slow(
     lock_id: LockId,
     potential_writer: Option<ThreadId>,
 ) -> Option<DeadlockInfo> {
-    
-
     // 1. Calculate stress delay (holding lock)
     #[cfg(feature = "stress-test")]
     let delay = {

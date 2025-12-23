@@ -52,22 +52,6 @@ impl Default for StressConfig {
 }
 
 impl StressConfig {
-    /// Configuration with higher probability
-    pub fn high_probability() -> Self {
-        Self {
-            preemption_probability: 0.8,
-            ..Default::default()
-        }
-    }
-
-    /// Configuration with lower probability
-    pub fn low_probability() -> Self {
-        Self {
-            preemption_probability: 0.2,
-            ..Default::default()
-        }
-    }
-
     /// Aggressive configuration (high delay and high probability)
     pub fn aggressive() -> Self {
         Self {

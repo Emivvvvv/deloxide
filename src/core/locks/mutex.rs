@@ -1,7 +1,6 @@
 use crate::core::detector;
 use crate::core::locks::NEXT_LOCK_ID;
 
-
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 #[cfg(feature = "logging-and-visualization")]
 use crate::core::{Events, logger};
@@ -170,7 +169,34 @@ impl<T> Mutex<T> {
 
         // Slow Path (Contention)
         // Read the current owner to report the dependency.
-        let current_owner_val = self.owner.load(Ordering::Acquire);
+        let mut current_owner_val = self.owner.load(Ordering::Acquire);
+
+        // Adaptive Backoff:
+        // If the lock is physically held but we don't see an owner yet, it means
+        // the owner is in the tiny gap between acquiring the lock and setting the owner ID.
+        if current_owner_val == 0 && self.inner.is_locked() {
+            let mut spin_count = 0;
+            while current_owner_val == 0 {
+                if spin_count < 100 {
+                    std::hint::spin_loop();
+                } else {
+                    std::thread::yield_now();
+                }
+
+                // Use Relaxed loading during the spin loop for performance
+                current_owner_val = self.owner.load(Ordering::Relaxed);
+                spin_count += 1;
+
+                // Optimization: Only check lock state occasionally to reduce cache traffic
+                // If the lock is released, current_owner_val might remain 0, so we must check.
+                if spin_count % 16 == 0 && !self.inner.is_locked() {
+                    break;
+                }
+            }
+            // Final Acquire fence to ensure we see the data associated with the owner store
+            std::sync::atomic::fence(Ordering::Acquire);
+        }
+
         let current_owner = if current_owner_val == 0 {
             None
         } else {
@@ -378,8 +404,6 @@ impl<T> Drop for MutexGuard<'_, T> {
                 logger::log_interaction_event(self.thread_id, self.lock_id, Events::MutexReleased);
             }
         }
-
-
     }
 }
 

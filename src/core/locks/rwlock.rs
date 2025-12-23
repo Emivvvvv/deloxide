@@ -25,7 +25,6 @@
 use crate::core::detector;
 use crate::core::locks::NEXT_LOCK_ID;
 
-
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 #[cfg(feature = "logging-and-visualization")]
 use crate::core::{Events, logger};
@@ -183,7 +182,32 @@ impl<T> RwLock<T> {
 
         // Slow Path
         // Check if a writer holds it locally
-        let current_writer_val = self.writer_owner.load(Ordering::Acquire);
+        let mut current_writer_val = self.writer_owner.load(Ordering::Acquire);
+
+        // Adaptive Backoff:
+        // If the lock is held exclusively but we don't see a writer owner yet,
+        // wait briefly for the owner to set their ID.
+        if current_writer_val == 0 && self.inner.is_locked_exclusive() {
+            let mut spin_count = 0;
+            while current_writer_val == 0 {
+                if spin_count < 100 {
+                    std::hint::spin_loop();
+                } else {
+                    std::thread::yield_now();
+                }
+
+                // Use Relaxed loading during the spin loop
+                current_writer_val = self.writer_owner.load(Ordering::Relaxed);
+                spin_count += 1;
+
+                // Optimization: Check lock state less frequently
+                if spin_count % 16 == 0 && !self.inner.is_locked_exclusive() {
+                    break;
+                }
+            }
+            std::sync::atomic::fence(Ordering::Acquire);
+        }
+
         let current_writer = if current_writer_val == 0 {
             None
         } else {
@@ -378,8 +402,6 @@ impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
                 );
             }
         }
-
-
     }
 }
 
