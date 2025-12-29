@@ -1781,10 +1781,11 @@ function updateLinkElements() {
         .style("stroke-dasharray", "5,3")
         .style("filter", null);
     } else if (d.type.includes("attempt")) {
+      const isReadAttempt = d.type === "rwlock_read_attempt";
       el.style("stroke", "var(--link-attempt)")
         .style("stroke-width", "2.5")
         .attr("marker-end", "url(#attempt-arrowhead)")
-        .style("stroke-dasharray", "5,3")
+        .style("stroke-dasharray", isReadAttempt ? "5,3" : null)
         .style("filter", null);
     } else if (d.type.includes("rwlock_read_acquired")) {
       el.style("stroke", "var(--link-acquired-read)")
@@ -1867,10 +1868,11 @@ function updateLinkElements() {
         .style("stroke-dasharray", "5,3")
         .style("filter", null);
     } else if (d.type.includes("attempt")) {
+      const isReadAttempt = d.type === "rwlock_read_attempt";
       el.style("stroke", "var(--link-attempt)")
         .style("stroke-width", "2.5")
         .attr("marker-end", "url(#attempt-arrowhead)")
-        .style("stroke-dasharray", "5,3")
+        .style("stroke-dasharray", isReadAttempt ? "5,3" : null)
         .style("filter", null);
     } else if (d.type.includes("rwlock_read_acquired")) {
       el.style("stroke", "var(--link-acquired-read)")

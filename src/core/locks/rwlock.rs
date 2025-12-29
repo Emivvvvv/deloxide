@@ -24,13 +24,16 @@
 
 use crate::core::detector;
 use crate::core::locks::NEXT_LOCK_ID;
+
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
+#[cfg(feature = "logging-and-visualization")]
+use crate::core::{Events, logger};
 use parking_lot::{
     RwLock as ParkingLotRwLock, RwLockReadGuard as ParkingLotReadGuard,
     RwLockWriteGuard as ParkingLotWriteGuard,
 };
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A wrapper around a reader-writer lock that tracks operations for deadlock detection
 ///
@@ -44,6 +47,8 @@ pub struct RwLock<T> {
     inner: ParkingLotRwLock<T>,
     /// Thread that created this lock
     creator_thread_id: ThreadId,
+    /// Tracks the thread ID of a WRITER using AtomicUsize. 0 if no writer.
+    writer_owner: AtomicUsize,
 }
 
 /// Guard for a shared (read) lock, reports release when dropped
@@ -58,6 +63,10 @@ pub struct RwLockWriteGuard<'a, T> {
     thread_id: ThreadId,
     lock_id: LockId,
     guard: ParkingLotWriteGuard<'a, T>,
+    /// Reference to the owner atomic to clear it on drop
+    owner_atomic: &'a AtomicUsize,
+    /// Whether this lock acquisition was tracked by the global detector
+    tracked_globally: bool,
 }
 
 impl<T> RwLock<T> {
@@ -83,6 +92,7 @@ impl<T> RwLock<T> {
             id,
             inner: ParkingLotRwLock::new(value),
             creator_thread_id,
+            writer_owner: AtomicUsize::new(0),
         }
     }
 
@@ -137,26 +147,107 @@ impl<T> RwLock<T> {
     /// A guard which releases the lock when dropped
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         let thread_id = get_current_thread_id();
+        let tid_usize = thread_id as usize;
 
-        // Phase 1: Atomic detection and try-acquire
-        let guard = crate::core::detector::rwlock::attempt_write(thread_id, self.id, || {
-            self.inner.try_write()
-        });
+        // Optimistic Fast Path (Writer) - Disabled during stress testing
+        #[cfg(not(feature = "stress-test"))]
+        if let Some(guard) = self.inner.try_write() {
+            self.writer_owner.store(tid_usize, Ordering::Release);
 
-        // Phase 2: If try-acquire failed, use blocking write
-        let guard = match guard {
-            Some(g) => g,
-            None => {
-                let g = self.inner.write();
-                detector::rwlock::complete_write(thread_id, self.id);
-                g
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::RwWriteAttempt);
+                }
             }
+
+            #[cfg(feature = "lock-order-graph")]
+            detector::rwlock::complete_write(thread_id, self.id);
+
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::RwWriteAcquired);
+                }
+            }
+
+            return RwLockWriteGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                owner_atomic: &self.writer_owner,
+                tracked_globally: cfg!(feature = "lock-order-graph"),
+            };
+        }
+
+        // Slow Path
+        // Check if a writer holds it locally
+        let mut current_writer_val = self.writer_owner.load(Ordering::Acquire);
+
+        // Adaptive Backoff:
+        // If the lock is held exclusively but we don't see a writer owner yet,
+        // wait briefly for the owner to set their ID.
+        if current_writer_val == 0 && self.inner.is_locked_exclusive() {
+            let mut spin_count = 0;
+            while current_writer_val == 0 {
+                if spin_count < 100 {
+                    std::hint::spin_loop();
+                } else {
+                    std::thread::yield_now();
+                }
+
+                // Use Relaxed loading during the spin loop
+                current_writer_val = self.writer_owner.load(Ordering::Relaxed);
+                spin_count += 1;
+
+                // Optimization: Check lock state less frequently
+                if spin_count % 16 == 0 && !self.inner.is_locked_exclusive() {
+                    break;
+                }
+            }
+            std::sync::atomic::fence(Ordering::Acquire);
+        }
+
+        let current_writer = if current_writer_val == 0 {
+            None
+        } else {
+            Some(current_writer_val as ThreadId)
         };
+
+        let deadlock_info =
+            detector::rwlock::acquire_write_slow(thread_id, self.id, current_writer);
+
+        if let Some(info) = deadlock_info {
+            // Verify the edge is still valid (it might be stale if the writer released the lock).
+            let is_stale = if let Some(expected_writer) = current_writer {
+                let actual_writer = self.writer_owner.load(Ordering::Relaxed);
+                !detector::deadlock_handling::verify_deadlock_edges(
+                    &info,
+                    thread_id,
+                    self.id,
+                    expected_writer,
+                    actual_writer,
+                )
+            } else {
+                false
+            };
+
+            if !is_stale {
+                detector::deadlock_handling::process_deadlock(info);
+            }
+        }
+
+        let guard = self.inner.write();
+
+        detector::rwlock::complete_write(thread_id, self.id);
+        self.writer_owner.store(tid_usize, Ordering::Release);
 
         RwLockWriteGuard {
             thread_id,
             lock_id: self.id,
             guard,
+            owner_atomic: &self.writer_owner,
+            tracked_globally: true,
         }
     }
 
@@ -184,14 +275,37 @@ impl<T> RwLock<T> {
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
         let thread_id = get_current_thread_id();
 
-        // Use atomic detection and try-acquire
-        let guard = detector::rwlock::attempt_write(thread_id, self.id, || self.inner.try_write());
+        if let Some(guard) = self.inner.try_write() {
+            self.writer_owner
+                .store(thread_id as usize, Ordering::Release);
 
-        guard.map(|g| RwLockWriteGuard {
-            thread_id,
-            lock_id: self.id,
-            guard: g,
-        })
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::RwWriteAttempt);
+                }
+            }
+
+            #[cfg(feature = "lock-order-graph")]
+            detector::rwlock::complete_write(thread_id, self.id);
+
+            #[cfg(feature = "logging-and-visualization")]
+            {
+                if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                    logger::log_interaction_event(thread_id, self.id, Events::RwWriteAcquired);
+                }
+            }
+
+            Some(RwLockWriteGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                owner_atomic: &self.writer_owner,
+                tracked_globally: cfg!(feature = "lock-order-graph"),
+            })
+        } else {
+            None
+        }
     }
 
     /// Consumes this RwLock, returning the underlying data
@@ -272,7 +386,22 @@ impl<'a, T> DerefMut for RwLockWriteGuard<'a, T> {
 }
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
-        detector::rwlock::release_write(self.thread_id, self.lock_id);
+        // 1. Clear local ownership
+        self.owner_atomic.store(0, Ordering::Release);
+
+        // 2. Report release (detector and/or logger)
+        if self.tracked_globally {
+            detector::rwlock::release_write(self.thread_id, self.lock_id);
+        } else {
+            #[cfg(feature = "logging-and-visualization")]
+            if logger::LOGGING_ENABLED.load(Ordering::Relaxed) {
+                logger::log_interaction_event(
+                    self.thread_id,
+                    self.lock_id,
+                    Events::RwWriteReleased,
+                );
+            }
+        }
     }
 }
 

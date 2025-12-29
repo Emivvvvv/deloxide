@@ -5,9 +5,9 @@
 //! - Lock order graph: tracks the order in which locks are acquired (optional feature)
 
 #[cfg(feature = "lock-order-graph")]
-pub(crate) mod lock_order_graph;
-pub(crate) mod wait_for_graph;
+pub mod lock_order_graph;
+pub mod wait_for_graph;
 
 #[cfg(feature = "lock-order-graph")]
-pub(crate) use lock_order_graph::LockOrderGraph;
-pub(crate) use wait_for_graph::WaitForGraph;
+pub use lock_order_graph::LockOrderGraph;
+pub use wait_for_graph::WaitForGraph;

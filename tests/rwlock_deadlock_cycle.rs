@@ -37,11 +37,21 @@ fn test_guaranteed_three_thread_rwlock_deadlock() {
     }
 
     let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
-    assert_eq!(
-        info.thread_cycle.len(),
-        3,
-        "Deadlock should involve 3 threads"
-    );
+
+    if info.lock_order_cycle.is_some() {
+        println!("Detected Lock Order Violation");
+        assert!(
+            info.lock_order_cycle.unwrap().len() >= 3,
+            "Lock cycle should involve at least 2 locks"
+        );
+    } else {
+        println!("Detected Wait-For Deadlock");
+        assert_eq!(
+            info.thread_cycle.len(),
+            3,
+            "Deadlock should involve 3 threads"
+        );
+    }
     println!(
         "✔ Detected 3-thread RwLock cycle deadlock: {:?}",
         info.thread_cycle

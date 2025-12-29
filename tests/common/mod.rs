@@ -1,3 +1,5 @@
+#[cfg(feature = "logging-and-visualization")]
+use deloxide::showcase_this;
 use deloxide::{DeadlockInfo, Deloxide};
 use std::sync::{Arc, Mutex as StdMutex, mpsc};
 use std::time::Duration;
@@ -17,13 +19,19 @@ pub fn start_detector() -> DetectorHarness {
     let detected = Arc::new(StdMutex::new(false));
     let flag = Arc::clone(&detected);
 
-    Deloxide::new()
-        .callback(move |info| {
-            *flag.lock().unwrap() = true;
-            let _ = tx.send(info);
-        })
-        .start()
-        .expect("Failed to initialize detector");
+    let builder = Deloxide::new().callback(move |info| {
+        #[cfg(feature = "logging-and-visualization")]
+        {
+            let _ = showcase_this();
+        }
+        *flag.lock().unwrap() = true;
+        let _ = tx.send(info);
+    });
+
+    #[cfg(feature = "logging-and-visualization")]
+    let builder = builder.with_log("logs/deloxide_{timestamp}.log");
+
+    builder.start().expect("Failed to initialize detector");
 
     DetectorHarness { rx, detected }
 }

@@ -142,11 +142,13 @@
 //! or for the currently active log if you initialized logging with `with_log()`.
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "logging-and-visualization")]
+//! # {
 //! use deloxide::{Deloxide, showcase, showcase_this};
 //!
-//! // Initialize with logging enabled
+//! // Initialize with logging enabled (default is "deloxide.log")
 //! Deloxide::new()
-//!     .with_log("logs/deadlock_{timestamp}.json")
+//!     .with_log("logs/deadlock_{timestamp}.json") // Optional: override default log path
 //!     .callback(|info| {
 //!         eprintln!("Deadlock: {:?}", info.thread_cycle);
 //!         // Optionally open the current log automatically
@@ -157,6 +159,11 @@
 //!
 //! // Or later, open a specific log file
 //! showcase("logs/deadlock_20250101_120000.json").unwrap();
+//! # }
+//! # #[cfg(not(feature = "logging-and-visualization"))]
+//! # {
+//! #     // This example requires the `visualization` feature.
+//! # }
 //! ```
 //!
 //! ## Lock Order Graph (optional feature)
@@ -175,9 +182,9 @@
 //! {
 //! use deloxide::Deloxide;
 //!
-//! // Enable lock order checking for development
+//! // Enable lock order checking for development (enabled by default if feature is on)
 //! Deloxide::new()
-//!     .with_lock_order_checking()
+//!     // .no_lock_order_checking() // Optional: disable if needed
 //!     .callback(|info| {
 //!         use deloxide::DeadlockSource;
 //!         match info.source {
@@ -221,8 +228,8 @@
 //!     .with_component_stress()
 //!     .with_stress_config(StressConfig {
 //!         preemption_probability: 0.7,
-//!         min_delay_ms: 2,
-//!         max_delay_ms: 15,
+//!         min_delay_us: 200,
+//!         max_delay_us: 1500,
 //!         preempt_after_release: true,
 //!     })
 //!     .start()
@@ -243,14 +250,16 @@ pub use core::{
 #[cfg(feature = "stress-test")]
 pub use core::{StressConfig, StressMode};
 
+#[cfg(feature = "logging-and-visualization")]
 mod showcase;
+#[cfg(feature = "logging-and-visualization")]
 pub use showcase::{showcase, showcase_this};
 
 pub mod ffi;
 
 // Ascii art font name "miniwi"
 const BANNER: &str = r#"
-▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▄▖  ▄▖
-▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▄▌  ▛▌
-▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗ ▄▌▗ █▌
+▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▖▖  ▄▖
+▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▙▌  ▛▌
+▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗  ▌▗ █▌
 "#;

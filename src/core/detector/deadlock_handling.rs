@@ -1,8 +1,8 @@
 use crate::DeadlockInfo;
-#[cfg(feature = "lock-order-graph")]
 use crate::LockId;
 use crate::ThreadId;
 use crate::core::detector::DISPATCHER;
+use crate::core::logger;
 use crate::core::{DeadlockSource, Detector};
 use chrono::Utc;
 
@@ -60,45 +60,129 @@ impl Detector {
         }
     }
 
-    pub fn handle_detected_deadlock(&self, cycle: Vec<ThreadId>) {
-        let info = DeadlockInfo {
+    pub fn extract_deadlock_info(&self, cycle: Vec<ThreadId>) -> DeadlockInfo {
+        // Optimization: Only include wait-for edges for threads in the cycle.
+        // This reduces the size of the info struct and speeds up verification.
+        let thread_waiting_for_locks = cycle
+            .iter()
+            .filter_map(|&t| self.thread_waits_for.get(&t).map(|&l| (t, l)))
+            .collect();
+
+        DeadlockInfo {
             source: DeadlockSource::WaitForGraph,
-            thread_cycle: cycle.clone(),
-            thread_waiting_for_locks: self
-                .thread_waits_for
-                .iter()
-                .map(|(&t, &l)| (t, l))
-                .collect(),
+            thread_cycle: cycle,
+            thread_waiting_for_locks,
             lock_order_cycle: None,
             timestamp: Utc::now().to_rfc3339(),
-        };
-        // Dispatch callback asynchronously
-        DISPATCHER.send(info.clone());
-
-        // Also write terminal deadlock record to the log if enabled
-        if let Some(logger) = &self.logger {
-            logger.log_deadlock(info);
+            verification_request: None,
         }
     }
 
     /// Handle a lock order violation detected via lock ordering analysis
     #[cfg(feature = "lock-order-graph")]
-    pub fn handle_lock_order_violation(
+    pub fn extract_lock_order_violation_info(
         &self,
         thread_id: ThreadId,
         lock_id: LockId,
         lock_cycle: Vec<LockId>,
-    ) {
-        let info = DeadlockInfo {
+    ) -> DeadlockInfo {
+        DeadlockInfo {
             source: DeadlockSource::LockOrderViolation,
             thread_cycle: vec![thread_id],
             thread_waiting_for_locks: vec![(thread_id, lock_id)],
             lock_order_cycle: Some(lock_cycle),
             timestamp: Utc::now().to_rfc3339(),
-        };
-        DISPATCHER.send(info.clone());
-        if let Some(logger) = &self.logger {
-            logger.log_deadlock(info);
+            verification_request: None,
         }
     }
+}
+
+/// Process a detected deadlock (log and dispatch callback)
+///
+/// This function should be called OUTSIDE the global detector lock
+/// to avoid holding the lock while formatting messages or waiting for callbacks.
+pub fn process_deadlock(info: DeadlockInfo) {
+    // Dispatch callback asynchronously
+    DISPATCHER.send(info.clone());
+
+    // Also write terminal deadlock record to the log if enabled
+    logger::log_deadlock(info);
+}
+
+/// Verify if a reported deadlock is valid by checking current lock ownership
+///
+/// This function performs "Immediate Edge Verification" to filter out stale edges
+/// that can occur when using atomic hints for Fast Path detection.
+///
+/// # Arguments
+/// * `info` - The detected deadlock info
+/// * `thread_id` - The ID of the current thread (the one verifying)
+/// * `lock_id` - The ID of the lock the current thread is trying to acquire
+/// * `expected_owner` - The thread ID that was expected to hold the lock (from atomic hint)
+/// * `actual_owner` - The actual current owner of the lock (from atomic load)
+///
+/// # Returns
+/// * `true` if the deadlock is valid (edges confirmed)
+/// * `false` if the deadlock is stale (edges invalid)
+pub fn verify_deadlock_edges(
+    info: &DeadlockInfo,
+    thread_id: ThreadId,
+    lock_id: LockId,
+    expected_owner: ThreadId,
+    actual_owner: usize,
+) -> bool {
+    // Verify Outgoing Edge: Check if we are waiting for this specific lock
+    let waiting_for_this = info
+        .thread_waiting_for_locks
+        .iter()
+        .any(|&(t, l)| t == thread_id && l == lock_id);
+
+    if !waiting_for_this {
+        return false;
+    }
+
+    // Verify the expected owner still holds the lock
+    if actual_owner != expected_owner {
+        return false; // Stale outgoing edge
+    }
+
+    // Verify Incoming Edges: Ensure cycle consistency with our current state
+    // If the cycle implies WE hold this lock, but we know we don't, then the cycle is stale.
+    // NOTE: LockOrderViolation cycles are synthetic (just the current thread) and don't represent
+    // a wait-for cycle, so we skip this check.
+    if info.source == DeadlockSource::LockOrderViolation {
+        return true;
+    }
+
+    // Find who is waiting for us in the cycle
+    // The cycle is a list of threads [t1, t2, t3] where t1->t2->t3->t1
+    let cycle_len = info.thread_cycle.len();
+    let mut self_index = None;
+    for (i, &t) in info.thread_cycle.iter().enumerate() {
+        if t == thread_id {
+            self_index = Some(i);
+            break;
+        }
+    }
+
+    if let Some(idx) = self_index {
+        // The thread before us in the cycle is waiting for us
+        let prev_idx = if idx == 0 { cycle_len - 1 } else { idx - 1 };
+        let prev_thread = info.thread_cycle[prev_idx];
+
+        // Check if prev_thread is waiting for THIS lock
+        let prev_waiting_for_this = info
+            .thread_waiting_for_locks
+            .iter()
+            .any(|&(t, l)| t == prev_thread && l == lock_id);
+
+        if prev_waiting_for_this {
+            // The cycle says prev_thread waits for US for THIS lock.
+            // But we know WE don't hold it (actual_owner == expected_owner != us).
+            // So this edge is stale.
+            return false; // Stale incoming edge
+        }
+    }
+
+    true
 }

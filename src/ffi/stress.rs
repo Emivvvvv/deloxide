@@ -15,8 +15,8 @@ use std::sync::atomic::Ordering;
 ///
 /// # Arguments
 /// * `probability` - Probability of preemption (0.0-1.0)
-/// * `min_delay_ms` - Minimum delay duration in milliseconds
-/// * `max_delay_ms` - Maximum delay duration in milliseconds
+/// * `min_delay_us` - Minimum delay duration in microseconds
+/// * `max_delay_us` - Maximum delay duration in microseconds
 ///
 /// # Returns
 /// * `0` on success
@@ -29,8 +29,8 @@ use std::sync::atomic::Ordering;
 #[allow(unused_variables)]
 pub unsafe extern "C" fn deloxide_enable_random_stress(
     probability: c_double,
-    min_delay_ms: c_ulong,
-    max_delay_ms: c_ulong,
+    min_delay_us: c_ulong,
+    max_delay_us: c_ulong,
 ) -> c_int {
     #[cfg(feature = "stress-test")]
     {
@@ -43,8 +43,8 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
         unsafe {
             STRESS_CONFIG = Some(crate::core::stress::StressConfig {
                 preemption_probability: probability,
-                min_delay_ms,
-                max_delay_ms,
+                min_delay_us,
+                max_delay_us,
                 preempt_after_release: true,
             });
         }
@@ -65,8 +65,8 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
 /// acquisition patterns to increase deadlock probability.
 ///
 /// # Arguments
-/// * `min_delay_ms` - Minimum delay duration in milliseconds
-/// * `max_delay_ms` - Maximum delay duration in milliseconds
+/// * `min_delay_us` - Minimum delay duration in microseconds
+/// * `max_delay_us` - Maximum delay duration in microseconds
 ///
 /// # Returns
 /// * `0` on success
@@ -78,8 +78,8 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
 #[unsafe(no_mangle)]
 #[allow(unused_variables)]
 pub unsafe extern "C" fn deloxide_enable_component_stress(
-    min_delay_ms: c_ulong,
-    max_delay_ms: c_ulong,
+    min_delay_us: c_ulong,
+    max_delay_us: c_ulong,
 ) -> c_int {
     #[cfg(feature = "stress-test")]
     {
@@ -92,8 +92,8 @@ pub unsafe extern "C" fn deloxide_enable_component_stress(
         unsafe {
             STRESS_CONFIG = Some(StressConfig {
                 preemption_probability: 0.8, // High probability for component-based mode
-                min_delay_ms,
-                max_delay_ms,
+                min_delay_us,
+                max_delay_us,
                 preempt_after_release: true,
             });
         }

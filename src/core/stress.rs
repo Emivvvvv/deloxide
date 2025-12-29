@@ -1,6 +1,7 @@
 // src/core/stress.rs
 // This module provides stress testing functionality for Deloxide
 // It's only compiled when the "stress-test" feature is enabled
+#![allow(dead_code)]
 
 use crate::core::types::{LockId, ThreadId};
 use fxhash::FxHashMap;
@@ -8,7 +9,6 @@ use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
-#[cfg(feature = "stress-test")]
 use rand::{Rng, rng};
 
 /// Stress testing modes available in Deloxide
@@ -28,10 +28,10 @@ pub enum StressMode {
 pub struct StressConfig {
     /// Probability of preemption (0.0-1.0)
     pub preemption_probability: f64,
-    /// Minimum delay in milliseconds
-    pub min_delay_ms: u64,
-    /// Maximum delay in milliseconds
-    pub max_delay_ms: u64,
+    /// Minimum delay in microseconds
+    pub min_delay_us: u64,
+    /// Maximum delay in microseconds
+    pub max_delay_us: u64,
     /// Whether to preempt after lock releases
     pub preempt_after_release: bool,
 }
@@ -40,9 +40,31 @@ impl Default for StressConfig {
     fn default() -> Self {
         StressConfig {
             preemption_probability: 0.5,
-            min_delay_ms: 1,
-            max_delay_ms: 10,
+            min_delay_us: 250,  // 250us
+            max_delay_us: 2000, // 2ms
             preempt_after_release: true,
+        }
+    }
+}
+
+impl StressConfig {
+    /// Aggressive configuration (high delay and high probability)
+    pub fn aggressive() -> Self {
+        Self {
+            preemption_probability: 0.8,
+            min_delay_us: 500,
+            max_delay_us: 5000,
+            preempt_after_release: true,
+        }
+    }
+
+    /// Gentle configuration (low delay and low probability)
+    pub fn gentle() -> Self {
+        Self {
+            preemption_probability: 0.2,
+            min_delay_us: 20,
+            max_delay_us: 100,
+            preempt_after_release: false,
         }
     }
 }
@@ -130,57 +152,56 @@ lazy_static::lazy_static! {
 }
 
 /// Apply a delay to the current thread
-#[cfg(feature = "stress-test")]
-pub fn apply_delay(min_ms: u64, max_ms: u64) {
+pub fn apply_delay(min_us: u64, max_us: u64) {
     let mut rng = rng();
-    let delay_ms = if min_ms == max_ms {
-        min_ms
+    let delay_us = if min_us == max_us {
+        min_us
     } else {
-        rng.random_range(min_ms..=max_ms)
+        rng.random_range(min_us..=max_us)
     };
-    thread::sleep(Duration::from_millis(delay_ms));
-}
-
-#[cfg(not(feature = "stress-test"))]
-pub fn apply_delay(_min_ms: u64, _max_ms: u64) {
-    // No-op when stress testing is disabled
+    thread::sleep(Duration::from_micros(delay_us));
 }
 
 /// Perform a random preemption if probability check passes
-#[cfg(feature = "stress-test")]
 #[allow(unused_variables)]
 pub fn try_random_preemption(
     thread_id: ThreadId,
     lock_id: LockId,
-    probability: f64,
-    min_delay_ms: u64,
-    max_delay_ms: u64,
-) -> bool {
+    held_locks: &[LockId],
+    config: &StressConfig,
+) -> Option<u64> {
+    // Only apply random preemption if the thread already holds locks.
+    // This prevents "random backoff" which can desynchronize threads and prevent deadlocks.
+    if held_locks.is_empty() {
+        return None;
+    }
+
+    let prob_int = (config.preemption_probability * 1_000_000.0) as u64;
+    if prob_int == 0 {
+        return None;
+    }
+
     let mut rng = rng();
 
-    if rng.random::<f64>() < probability {
+    if rng.random_range(0..1_000_000) < prob_int {
         // Track this preemption
         let mut state = STRESS_STATE.lock();
         state.track_preemption(lock_id);
-        drop(state); // Release lock before sleeping
+        drop(state); // Release lock before returning
 
-        // Apply delay
-        apply_delay(min_delay_ms, max_delay_ms);
-        true
+        // Calculate delay
+        let min_us = config.min_delay_us;
+        let max_us = config.max_delay_us;
+
+        let delay_us = if min_us == max_us {
+            min_us
+        } else {
+            rng.random_range(min_us..=max_us)
+        };
+        Some(delay_us)
     } else {
-        false
+        None
     }
-}
-
-#[cfg(not(feature = "stress-test"))]
-pub fn try_random_preemption(
-    _thread_id: ThreadId,
-    _lock_id: LockId,
-    _probability: f64,
-    _min_delay_ms: u64,
-    _max_delay_ms: u64,
-) -> bool {
-    false
 }
 
 /// Apply component-based delay strategy
@@ -189,11 +210,10 @@ pub fn apply_component_delay(
     thread_id: ThreadId,
     lock_id: LockId,
     held_locks: &[LockId],
-    min_delay_ms: u64,
-    max_delay_ms: u64,
-) -> bool {
+    config: &StressConfig,
+) -> Option<u64> {
     if held_locks.is_empty() {
-        return false;
+        return None;
     }
 
     let mut should_delay = false;
@@ -213,53 +233,39 @@ pub fn apply_component_delay(
 
     if should_delay {
         state.track_preemption(lock_id);
-        drop(state); // Release lock before sleeping
+        drop(state); // Release lock before returning
 
-        // Apply delay
-        apply_delay(min_delay_ms, max_delay_ms);
-        true
+        // Calculate delay
+        let min_us = config.min_delay_us;
+        let max_us = config.max_delay_us;
+
+        let mut rng = rng();
+        let delay_us = if min_us == max_us {
+            min_us
+        } else {
+            rng.random_range(min_us..=max_us)
+        };
+        Some(delay_us)
     } else {
-        false
+        None
     }
 }
 
 /// Apply stress testing before lock acquisition
-pub fn on_lock_attempt(
+pub fn calculate_stress_delay(
     mode: StressMode,
     thread_id: ThreadId,
     lock_id: LockId,
     held_locks: &[LockId],
     config: &StressConfig,
-) -> bool {
+) -> Option<u64> {
     match mode {
-        StressMode::None => false,
+        StressMode::None => None,
 
-        StressMode::RandomPreemption => try_random_preemption(
-            thread_id,
-            lock_id,
-            config.preemption_probability,
-            config.min_delay_ms,
-            config.max_delay_ms,
-        ),
+        StressMode::RandomPreemption => {
+            try_random_preemption(thread_id, lock_id, held_locks, config)
+        }
 
-        StressMode::ComponentBased => apply_component_delay(
-            thread_id,
-            lock_id,
-            held_locks,
-            config.min_delay_ms,
-            config.max_delay_ms,
-        ),
-    }
-}
-
-/// Apply stress testing after lock release
-pub fn on_lock_release(
-    mode: StressMode,
-    _thread_id: ThreadId,
-    _lock_id: LockId,
-    config: &StressConfig,
-) {
-    if mode != StressMode::None && config.preempt_after_release {
-        thread::yield_now();
+        StressMode::ComponentBased => apply_component_delay(thread_id, lock_id, held_locks, config),
     }
 }

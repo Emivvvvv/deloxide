@@ -1,7 +1,6 @@
 pub mod encoder;
 use encoder::process_log_for_url;
 
-use crate::core::detector::flush_global_detector_logs;
 use crate::core::logger::{self};
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -82,12 +81,9 @@ pub fn showcase<P: AsRef<Path>>(log_path: P) -> Result<()> {
 /// showcase_this().expect("Failed to showcase current log");
 /// ```
 pub fn showcase_this() -> Result<()> {
-    // First, flush all pending log entries to ensure completeness
-    flush_global_detector_logs().context("Failed to flush pending log entries")?;
-
-    // Get the current log file path
-    let log_path = logger::get_current_log_file()
-        .ok_or_else(|| anyhow::anyhow!("No active log file found"))?;
+    // Flush pending entries and fetch the active log path
+    let log_path =
+        logger::prepare_showcase_log_path().context("Failed to prepare log file for showcasing")?;
 
     // Process the log file to get an encoded string suitable for URLs
     let encoded_log =
