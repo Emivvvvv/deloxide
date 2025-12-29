@@ -7,15 +7,14 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 ## Features
 
-- **Real-time deadlock detection** - Detects deadlocks as they happen
+- **Real-time deadlock detection** - Detects deadlocks as they happen using a Dual Detection Architecture (WFG + LOG)
+- **Zero False Positives** - Wait-For Graph (WFG) analysis ensures 100% precision for active deadlocks
+- **Optimistic Fast Path** - "Always-on" monitoring with negligible overhead (1.09x baseline / ~10.8ns)
 - **Cross-language support** - Core implementation in Rust with C bindings
-- **Thread & lock tracking** - Monitors relationships between threads and sync primitives (Mutex, RwLock, Condvar)
-- **Visualization** - Web-based visualization of thread-lock relationships (see [example](https://deloxide.vercel.app/?logs=H4sIAAAAAAAC_03NvQrCMBSG4ZNEHKqDiOIipYMWi1ROo_2hm4uDo3hlkVyAk-DgjejmZNE7cLVdPcWkOD688H3qCT0NrHVdF_77M57cmAbOjaYnkmgb-S-mOYDRLCKxgdUGSEOrLYk7VudaHasLSbhGAdataxWDFs1DsGNaNCvlkVqzUt5JwjOqnP-_qk-NjX5yVQEHxYVSnCvBHp5EGYeYhZHcyyhfJrnExSpNsySdI-aIX6996tkRAQAA
+- **Stress Testing Framework** - Probabilistic scheduling with Component-Based Targeting (99.5% Heisenbug manifestation)
+- **Visual Diagnostics** - Serverless, privacy-preserving visualization of thread interactions (see [example](https://deloxide.vercel.app/?logs=H4sIAAAAAAAC_03NvQrCMBSG4ZNEHKqDiOIipYMWi1ROo_2hm4uDo3hlkVyAk-DgjejmZNE7cLVdPcWkOD688H3qCT0NrHVdF_77M57cmAbOjaYnkmgb-S-mOYDRLCKxgdUGSEOrLYk7VundaHasLSbhGAdataxWDFs1DsGNaNCvlkVqzUt5JwjOqnP-_qk-Njq_5yVQEHxYVSnCvBHp5EGYeYhZHcyyhfJrnExSpNsySdI-aIX6996tkRAQAA
   ) here)
-- **Low overhead** - Designed to be lightweight for use in production systems
-- **Easy integration** - Simple API for both Rust and C
-- **Lock order graph** - Optional feature to detect potential deadlocks via lock ordering patterns
-- **Stress testing** - Optional feature to increase deadlock manifestation during testing
+- **Easy integration** - Drop-in replacements for `parking_lot` primitives
 
 > [!NOTE]
 > Cross-platform support: Rust API works on Windows, macOS, and Linux. The C API is POSIX-first and ships with pthread-based convenience macros for macOS/Linux; on Windows those macros are disabled (see below) but the core C functions are fully usable.
@@ -29,10 +28,11 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 2. **Resource Creation**: When threads, mutexes, and reader-writer locks are created, they're registered with the deadlock detector.
 
 3. **Lock Operations**: When a thread attempts to acquire a lock:
-   - The attempt is recorded by the detector
-   - If the lock is already held by another thread, a "wait-for" edge is added
-   - The detector checks for cycles in the "wait-for" graph
-   - If a cycle is found, a deadlock is reported
+   - **Optimistic Fast Path**: The system first attempts a fast-path acquisition using atomic operations. If successful (uncontended), it bypasses the detector entirely (zero overhead).
+   - **Slow Path (Contended)**: If the lock is held, the attempt is recorded by the detector.
+   - A "wait-for" edge is added to the graph.
+   - The detector checks for cycles in the "wait-for" graph.
+   - If a cycle is found, a deadlock is reported.
 
 4. **Deadlock Detection**: When a deadlock is detected, the callback is invoked with detailed information, including which threads are involved and which locks they're waiting for.
 
@@ -40,36 +40,40 @@ Deloxide is a cross-language deadlock detection library with visualization suppo
 
 ### Core Components
 
-1. **Deadlock Detection Engine**
-   - Maintains a "wait-for" graph of thread dependencies
-   - Detects cycles in the graph to identify potential deadlocks
-   - Reports detected deadlocks through a configurable callback
+1. **Dual Detection Engine**
+   - **Wait-For Graph (WFG)**: The default, reactive tier. Detects active circular dependencies with mathematical certainty (0 false positives).
+   - **Lock Order Graph (LOG)**: An optional, proactive tier. Analyzes historical acquisition patterns to warn about potential deadlocks before they occur (requires `lock-order-graph` feature).
 
-2. **Resource Tracking**
+<img src="images/architecture.png" alt="System Architecture" width="800">
+
+2. **Optimistic Fast Path**
+   - Implements an "Optimistic Fast Path" architecture using atomic release-acquire semantics.
+   - Bypasses the global detector entirely for uncontended locks.
+   - Lowers instrumentation overhead to just **~10.8ns** (1.09x of standard `parking_lot`), enabling "always-on" production monitoring.
+
+3. **Stress Testing Framework** (Optional)
+   - Employs **Probabilistic Concurrency Testing (PCT)** to expose Heisenbugs.
+   - **Component-Based Targeting**: Intelligently injects delays into interacting lock groups.
+   - Achieves a **99.5% manifestation rate** for latent deadlocks (vs 63.4% for passive tools).
+
+4. **Resource Tracking**
    - Tracks threads and locks as resources with lifecycles
    - Manages parent-child relationships between threads
    - Automatically cleans up resources when threads exit
 
-3. **Logging and Visualization**
-   - Records thread-lock interactions to a log file
-   - Processes logs for visualization in a web browser
-   - Provides automatic visualization when deadlocks are detected
+5. **Visualization Pipeline**
+   - **Serverless Sharing**: Compresses logs into URL-safe Base64 payloads (MessagePack + Gzip).
+   - **Privacy-First**: All decoding and rendering happens client-side; no data is sent to external servers.
+   - Provides interactive timelines and dependency graphs.
+   
+   <img src="images/visualization.png" alt="Visualization Interface" width="800">
 
-4. **Cross-Language Support**
+6. **Cross-Language Support**
    - Rust API with `Mutex`, `RwLock`, `Condvar`, and `thread` module
    - C API through FFI bindings in `deloxide.h`
    - Simple macros for C to handle common operations
 
-5. **Lock Order Graph** (Optional with lock-order-graph feature)
-   - Tracks lock acquisition ordering patterns across threads
-   - Detects potential deadlocks even when threads don't actually block
-   - Provides early warning of dangerous lock ordering patterns
-   - Available as an opt-in feature for development and testing
 
-6. **Stress Testing** (Optional with stress-testing feature)
-   - Strategically delays threads to increase deadlock probability
-   - Multiple strategies for different testing scenarios
-   - Available as an opt-in feature for testing environments
 
 ## Quick Start
 
@@ -221,8 +225,7 @@ use std::time::Duration;
 
 fn main() {
     // Initialize the detector with logging and visualization
-    // (requires the `logging-and-visualization` feature)
-    // Initialize the detector with logging and visualization
+    // (requires the `visualization` feature)
     // (Logging is enabled by default to "deloxide.log" if the feature is active)
     Deloxide::new()
         .callback(|info| {
@@ -827,239 +830,75 @@ For more detailed documentation:
 - Rust Docs: `https://docs.rs/deloxide`
 - C API: See `include/deloxide.h` and `https://docs.rs/deloxide/latest/deloxide/ffi/index.html`
 
-## Performance & Evaluation
 
-This section outlines the performance, deadlock detection capabilities, and robustness of `Deloxide` v0.4. We compare it against standard Rust mutexes (`std::sync::Mutex`), `parking_lot::Mutex` (with its `deadlock_detection` feature), and the `no_deadlocks` library.
 
-All benchmarks were run on a base M1 MacBook Pro with Rust 1.86.0-nightly (v0.4.0).
 
-### 1. Performance Overhead
 
-We evaluated overhead using both low-level microbenchmarks and application-level macrobenchmarks.
+## Performance & Validation
 
-#### Microbenchmark Overhead
+Deloxide has been evaluated through a three-tiered testing framework: **Correctness** (Guaranteed Deadlocks), **Stress Testing** (Heisenbugs), and **Performance** (Micro/Macrobenchmarks).
 
-These tests measure the raw performance of creating locks and performing single, uncontended lock/unlock cycles.
+### 1. Methodology
+- **Guaranteed Deadlock Tests**: Validates that the WFG logic detects 100% of deterministic cycles (e.g., barriers enforcing circular wait).
+- **Heisenbug Manifestation**: Uses probabilistic scheduling to force race conditions in non-deterministic scenarios (e.g., Dining Philosophers without barriers).
+- **False Positive Analysis**: Tested against 56 complex "false positive" scenarios (e.g., Gate Guarded, Lock Order Inversion) to ensure 0% false alarm rate.
 
-**Mutex Performance:**
+### 2. Microbenchmark Overhead
+The "Optimistic Fast Path" ensures minimal impact on atomic operations. Deloxide incurs only ~1ns overhead per lock operation.
 
-| Tested Setup | Lock/Unlock Time |
-| :--- | :--- |
-| **Std** | **8.5 ± 0.06 ns** |
-| **ParkingLot** | 9.7 ± 0.11 ns |
-| **NoDeadlocks** | 9.7 ± 0.09 µs |
-| **Deloxide (Default)** | 68.8 ± 0.59 ns |
-| `Deloxide+LockOrder` | 70.2 ± 0.74 ns |
-| `Deloxide+StressRand` | 3.9 ± 1.19 ms |
-| `Deloxide+StressComp` | 235.3 ± 3.73 ns |
+<img src="images/mutex_latency.png" alt="Mutex Latency Comparison" width="600">
 
-**RwLock Performance:**
+| Metric | STD | PL+DD | **DX** | DX (LOG) | DX (COMP) | ND |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Mutex Lock** | 8.7ns | 9.9ns | **10.8ns** | 58.1ns | 229.4ns | 10,527ns |
+| **RwLock Write** | 10.1ns | 12.8ns | **13.9ns** | 57.7ns | 234.1ns | 10,797ns |
+| **RwLock Read** | 13.9ns | 16.1ns | **62.4ns** | 85.5ns | 222.5ns | 10,895ns |
+| **Condvar** | 17.1µs | 17.2µs | **19.6µs** | 17.4µs | 20.3µs | 2,100µs |
 
-| Tested Setup | Read Lock/Unlock | Write Lock/Unlock |
-| :--- | :--- | :--- |
-| **Std** | 13.5 ± 0.21 ns | 9.6 ± 0.10 ns |
-| **ParkingLot** | 16.0 ± 0.16 ns | 12.8 ± 0.72 ns |
-| **NoDeadlocks** | 10.6 ± 0.07 µs | 10.6 ± 0.09 µs |
-| **Deloxide (Default)** | 102.3 ± 1.06 ns | 73.3 ± 0.55 ns |
-| `Deloxide+LockOrder` | 103.1 ± 1.17 ns | 73.8 ± 0.50 ns |
-| `Deloxide+StressRand` | 3.9 ± 1.33 ms | 4.0 ± 1.18 ms |
-| `Deloxide+StressComp` | 103.9 ± 0.79 ns | 238.7 ± 3.83 ns |
+> *PL+DD = parking_lot + detection, ND = no_deadlocks. DX (COMP) intentional overhead forces thread interleaving.*
 
-*(Lower is better)*
+### 3. Real-World Validation: Ray Tracing
+In a high-contention Ray Tracing case study (1080p, ~4kHz locking), Deloxide demonstrated superior **deterministic stability**.
 
-**Analysis:**
-- `Deloxide` adds ~60-90ns overhead per lock operation compared to std/parking_lot (still sub-microsecond)
-- Lock order checking adds negligible overhead (~1-2ns)
-- Stress testing modes intentionally add delays for bug detection (not intended for production)
-- `NoDeadlocks` has 1000x higher overhead than Deloxide for basic operations
+| Config | 426x240 | 854x480 | 1280x720 | 1920x1080 (Saturation) |
+| :--- | :--- | :--- | :--- | :--- |
+| **STD** | 0.81s ± 0.03 | 3.41s ± 0.15 | 7.33s ± 0.31 | 17.22s ± 0.65 |
+| **PL+DD** | 0.81s ± 0.00 | 3.26s ± 0.02 | 7.19s ± 0.03 | 18.32s ± 0.06 |
+| **DX (Default)** | **0.80s ± 0.00** | **3.18s ± 0.01** | **7.09s ± 0.03** | **16.67s ± 0.09** |
+| **ND** | 33.0s ± 31.4 | 220.9s ± 182 | 192.9s ± 281 | 329.1s ± 554 |
 
-#### Application-Level Overhead
+**Key Result**: At 1080p, Deloxide (16.67s) is **9% faster** than the baseline parking_lot (18.32s) and significantly more stable (CV < 0.6%) than STD.
 
-**Producer-Consumer Benchmark** (High contention scenario with multiple producers/consumers accessing a shared queue):
+### 4. Heisenbug Manifestation Rates (Stress Testing)
+Comparison of manifestation rates (1000 iterations) across different strategies. **Active stress testing is required to find latent bugs.**
 
-| Configuration | 4x4 Threads | 16x16 Threads | 64x64 Threads |
-| :--- | :--- | :--- | :--- |
-| **Std** | 306.2 ± 2.57 µs | 942.1 ± 92.47 µs | 4.2 ± 0.02 ms |
-| **ParkingLot** | 222.7 ± 9.47 µs | 1264.7 ± 36.94 µs | 8.8 ± 0.46 ms |
-| **Deloxide** | 1553.8 ± 26.35 µs | 19.5 ± 0.88 ms | 308.7 ± 73.88 ms |
-| `Deloxide+LockOrder` | 18.6 ± 0.64 ms | 359.5 ± 27.24 ms | - |
-| `Deloxide+StressComp` | 120.0 ± 1.66 ms | 474.1 ± 56.33 ms | - |
-| **NoDeadlocks** | 16.4 ± 12.97 s | - | - |
+<img src="images/manifestation_rate.png" alt="Manifestation Rates" width="600">
 
-**RwLock Concurrent Reads Benchmark** (Multiple readers accessing shared data):
+| Scenario | DX (Passive) | DX (RAND) | DX (AGG) | **DX (COMP)** | PL+DD | ND |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `dining_philosophers` | 40.3% | 65.4% | 83.6% | **98.7%** | 54.1% | 75.5% |
+| `five_lock_cycle` | 100.0% | 100.0% | 100.0% | **100.0%** | 100.0% | 99.4% |
+| `rwlock_deadlock` | 41.5% | 71.1% | 88.1% | **100.0%** | 60.4% | 100.0% |
+| `three_lock_cycle` | 88.7% | 98.7% | 99.4% | **100.0%** | 77.4% | 98.7% |
+| `two_lock` | 17.6% | 57.2% | 81.8% | **98.7%** | 25.2% | 73.6% |
+| **Average Rate** | **57.6%** | **78.5%** | **90.6%** | **99.5%** | **63.4%** | **89.4%** |
 
-| Configuration | 4 Threads | 16 Threads | 64 Threads |
-| :--- | :--- | :--- | :--- |
-| **Std** | 264.2 ± 2.75 µs | 6.7 ± 0.43 ms | 29.0 ± 2.31 ms |
-| **ParkingLot** | 298.3 ± 3.73 µs | 3.0 ± 0.04 ms | 14.1 ± 0.26 ms |
-| **Deloxide** | 575.3 ± 6.88 µs | 3.1 ± 0.04 ms | 31.7 ± 1.35 ms |
-| `Deloxide+LockOrder` | 578.4 ± 7.16 µs | 3.0 ± 0.05 ms | 30.9 ± 4.42 ms |
-| `Deloxide+StressComp` | 613.0 ± 35.61 µs | 3.2 ± 0.11 ms | 38.7 ± 6.06 ms |
-| **NoDeadlocks** | 21.6 ± 0.05 ms | - | - |
+### 5. False Positive Analysis
+Deloxide (WFG) achieved **0 False Positives**, utilizing a mathematically rigorous cycle detection algorithm.
+- **Tested Patterns**: Gate Guarded, Lock-Free Intervals, Lock Order Inversion, Thread-Local Hierarchies.
+- **Result**: Perfect specificity.
 
-**Analysis:**
-- Under high contention (producer-consumer), Deloxide is 5-20x slower than std, but still completes in milliseconds
-- For read-heavy workloads (concurrent reads), overhead is much lower (2-3x)
-- Lock order checking adds minimal overhead in real applications
-- NoDeadlocks is 10-1000x slower than Deloxide, making it impractical for many scenarios
+### 6. Comprehensive Feature Comparison
 
-### 2. Deadlock Detection Capability
-
-The primary goal of `Deloxide` is to find deadlocks quickly and reliably. We focus on detecting **Heisenbugs**—elusive deadlocks that only manifest under specific, rare thread interleavings and often disappear when you try to debug them. These bugs are notoriously difficult to reproduce and find in testing.
-
-We tested 140 different configurations across 14 deadlock scenarios. For fairness and reproducibility, all tests used **fixed random seeds**, ensuring each detector faced identical thread scheduling conditions. This allows for direct comparison of detection capabilities.
-
-#### Detection Rate Summary
-
-**Heisenbug Deadlock Scenarios** (1000 runs each with fixed seed):
-
-| Scenario | Deloxide | +LockOrder | +Random | +Random+LO | +Aggressive | +Agg+LO | +Component | +Comp+LO | ParkingLot | NoDeadlocks |
-|:---------|:--------:|:----------:|:-------:|:----------:|:-----------:|:-------:|:----------:|:--------:|:----------:|:-----------:|
-| **Two Lock** | 25.6% | **100.0%** | 66.3% | 99.8% | 74.7% | **100.0%** | 28.4% | **100.0%** | 31.5% | 63.6% |
-| **Two Lock (2t)** | 39.2% | **100.0%** | 84.6% | **100.0%** | 91.4% | **100.0%** | 48.2% | **100.0%** | 56.4% | 99.7% |
-| **Two Lock (4t)** | 76.0% | **100.0%** | 97.9% | **100.0%** | 99.7% | **100.0%** | 79.4% | **100.0%** | 76.1% | 74.5% |
-| **Two Lock (8t)** | 93.6% | **100.0%** | 99.9% | **100.0%** | **100.0%** | **100.0%** | 99.1% | **100.0%** | 91.6% | 94.8% |
-| **Two Lock (16t)** | 99.5% | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | 99.0% | 99.9% |
-| **Three Lock Cycle** | 89.1% | **100.0%** | 99.6% | **100.0%** | 99.8% | **100.0%** | **100.0%** | **100.0%** | 79.1% | 98.6% |
-| **Five Lock Cycle** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** |
-| **RwLock Deadlock** | 32.4% | **100.0%** | 80.5% | **100.0%** | 91.0% | **100.0%** | 33.6% | 99.9% | 59.0% | 99.9% |
-| **Dining Philosophers** | 66.5% | 66.9% | 93.6% | 92.6% | 95.6% | 95.4% | 75.7% | 79.5% | 52.9% | 75.3% |
-
-**Guaranteed Deadlock Scenarios** (250 runs each):
-
-All configurations achieved **100% detection rate** across all guaranteed deadlock scenarios, including:
-- Guaranteed Two Lock
-- Guaranteed Three Lock  
-- Guaranteed RwLock Deadlock
-- Guaranteed Dining Philosophers
-- Guaranteed Condvar Deadlock
-
-#### Detection Speed
-
-Average time to detect deadlock (milliseconds):
-
-| Scenario | Deloxide | +LockOrder | +Random | +Agg | +Component | ParkingLot | NoDeadlocks |
-|:---------|:--------:|:----------:|:-------:|:----:|:----------:|:----------:|:-----------:|
-| **Two Lock** | 1.69 | **1.54** | 18.26 | 9.81 | 15.96 | 1.57 | 1100.37 |
-| **Two Lock (2t)** | 1.55 | **1.53** | 17.01 | 9.23 | 16.08 | 1.54 | 1092.56 |
-| **Two Lock (4t)** | 0.77 | **0.04** | 3.74 | 1.29 | 9.38 | 0.42 | 1400.35 |
-| **Two Lock (8t)** | 0.42 | **0.11** | 0.86 | 0.19 | 7.25 | 0.37 | 1943.13 |
-| **Two Lock (16t)** | 0.37 | **0.25** | 0.35 | 0.30 | 0.79 | 0.36 | 2619.03 |
-| **Three Lock** | 1.55 | **1.53** | 23.64 | 12.91 | 19.90 | 1.59 | 1325.65 |
-| **Five Lock** | 1.59 | **1.57** | 37.85 | 20.46 | 22.06 | 1.64 | 3093.64 |
-| **RwLock Deadlock** | 1.61 | **1.55** | 16.80 | 9.27 | 15.78 | 1.56 | 1088.95 |
-| **Dining Philosophers** | 1.61 | **1.57** | 37.77 | 19.84 | 20.68 | 1.65 | 3252.39 |
-
-**Key Findings:**
-- **Lock Order Graph detection is fastest**: Detects deadlocks in ~0.04-1.6ms on average (100-10000x faster than NoDeadlocks)
-- **ParkingLot is fast but misses bugs**: Similar speed to Deloxide (~1.5ms) but much lower detection rates (31-79%)
-- **Stress testing trades speed for detection rate**: Random/Aggressive modes take 10-40ms but catch 95-100% of bugs
-- **NoDeadlocks is 50-2000x slower**: Takes 1-3 seconds to detect what Deloxide finds in microseconds/milliseconds
-- **Scaling improves detection speed**: With more threads (16t), even basic Deloxide detects in 0.37ms
-- **Guaranteed deadlocks detected instantly**: All detectors find these in <2ms
-
-### 3. False Positive Analysis
-
-A deadlock detector must be reliable. We tested 90 configurations of deadlock-free code (10 runs each) across 9 different scenarios to ensure no false alarms.
-
-**False Positive Test Results:**
-
-| Test Category | Configurations Tested | False Positives (Wait-For) | Known FP (Lock Order) |
-|:--------------|:---------------------:|:--------------------------:|:---------------------:|
-| **Traditional FP Tests** | 70 | **0** | 0 |
-| **Lock Order FP Tests** | 20 | **0** | 8 |
-| **Total** | 90 | **0** | 8 |
-
-**Test Scenarios:**
-1. **Gate Guarded**: Threads lock A→B or B→A, but use a gate to prevent circular waits
-2. **Four Hierarchical**: Locks always acquired in consistent order (A→B→C→D)
-3. **Conditional Locking**: Lock acquisition depends on runtime conditions
-4. **Lock-Free Intervals**: Threads release all locks between critical sections
-5. **Producer-Consumer**: Proper condvar-based synchronization
-6. **Read-Dominated**: Heavy read-lock usage with occasional writes
-7. **Thread-Local Hierarchy**: Each thread has its own lock hierarchy
-8. **Complex Lock Order**: Multiple valid lock orders that don't create cycles
-9. **Lock Order Inversion**: Apparent inversions that are actually safe
-
-**False Positive Test Execution Times** (average across 10 runs):
-
-| Test Scenario | Deloxide | +LockOrder | +StressComp | ParkingLot | NoDeadlocks |
-|:--------------|:--------:|:----------:|:-----------:|:----------:|:-----------:|
-| **Gate Guarded** | 0.52s | 0.52s | 0.51s | 0.47s | 0.58s |
-| **Four Hierarchical** | 0.66s | 0.66s | 0.69s | 0.63s | 11.73s |
-| **Conditional Locking** | 25.55s | 25.56s | 26.83s | 24.12s | 654.32s |
-| **Lock-Free Interval** | 1.11s | 1.11s | 1.12s | 0.96s | 1.11s |
-| **Producer-Consumer** | 0.70s | 0.71s | 0.72s | 0.59s | 14.09s |
-| **Read-Dominated** | 2.07s | 2.07s | 5.21s | 1.79s | 19.30s |
-| **Thread-Local Hierarchy** | 25.69s | 25.73s | 28.41s | 22.68s | 318.44s |
-| **Complex Lock Order** | 0.06s | 0.07s | 0.11s | 0.06s | 0.06s |
-| **Lock Order Inversion** | 0.06s | 0.06s | 0.07s | 0.05s | 0.06s |
-
-**Analysis:**
-- **Zero unexpected false positives**: Wait-for graph detection is 100% accurate across all scenarios
-- **Lock order graph limitations**: 8 known false positives in scenarios with complex but safe lock ordering patterns
-  - These are inherent limitations of static lock order analysis
-  - Wait-for graph detection correctly identifies these as safe
-- **All detectors passed**: Deloxide, ParkingLot, and NoDeadlocks all showed zero false positives on traditional tests
-- **Performance on deadlock-free code**: Deloxide performs similarly to ParkingLot, while NoDeadlocks is 1-27x slower on complex scenarios
-
-### 4. Summary & Comparison
-
-#### Detector Comparison
-
-| Feature | std::sync | parking_lot | Deloxide | Deloxide +stress | no_deadlocks |
-|:--------|:---------:|:-----------:|:--------:|:----------------:|:------------:|
-| **Performance** |
-| Microbenchmark Overhead | 1x | 1.1x | 7-10x | 1000x+ | 1000x+ |
-| Real Application Overhead | 1x | 0.7-1.2x | 1-2x | 100-500x | 10-1000x |
-| Production Ready | ✅ | ✅ | ✅ | ❌ | ❌ |
-| **Detection** |
-| Heisenbug Detection Rate | ❌ | 31-79% | 26-100% | 95-100% | 64-100% |
-| Detection Speed | N/A | ~1.5ms | 0.04-1.6ms | 10-40ms | 1-3 seconds |
-| False Positives | N/A | 0% | 0% | 0% | 0% |
-| **Features** |
-| Lock Order Graph | ❌ | ❌ | ✅ | ✅ | ❌ |
-| Stress Testing | ❌ | ❌ | ✅ | ✅ | ❌ |
-| Visualization | ❌ | ❌ | ✅ | ✅ | ❌ |
-| Condvar Detection | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Cross-Language (C API) | ❌ | ❌ | ✅ | ✅ | ❌ |
-
-**Note:** All parking_lot results use the deadlock_detection feature enabled.
-
-#### Quick Decision Guide
-
-**Deloxide's Sweet Spot:**
-- **Performance:** 1-2x overhead in real applications (comparable to parking_lot), despite 7-10x in microbenchmarks
-- **Detection:** 95-100% Heisenbug detection with stress testing, 50-2000x faster than no_deadlocks
-- **Features:** Only detector with visualization, lock order graph, stress testing, and full Condvar support
-
-**When to Choose Each:**
-
-| Detector | Best For | Key Advantage | Main Limitation |
-|:---------|:---------|:--------------|:----------------|
-| **std::sync** | Maximum performance, no detection needed | Fastest (baseline) | No deadlock detection |
-| **parking_lot** | Basic detection with minimal overhead | Fast + 31-79% detection | Misses many Heisenbugs, no Condvar detection |
-| **Deloxide** | Development, testing, production monitoring | 95-100% detection + visualization + 1-2x overhead | 7-10x microbenchmark overhead |
-| **Deloxide +stress** | CI/CD, hunting elusive bugs | 95-100% detection guaranteed | High overhead (testing only) |
-| **no_deadlocks** | When speed doesn't matter | High detection rates | 1-3 second detection time |
-
-#### Recommendation by Use Case
-
-| Your Scenario | Choose This |
-|:--------------|:------------|
-| **Production (performance-critical)** | std::sync or parking_lot without detection |
-| **Production (moderate performance)** | Deloxide or parking_lot (1-2x overhead acceptable) |
-| **Development & debugging** | Deloxide (visualization + better detection) |
-| **CI/CD & testing** | Deloxide +stress (95-100% detection) |
-| **Hunting Heisenbugs** | Deloxide +aggressive or +component stress |
-| **Need visualization or C API** | Deloxide (unique features) |
-
-**Bottom Line:** Deloxide offers the best balance—catching 95-100% of Heisenbugs with only 1-2x real-world overhead, 50-2000x faster detection than alternatives, plus unique features like visualization and cross-language support. Use it for development, testing, and production monitoring. Only skip it if you need absolute maximum performance or are certain your code is deadlock-free.
-- ✅ Production monitoring (without stress testing)
-- ✅ Debugging hard-to-reproduce deadlocks
-- ⚠️ Not recommended for ultra-low-latency systems with heavy lock contention
-
-This project is my graduation project so I will share the full test suite repo after my defense.
+| Feature | STD | PL+DD | ND | **DX** |
+| :--- | :--- | :--- | :--- | :--- |
+| **Mutex Overhead** | 0.88x | 1.00x | 1063.33x | **1.09x** |
+| **Ray Tracing (1080p)** | 0.94x | 1.00x | 17.96x | **0.91x (Faster)** |
+| **Detection Method** | None | Async (Poll) | Synchronous | **Synchronous (Instant)** |
+| **Lock Order Analysis** | No | No | No | **Yes** |
+| **Stress Testing** | No | No | No | **Yes** |
+| **Visualization** | No | No | Text Dump | **Interactive URL** |
+| **False Positive Rate** | N/A | Zero | Zero | **Zero (WFG)** |
 
 ## License
 

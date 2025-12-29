@@ -77,7 +77,6 @@ impl Detector {
 
         // Apply stress testing
 
-
         // Determine the effective owner.
         // Priority: Global state > Atomic hint (if validated or waking from Condvar).
         let effective_owner = self.mutex_owners.get(&lock_id).copied().or_else(|| {
@@ -246,8 +245,6 @@ pub fn acquire_slow(
     lock_id: LockId,
     potential_owner: Option<ThreadId>,
 ) -> Option<DeadlockInfo> {
-    
-
     // 1. Calculate stress delay (holding lock)
     #[cfg(feature = "stress-test")]
     let delay = {

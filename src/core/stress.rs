@@ -9,11 +9,7 @@ use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
-
-
 use rand::{Rng, rng};
-
-
 
 /// Stress testing modes available in Deloxide
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -168,7 +164,12 @@ pub fn apply_delay(min_us: u64, max_us: u64) {
 
 /// Perform a random preemption if probability check passes
 #[allow(unused_variables)]
-pub fn try_random_preemption(thread_id: ThreadId, lock_id: LockId, held_locks: &[LockId], config: &StressConfig) -> Option<u64> {
+pub fn try_random_preemption(
+    thread_id: ThreadId,
+    lock_id: LockId,
+    held_locks: &[LockId],
+    config: &StressConfig,
+) -> Option<u64> {
     // Only apply random preemption if the thread already holds locks.
     // This prevents "random backoff" which can desynchronize threads and prevent deadlocks.
     if held_locks.is_empty() {
@@ -191,7 +192,7 @@ pub fn try_random_preemption(thread_id: ThreadId, lock_id: LockId, held_locks: &
         // Calculate delay
         let min_us = config.min_delay_us;
         let max_us = config.max_delay_us;
-        
+
         let delay_us = if min_us == max_us {
             min_us
         } else {
@@ -205,7 +206,12 @@ pub fn try_random_preemption(thread_id: ThreadId, lock_id: LockId, held_locks: &
 
 /// Apply component-based delay strategy
 #[allow(unused_variables)]
-pub fn apply_component_delay(thread_id: ThreadId, lock_id: LockId, held_locks: &[LockId], config: &StressConfig) -> Option<u64> {
+pub fn apply_component_delay(
+    thread_id: ThreadId,
+    lock_id: LockId,
+    held_locks: &[LockId],
+    config: &StressConfig,
+) -> Option<u64> {
     if held_locks.is_empty() {
         return None;
     }
@@ -232,7 +238,7 @@ pub fn apply_component_delay(thread_id: ThreadId, lock_id: LockId, held_locks: &
         // Calculate delay
         let min_us = config.min_delay_us;
         let max_us = config.max_delay_us;
-        
+
         let mut rng = rng();
         let delay_us = if min_us == max_us {
             min_us
@@ -256,7 +262,9 @@ pub fn calculate_stress_delay(
     match mode {
         StressMode::None => None,
 
-        StressMode::RandomPreemption => try_random_preemption(thread_id, lock_id, held_locks, config),
+        StressMode::RandomPreemption => {
+            try_random_preemption(thread_id, lock_id, held_locks, config)
+        }
 
         StressMode::ComponentBased => apply_component_delay(thread_id, lock_id, held_locks, config),
     }

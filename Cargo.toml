@@ -22,7 +22,7 @@ required-features = ["logging-and-visualization"]
 
 [features]
 default = [] # Fast production build: no logging overhead.
-logging-and-visualization = ["dep:crossbeam-channel"] # Enable structured logging + visualization support
+logging-and-visualization = ["dep:crossbeam-channel"] # Enable structured logging and visualization support
 stress-test = [] # for stress testing functionality
 lock-order-graph = [] # for lock order graph functionality
 

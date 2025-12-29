@@ -70,10 +70,10 @@ impl WaitForGraph {
     /// * ⁠ None ⁠ - If no cycle would be created
     pub fn add_edge(&mut self, from: ThreadId, to: ThreadId) -> Option<Vec<ThreadId>> {
         // Optimization: Do not perform BFS if the edge already exists
-        if let Some(targets) = self.edges.get(&from) {
-            if targets.contains(&to) {
-                return None;
-            }
+        if let Some(targets) = self.edges.get(&from)
+            && targets.contains(&to)
+        {
+            return None;
         }
 
         // Check if adding this edge would create a cycle
@@ -121,18 +121,18 @@ impl WaitForGraph {
     /// * ⁠ to ⁠ - The target thread
     pub fn remove_edge(&mut self, from: ThreadId, to: ThreadId) {
         // Remove from forward graph
-        if let Some(neighbors) = self.edges.get_mut(&from) {
-            if neighbors.remove(&to) {
-                if neighbors.is_empty() {
-                    self.edges.remove(&from);
-                }
+        if let Some(neighbors) = self.edges.get_mut(&from)
+            && neighbors.remove(&to)
+        {
+            if neighbors.is_empty() {
+                self.edges.remove(&from);
+            }
 
-                // Remove from reverse graph
-                if let Some(waiters) = self.incoming_edges.get_mut(&to) {
-                    waiters.remove(&from);
-                    if waiters.is_empty() {
-                        self.incoming_edges.remove(&to);
-                    }
+            // Remove from reverse graph
+            if let Some(waiters) = self.incoming_edges.get_mut(&to) {
+                waiters.remove(&from);
+                if waiters.is_empty() {
+                    self.incoming_edges.remove(&to);
                 }
             }
         }

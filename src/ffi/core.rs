@@ -25,7 +25,7 @@ use crate::ffi::{STRESS_CONFIG, STRESS_MODE};
 /// * `1` if the detector is already initialized
 /// * `-1` if the log path contains invalid UTF-8
 /// * `-2` if the logger failed to initialize
-/// * `-3` if logging was requested but the `logging-and-visualization` feature is disabled
+/// * `-3` if logging was requested but the `logging` feature is disabled
 ///
 /// # Safety
 /// This function dereferences raw pointers (`log_path`) and writes to mutable global statics:
@@ -74,7 +74,7 @@ pub unsafe extern "C" fn deloxide_init(
         #[cfg(not(feature = "logging-and-visualization"))]
         {
             if log_path_option.is_some() {
-                return -3; // Logging requires the logging-and-visualization feature
+                return -3; // Logging requires the logging feature
             }
             IS_LOGGING_ENABLED.store(false, Ordering::SeqCst);
         }

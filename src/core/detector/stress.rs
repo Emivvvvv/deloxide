@@ -31,12 +31,11 @@ impl crate::core::Detector {
         _thread_id: crate::core::ThreadId,
         _lock_id: crate::core::LockId,
     ) {
-        if self.stress_mode != crate::core::stress::StressMode::None {
-            if let Some(config) = &self.stress_config {
-                if config.preempt_after_release {
-                    std::thread::yield_now();
-                }
-            }
+        if self.stress_mode != crate::core::stress::StressMode::None
+            && let Some(config) = &self.stress_config
+            && config.preempt_after_release
+        {
+            std::thread::yield_now();
         }
     }
 }

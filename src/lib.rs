@@ -162,7 +162,7 @@
 //! # }
 //! # #[cfg(not(feature = "logging-and-visualization"))]
 //! # {
-//! #     // This example requires the `logging-and-visualization` feature.
+//! #     // This example requires the `visualization` feature.
 //! # }
 //! ```
 //!
