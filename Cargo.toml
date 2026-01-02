@@ -1,10 +1,10 @@
 [package]
 name = "deloxide"
-version = "0.4.0"
+version = "1.0.0"
 authors = ["Emirhan Tala <tala.emirhan@gmail.com>", "Ulaş Can Demirbağ <ulascandemirbag@gmail.com>"]
 edition = "2024"
 description = "Deloxide scrubs your threads clean by detecting deadlocks in real time—keeping your system smooth, safe, and corrosion-free. 🦀🧼🔒"
-license-file = "LICENSE"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/Emivvvvv/deloxide"
 documentation = "https://docs.rs/deloxide"
 keywords = ["deadlock", "concurrency", "debug", "visualization"]

@@ -1,85 +1,150 @@
 # <img src='images/deloxide_logo_orange.png' height='25'> Deloxide - Cross-Language Deadlock Detector
 
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
-[![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE)
+[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+[![License: Coffeeware](https://img.shields.io/badge/License-Coffeeware-brown.svg)](LICENSE-COFFEE)
 
 Deloxide is a cross-language deadlock detection library with visualization support. It tracks mutex and reader-writer lock operations in multi-threaded applications to detect, report, and visualize potential deadlocks in real-time.
+
+## Table of Contents
+- [Features](#features)
+- [Building and Installation](#building-and-installation)
+- [Quick Start](#quick-start)
+  - [Rust](#rust)
+  - [C](#c)
+- [Visualization](#visualization)
+- [Project Architecture](#project-architecture)
+- [Lock Order Graph](#lock-order-graph)
+- [Stress Testing](#stress-testing)
+- [Comparison with Other Solutions](#comparison-with-other-solutions)
+- [Performance & Validation](#performance--validation)
+- [Documentation](#documentation)
+- [License](#license)
 
 ## Features
 
 - **Real-time deadlock detection** - Detects deadlocks as they happen using a Dual Detection Architecture (WFG + LOG)
 - **Zero False Positives** - Wait-For Graph (WFG) analysis ensures 100% precision for active deadlocks
-- **Optimistic Fast Path** - "Always-on" monitoring with negligible overhead (1.09x baseline / ~10.8ns)
+- **Optimistic Fast Path** - "Always-on" monitoring with negligible overhead
 - **Cross-language support** - Core implementation in Rust with C bindings
-- **Stress Testing Framework** - Probabilistic scheduling with Component-Based Targeting (99.5% Heisenbug manifestation)
-- **Visual Diagnostics** - Serverless, privacy-preserving visualization of thread interactions (see [example](https://deloxide.vercel.app/?logs=H4sIAAAAAAAC_03NvQrCMBSG4ZNEHKqDiOIipYMWi1ROo_2hm4uDo3hlkVyAk-DgjejmZNE7cLVdPcWkOD688H3qCT0NrHVdF_77M57cmAbOjaYnkmgb-S-mOYDRLCKxgdUGSEOrLYk7VundaHasLSbhGAdataxWDFs1DsGNaNCvlkVqzUt5JwjOqnP-_qk-Njq_5yVQEHxYVSnCvBHp5EGYeYhZHcyyhfJrnExSpNsySdI-aIX6996tkRAQAA
-  ) here)
+- **Stress Testing Framework** - Probabilistic scheduling with Component-Based Targeting
+- **Visual Diagnostics** - Serverless, privacy-preserving visualization of thread interactions (see [example](https://deloxide.vercel.app/?logs=H4sIAAAAAAAC_0XNPQ4BURQF4PvO9f9fEJ3ohbw3QZjOAnRswApsQWEDT5hEYTqNnSBBScQSdEqJm5hH-eWcnGPvVAqIVOwwuI1flc3-pihQBEQ-PsQgTkQ-TcUMosjnnTgGVXa-EgVxqIrzU5wAMpEvM3ESyDrPxSlwzXklTgM557U4w7-_y1H-suz2wnAoeY7dXhguxXnmuvObEBTw778lL7Kqfr0tTYgWFmwtYFld6572uk1tmtobmbbvGd_oVqff7hnT0NrX-gNrXS3fMQEAAA==) here)
 - **Easy integration** - Drop-in replacements for `parking_lot` primitives
 
 > [!NOTE]
 > Cross-platform support: Rust API works on Windows, macOS, and Linux. The C API is POSIX-first and ships with pthread-based convenience macros for macOS/Linux; on Windows those macros are disabled (see below) but the core C functions are fully usable.
 
-## Project Architecture
+## Building and Installation
 
-### How Deloxide Works
+### Rust
 
-1. **Initialization**: The application initializes Deloxide. Logging and lock order checking are enabled by default if their respective features are active.
+Deloxide is available on crates.io. You can add it as a dependency in your `Cargo.toml`:
 
-2. **Resource Creation**: When threads, mutexes, and reader-writer locks are created, they're registered with the deadlock detector.
+```toml
+[dependencies]
+deloxide = "1.0"
+```
 
-3. **Lock Operations**: When a thread attempts to acquire a lock:
-   - **Optimistic Fast Path**: The system first attempts a fast-path acquisition using atomic operations. If successful (uncontended), it bypasses the detector entirely (zero overhead).
-   - **Slow Path (Contended)**: If the lock is held, the attempt is recorded by the detector.
-   - A "wait-for" edge is added to the graph.
-   - The detector checks for cycles in the "wait-for" graph.
-   - If a cycle is found, a deadlock is reported.
+With lock order graph:
 
-4. **Deadlock Detection**: When a deadlock is detected, the callback is invoked with detailed information, including which threads are involved and which locks they're waiting for.
+```toml
+[dependencies]
+deloxide = { version = "1.0", features = ["lock-order-graph"] }
+```
 
-5. **Visualization**: The `showcase` function can be called (automatically in the callback or manually) to visualize the thread-lock interactions in a web browser.
+With stress testing:
 
-### Core Components
+```toml
+[dependencies]
+deloxide = { version = "1.0", features = ["stress-test"] }
+```
 
-1. **Dual Detection Engine**
-   - **Wait-For Graph (WFG)**: The default, reactive tier. Detects active circular dependencies with mathematical certainty (0 false positives).
-   - **Lock Order Graph (LOG)**: An optional, proactive tier. Analyzes historical acquisition patterns to warn about potential deadlocks before they occur (requires `lock-order-graph` feature).
+With logging and visualization:
 
-<img src="images/architecture.png" alt="System Architecture" width="800">
+```toml
+[dependencies]
+deloxide = { version = "1.0", features = ["logging-and-visualization"] }
+```
 
-2. **Optimistic Fast Path**
-   - Implements an "Optimistic Fast Path" architecture using atomic release-acquire semantics.
-   - Bypasses the global detector entirely for uncontended locks.
-   - Lowers instrumentation overhead to just **~10.8ns** (1.09x of standard `parking_lot`), enabling "always-on" production monitoring.
+Or install the CLI tool to showcase deadlock logs directly:
 
-3. **Stress Testing Framework** (Optional)
-   - Employs **Probabilistic Concurrency Testing (PCT)** to expose Heisenbugs.
-   - **Component-Based Targeting**: Intelligently injects delays into interacting lock groups.
-   - Achieves a **99.5% manifestation rate** for latent deadlocks (vs 63.4% for passive tools).
+```bash
+cargo install deloxide
+deloxide my_deadlock.log  # Opens visualization in browser
+```
 
-4. **Resource Tracking**
-   - Tracks threads and locks as resources with lifecycles
-   - Manages parent-child relationships between threads
-   - Automatically cleans up resources when threads exit
+For development builds:
 
-5. **Visualization Pipeline**
-   - **Serverless Sharing**: Compresses logs into URL-safe Base64 payloads (MessagePack + Gzip).
-   - **Privacy-First**: All decoding and rendering happens client-side; no data is sent to external servers.
-   - Provides interactive timelines and dependency graphs.
-   
-   <img src="images/visualization.png" alt="Visualization Interface" width="800">
+```bash
+# Standard build
+cargo build --release
 
-6. **Cross-Language Support**
-   - Rust API with `Mutex`, `RwLock`, `Condvar`, and `thread` module
-   - C API through FFI bindings in `deloxide.h`
-   - Simple macros for C to handle common operations
+# With lock order graph feature
+cargo build --release --features lock-order-graph
 
+# With stress testing feature
+cargo build --release --features stress-test
 
+# With both features
+cargo build --release --features lock-order-graph,stress-test
+```
+
+### C
+
+For C programs, you'll need to compile the Rust library and link against it:
+
+```bash
+# Build the Rust library
+cargo build --release
+
+# With lock order graph feature
+cargo build --release --features lock-order-graph
+
+# With stress testing feature
+cargo build --release --features stress-test
+
+# With both features
+cargo build --release --features lock-order-graph,stress-test
+
+# Compile your C program with Deloxide
+gcc -Iinclude your_program.c -Ltarget/release -ldeloxide -lpthread -o your_program
+```
+
+A Makefile is included in the repository to simplify building and testing with C programs.
+It handles building the Rust library and compiling the C test programs automatically.
+
+### C API portability notes
+
+- Thread ID size across FFI
+  - The C header uses `uintptr_t` for all thread IDs; the Rust side uses `usize`. This ensures correct sizes on LP64 (Linux/macOS) and LLP64 (Windows).
+
+- pthread-based helpers are POSIX-only
+  - The convenience macros `DEFINE_TRACKED_THREAD` and `CREATE_TRACKED_THREAD` depend on `pthread.h` and are available only on non-Windows platforms.
+  - On Windows, these macros are disabled at compile time. You can still use the full C API by manually registering thread lifecycle events.
+
+- Manual thread registration (Windows or custom runtimes)
+  1. Create your thread using your platform's API.
+  2. In the thread entry, call `deloxide_register_thread_spawn(child_tid, parent_tid)` once. On the thread, get IDs from `deloxide_get_thread_id()`.
+  3. Before the thread returns, call `deloxide_register_thread_exit(current_tid)`.
+
+  Minimal example sketch (pseudo-C):
+
+  ```c
+  // In parent, capture parent thread id
+  uintptr_t parent_tid = deloxide_get_thread_id();
+  // Create thread with OS API (e.g., _beginthreadex / CreateThread)
+  // In child thread entry:
+  uintptr_t child_tid = deloxide_get_thread_id();
+  deloxide_register_thread_spawn(child_tid, parent_tid);
+  // ... user work ...
+  deloxide_register_thread_exit(child_tid);
+  ```
 
 ## Quick Start
 
 ### Rust
 
-Deloxide provides drop-in replacements for standard synchronization primitives with deadlock detection capabilities. All primitives wrap parking_lot implementations and add unique identifiers for tracking and visualization.
+Deloxide provides drop-in replacements for `parking_lot` synchronization primitives with added deadlock detection capabilities. These primitives are API-compatible with `parking_lot` and serve as near drop-in replacements for `std::sync` (requiring only the removal of `.unwrap()` calls since poisoning is not supported).
 
 #### deloxide::thread
 
@@ -133,7 +198,7 @@ It automatically registers thread spawn/exit events for deadlock detection, visu
 
 #### Deloxide::Mutex
 
-A drop-in replacement for `std::sync::Mutex` (based on `parking_lot::Mutex`) with tracking:
+A drop-in replacement for `parking_lot::Mutex`. It is also a direct alternative to `std::sync::Mutex`, but without lock poisoning (removing the need for `.unwrap()` on lock acquisition):
 
 ```rust
 pub struct Mutex<T> {
@@ -149,6 +214,7 @@ impl<T> Mutex<T> {
     pub fn into_inner(self) -> T where T: Sized;
     pub fn get_mut(&mut self) -> &mut T;
     pub fn id(&self) -> LockId;
+    pub fn creator_thread_id(&self) -> ThreadId;
 }
 
 impl<T: Default> Default for Mutex<T> { /* ... */ }
@@ -159,7 +225,7 @@ All `std::sync::Mutex` methods are supported (except poisoning-related ones, as 
 
 #### Deloxide::RwLock
 
-A drop-in replacement for `std::sync::RwLock` (based on `parking_lot::RwLock`) with tracking:
+A drop-in replacement for `parking_lot::RwLock`. It is also a direct alternative to `std::sync::RwLock`, but without lock poisoning:
 
 ```rust
 pub struct RwLock<T> {
@@ -177,6 +243,7 @@ impl<T> RwLock<T> {
     pub fn into_inner(self) -> T where T: Sized;
     pub fn get_mut(&mut self) -> &mut T;
     pub fn id(&self) -> LockId;
+    pub fn creator_thread_id(&self) -> ThreadId;
 }
 
 impl<T: Default> Default for RwLock<T> { /* ... */ }
@@ -187,7 +254,7 @@ All `std::sync::RwLock` methods are supported (except poisoning-related ones).
 
 #### Deloxide::Condvar
 
-A drop-in replacement for `std::sync::Condvar` (based on `parking_lot::Condvar`) with tracking:
+A drop-in replacement for `parking_lot::Condvar`. It serves as a replacement for `std::sync::Condvar` but interacts with `Deloxide::Mutex`.
 
 ```rust
 pub struct Condvar {
@@ -225,7 +292,7 @@ use std::time::Duration;
 
 fn main() {
     // Initialize the detector with logging and visualization
-    // (requires the `visualization` feature)
+    // (requires the `logging-and-visualization` feature)
     // (Logging is enabled by default to "deloxide.log" if the feature is active)
     Deloxide::new()
         .callback(|info| {
@@ -361,6 +428,11 @@ uintptr_t deloxide_get_thread_id();
 int deloxide_flush_logs();
 int deloxide_showcase(const char* log_path);
 int deloxide_showcase_current();
+
+// Stress Testing (requires "stress-test" feature)
+int deloxide_enable_random_stress(double probability, unsigned long min_delay_us, unsigned long max_delay_us);
+int deloxide_enable_component_stress(unsigned long min_delay_us, unsigned long max_delay_us);
+int deloxide_disable_stress();
 ```
 
 #### Helper Macros
@@ -560,10 +632,85 @@ int main() {
 }
 ```
 
-#### C API Portability Notes
+## Visualization
 
-- **Linux/macOS**: Full pthread support, all features available
-- **Windows**: Requires pthread-compatible library. Refer to [C API portability notes]
+Deloxide includes a web-based visualization tool. After detecting a deadlock, use the showcase feature to view it in your browser:
+
+```rust
+// In Rust
+deloxide::showcase("deadlock_log.log").expect("Failed to launch visualization");
+
+// Or for the currently active log
+deloxide::showcase_this().expect("Failed to launch visualization");
+```
+
+```c
+// In C
+deloxide_showcase("deadlock_log.log");
+
+// Or for the currently active log
+deloxide_showcase_current();
+```
+
+You can also automatically launch the visualization when a deadlock is detected by calling the showcase function in your deadlock callback.
+
+Additionally, you can manually upload a log file to visualize deadlocks through the web interface:
+
+[Deloxide Showcase](https://deloxide.vercel.app/)
+
+## Project Architecture
+
+### How Deloxide Works
+
+1. **Initialization**: The application initializes Deloxide. Logging and lock order checking are enabled by default if their respective features are active.
+
+2. **Resource Creation**: When threads, mutexes, and reader-writer locks are created, they're registered with the deadlock detector.
+
+3. **Lock Operations**: When a thread attempts to acquire a lock:
+   - **Optimistic Fast Path**: The system first attempts a fast-path acquisition using atomic operations. If successful (uncontended), it bypasses the detector entirely (zero overhead).
+   - **Slow Path (Contended)**: If the lock is held, the attempt is recorded by the detector.
+   - A "wait-for" edge is added to the graph.
+   - The detector checks for cycles in the "wait-for" graph.
+   - If a cycle is found, a deadlock is reported.
+
+4. **Deadlock Detection**: When a deadlock is detected, the callback is invoked with detailed information, including which threads are involved and which locks they're waiting for.
+
+5. **Visualization**: The `showcase` function can be called (automatically in the callback or manually) to visualize the thread-lock interactions in a web browser.
+
+### Core Components
+
+1. **Dual Detection Engine**
+   - **Wait-For Graph (WFG)**: The default, reactive tier. Detects active circular dependencies with mathematical certainty (0 false positives).
+   - **Lock Order Graph (LOG)**: An optional, proactive tier. Analyzes historical acquisition patterns to warn about potential deadlocks before they occur (requires `lock-order-graph` feature).
+
+<img src="images/architecture.png" alt="System Architecture" width="800">
+
+2. **Optimistic Fast Path**
+   - Implements an "Optimistic Fast Path" architecture using atomic release-acquire semantics.
+   - Bypasses the global detector entirely for uncontended locks.
+   - Lowers instrumentation overhead to just **~10.8ns** (1.09x of standard `parking_lot`), enabling "always-on" production monitoring.
+
+3. **Stress Testing Framework** (Optional)
+   - Employs **Probabilistic Concurrency Testing (PCT)** to expose Heisenbugs.
+   - **Component-Based Targeting**: Intelligently injects delays into interacting lock groups.
+   - Achieves a **99.5% manifestation rate** for latent deadlocks (vs 63.4% for passive tools).
+
+4. **Resource Tracking**
+   - Tracks threads and locks as resources with lifecycles
+   - Manages parent-child relationships between threads
+   - Automatically cleans up resources when threads exit
+
+5. **Visualization Pipeline**
+   - **Serverless Sharing**: Compresses logs into URL-safe Base64 payloads (MessagePack + Gzip).
+   - **Privacy-First**: All decoding and rendering happens client-side; no data is sent to external servers.
+   - Provides interactive timelines and dependency graphs.
+   
+   <img src="images/visualization.png" alt="Visualization Interface" width="800">
+
+6. **Cross-Language Support**
+   - Rust API with `Mutex`, `RwLock`, `Condvar`, and `thread` module
+   - C API through FFI bindings in `deloxide.h`
+   - Simple macros for C to handle common operations
 
 ## Lock Order Graph
 
@@ -577,7 +724,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.4", features = ["lock-order-graph"] }
+deloxide = { version = "1.0", features = ["lock-order-graph"] }
 ```
 
 Then use the lock order checking API:
@@ -616,9 +763,6 @@ When a thread holds lock A and then acquires lock B, the system records that A <
 
 Deloxide includes an optional stress testing feature to increase the probability of deadlock manifestation during testing. This feature helps expose potential deadlocks by strategically delaying threads at critical points.
 
-> [!NOTE]
-> All stress delays are now specified in microseconds (`*_us`). If you previously configured `min_delay_ms` / `max_delay_ms`, update your code and FFI calls accordingly.
-
 ### Enabling Stress Testing
 
 #### In Rust:
@@ -627,7 +771,7 @@ Enable the feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deloxide = { version = "0.4", features = ["stress-test"] }
+deloxide = { version = "1.0", features = ["stress-test"] }
 ```
 
 Then use the stress testing API:
@@ -687,152 +831,24 @@ deloxide_init("deadlock.log", deadlock_callback);
 - **Random Preemption**: Randomly delays threads before lock acquisitions with configurable probability
 - **Component-Based**: Analyzes lock acquisition patterns and intelligently targets delays to increase deadlock probability
 
-> [!NOTE]
-> Condvar wake-ups (notify_one/notify_all) trigger a synthesized mutex attempt for the woken thread to model the required mutex re-acquisition. Stress injection occurs on this synthetic mutex attempt (and on normal lock attempts), not directly on the condvar wait/notify operations.
 
-## Building and Installation
+## Comparison with Other Solutions
 
-### Rust
+The Rust ecosystem offers several approaches to concurrency safety, each with distinct trade-offs. Deloxide focuses on bridging the gap between "safe but slow" debugging tools and "fast but unsafe" production primitives.
 
-Deloxide is available on crates.io. You can add it as a dependency in your `Cargo.toml`:
+### The Landscape
 
-```toml
-[dependencies]
-deloxide = "0.4"
-```
+- **Static Analysis**: Tools that check code at compile time. They often suffer from high false positive rates (flagging safe code as dangerous), making them noisy for complex projects.
+- **Passive Dynamic Detection** (`parking_lot`): Monitors locks asynchronously. While fast, it can miss "Heisenbugs" (transient deadlocks) because it doesn't force thread interleavings, and it reports deadlocks only after a delay (polling).
+- **Synchronous Graph Analysis** (`no_deadlocks`): Checks for cycles on *every* lock operation. This guarantees detection but incurs prohibitive overhead (>1000x), making it unusable for real-time applications.
 
-With lock order graph:
+### When to use what?
 
-```toml
-[dependencies]
-deloxide = { version = "0.4", features = ["lock-order-graph"] }
-```
-
-With stress testing:
-
-```toml
-[dependencies]
-deloxide = { version = "0.4", features = ["stress-test"] }
-```
-
-With both features:
-
-```toml
-[dependencies]
-deloxide = { version = "0.4", features = ["lock-order-graph", "stress-test"] }
-```
-
-Or install the CLI tool to showcase deadlock logs directly:
-
-```bash
-cargo install deloxide
-deloxide my_deadlock.log  # Opens visualization in browser
-```
-
-For development builds:
-
-```bash
-# Standard build
-cargo build --release
-
-# With lock order graph feature
-cargo build --release --features lock-order-graph
-
-# With stress testing feature
-cargo build --release --features stress-test
-
-# With both features
-cargo build --release --features lock-order-graph,stress-test
-```
-
-### C
-
-For C programs, you'll need to compile the Rust library and link against it:
-
-```bash
-# Build the Rust library
-cargo build --release
-
-# With lock order graph feature
-cargo build --release --features lock-order-graph
-
-# With stress testing feature
-cargo build --release --features stress-test
-
-# With both features
-cargo build --release --features lock-order-graph,stress-test
-
-# Compile your C program with Deloxide
-gcc -Iinclude your_program.c -Ltarget/release -ldeloxide -lpthread -o your_program
-```
-
-A Makefile is included in the repository to simplify building and testing with C programs.
-It handles building the Rust library and compiling the C test programs automatically.
-
-### C API portability notes
-
-- Thread ID size across FFI
-  - The C header uses `uintptr_t` for all thread IDs; the Rust side uses `usize`. This ensures correct sizes on LP64 (Linux/macOS) and LLP64 (Windows).
-
-- pthread-based helpers are POSIX-only
-  - The convenience macros `DEFINE_TRACKED_THREAD` and `CREATE_TRACKED_THREAD` depend on `pthread.h` and are available only on non-Windows platforms.
-  - On Windows, these macros are disabled at compile time. You can still use the full C API by manually registering thread lifecycle events.
-
-- Manual thread registration (Windows or custom runtimes)
-  1. Create your thread using your platform's API.
-  2. In the thread entry, call `deloxide_register_thread_spawn(child_tid, parent_tid)` once. On the thread, get IDs from `deloxide_get_thread_id()`.
-  3. Before the thread returns, call `deloxide_register_thread_exit(current_tid)`.
-
-  Minimal example sketch (pseudo-C):
-
-  ```c
-  // In parent, capture parent thread id
-  uintptr_t parent_tid = deloxide_get_thread_id();
-  // Create thread with OS API (e.g., _beginthreadex / CreateThread)
-  // In child thread entry:
-  uintptr_t child_tid = deloxide_get_thread_id();
-  deloxide_register_thread_spawn(child_tid, parent_tid);
-  // ... user work ...
-  deloxide_register_thread_exit(child_tid);
-  ```
-
-## Visualization
-
-Deloxide includes a web-based visualization tool. After detecting a deadlock, use the showcase feature to view it in your browser:
-
-```rust
-// In Rust
-deloxide::showcase("deadlock_log.log").expect("Failed to launch visualization");
-
-// Or for the currently active log
-deloxide::showcase_this().expect("Failed to launch visualization");
-```
-
-```c
-// In C
-deloxide_showcase("deadlock_log.log");
-
-// Or for the currently active log
-deloxide_showcase_current();
-```
-
-You can also automatically launch the visualization when a deadlock is detected by calling the showcase function in your deadlock callback.
-
-Additionally, you can manually upload a log file to visualize deadlocks through the web interface:
-
-[Deloxide Showcase](https://deloxide.vercel.app/)
-
-## Documentation
-
-For more detailed documentation:
-
-- Crates.io: `https://crates.io/crates/deloxide`
-- Rust Docs: `https://docs.rs/deloxide`
-- C API: See `include/deloxide.h` and `https://docs.rs/deloxide/latest/deloxide/ffi/index.html`
-
-
-
-
+- **Use `parking_lot` (without detection)**: If **pure raw performance** is the absolute only metric that matters, and you have mathematically proven your system cannot deadlock (e.g., essentially lock-free designs). It avoids the ~1ns atomic overhead of Deloxide's fast path.
+- **Use `deloxide`**: For everything else.
+    - **Development**: Instant feedback and visualization.
+    - **Testing**: Stress testing to find Heisenbugs.
+    - **Production**: The "Optimistic Fast Path" means you get safety netting with negligible cost (and sometimes speedups in high contention).
 
 ## Performance & Validation
 
@@ -841,7 +857,7 @@ Deloxide has been evaluated through a three-tiered testing framework: **Correctn
 ### 1. Methodology
 - **Guaranteed Deadlock Tests**: Validates that the WFG logic detects 100% of deterministic cycles (e.g., barriers enforcing circular wait).
 - **Heisenbug Manifestation**: Uses probabilistic scheduling to force race conditions in non-deterministic scenarios (e.g., Dining Philosophers without barriers).
-- **False Positive Analysis**: Tested against 56 complex "false positive" scenarios (e.g., Gate Guarded, Lock Order Inversion) to ensure 0% false alarm rate.
+- **False Positive Analysis**: Tested against 9 complex "false positive" scenarios (e.g., Gate Guarded, Lock Order Inversion) to ensure 0% false alarm rate.
 
 ### 2. Microbenchmark Overhead
 The "Optimistic Fast Path" ensures minimal impact on atomic operations. Deloxide incurs only ~1ns overhead per lock operation.
@@ -858,7 +874,14 @@ The "Optimistic Fast Path" ensures minimal impact on atomic operations. Deloxide
 > *PL+DD = parking_lot + detection, ND = no_deadlocks. DX (COMP) intentional overhead forces thread interleaving.*
 
 ### 3. Real-World Validation: Ray Tracing
-In a high-contention Ray Tracing case study (1080p, ~4kHz locking), Deloxide demonstrated superior **deterministic stability**.
+
+To rigorously evaluate overhead in a realistic high-performance context, we architected a custom path-tracing renderer in Rust. Unlike data-parallel approaches (like Rayon) that isolate memory, this implementation uses a **shared framebuffer architecture** with a fine-grained tile-based locking strategy (16x16 pixel chunks).
+
+- **Workload**: High-complexity scene with multiple material types and max recursion depth of 50 bounces.
+- **Contention**: At 1080p resolution, workers contend for locks over **129,600 times per frame** (~4kHz locking frequency).
+- **Result**: This specifically targets the "worst-case" scenario for a deadlock detector: high-frequency, fine-grained locking.
+
+In this saturation test, Deloxide demonstrated superior **deterministic stability**.
 
 | Config | 426x240 | 854x480 | 1280x720 | 1920x1080 (Saturation) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -868,6 +891,8 @@ In a high-contention Ray Tracing case study (1080p, ~4kHz locking), Deloxide dem
 | **ND** | 33.0s ± 31.4 | 220.9s ± 182 | 192.9s ± 281 | 329.1s ± 554 |
 
 **Key Result**: At 1080p, Deloxide (16.67s) is **9% faster** than the baseline parking_lot (18.32s) and significantly more stable (CV < 0.6%) than STD.
+
+**Clarification**: Deloxide outperforms the baseline not because detection makes it faster, but because our underlying mutex implementation handles high-contention tail latency better than the OS primitive.
 
 ### 4. Heisenbug Manifestation Rates (Stress Testing)
 Comparison of manifestation rates (1000 iterations) across different strategies. **Active stress testing is required to find latent bugs.**
@@ -888,7 +913,8 @@ Deloxide (WFG) achieved **0 False Positives**, utilizing a mathematically rigoro
 - **Tested Patterns**: Gate Guarded, Lock-Free Intervals, Lock Order Inversion, Thread-Local Hierarchies.
 - **Result**: Perfect specificity.
 
-### 6. Comprehensive Feature Comparison
+
+### Feature Matrix
 
 | Feature | STD | PL+DD | ND | **DX** |
 | :--- | :--- | :--- | :--- | :--- |
@@ -900,9 +926,32 @@ Deloxide (WFG) achieved **0 False Positives**, utilizing a mathematically rigoro
 | **Visualization** | No | No | Text Dump | **Interactive URL** |
 | **False Positive Rate** | N/A | Zero | Zero | **Zero (WFG)** |
 
+> *STD = std::sync, PL+DD = parking_lot with deadlock_detection, ND = no_deadlocks, DX = Deloxide*
+
+## Documentation
+
+For more detailed documentation:
+
+- Crates.io: `https://crates.io/crates/deloxide`
+- Rust Docs: `https://docs.rs/deloxide`
+- C API: See `include/deloxide.h` and `https://docs.rs/deloxide/latest/deloxide/ffi/index.html`
+
 ## License
 
-```
+Deloxide is licensed under the terms of the MIT license, the Apache License (Version 2.0), or the Coffeeware License, at your option.
+
+### Option 1: The "Serious" Licenses
+
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Option 2: The "Fun" License
+
+```text
 /*
  *      ( (
  *       ) )

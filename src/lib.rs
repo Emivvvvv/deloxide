@@ -174,7 +174,7 @@
 //! ```toml
 //! # Cargo.toml
 //! [dependencies]
-//! deloxide = { version = "0.4.0", features = ["lock-order-graph"] }
+//! deloxide = { version = "1.0.0", features = ["lock-order-graph"] }
 //! ```
 //!
 //! ```rust
@@ -209,7 +209,7 @@
 //! ```toml
 //! # Cargo.toml
 //! [dependencies]
-//! deloxide = { version = "0.4.0", features = ["stress-test"] }
+//! deloxide = { version = "1.0.0", features = ["stress-test"] }
 //! ```
 //!
 //! ```rust
@@ -259,7 +259,7 @@ pub mod ffi;
 
 // Ascii art font name "miniwi"
 const BANNER: &str = r#"
-▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▄▖  ▖▖  ▄▖
-▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▛▌  ▙▌  ▛▌
-▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘█▌▗  ▌▗ █▌
+▄ ▄▖▖ ▄▖▖▖▄▖▄ ▄▖    ▗   ▄▖  ▄▖
+▌▌▙▖▌ ▌▌▚▘▐ ▌▌▙▖  ▌▌▜   ▛▌  ▛▌
+▙▘▙▖▙▖▙▌▌▌▟▖▙▘▙▖  ▚▘▟▖▗ █▌▗ █▌
 "#;
