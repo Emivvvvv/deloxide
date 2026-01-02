@@ -81,24 +81,32 @@ impl Detector {
         notifier_id: ThreadId,
     ) -> Vec<DeadlockInfo> {
         // Wake one waiter if any exist
-        let (woken_thread, deadlocks) = if let Some(queue) = self.cv_waiters.get_mut(&condvar_id)
+        let (woken_thread_info, deadlocks) = if let Some(queue) =
+            self.cv_waiters.get_mut(&condvar_id)
             && let Some((waiter_thread, mutex_id)) = queue.pop_front()
         {
             // Mark as woken (for diagnostics)
             self.cv_woken.insert(waiter_thread);
             let deadlocks = self.on_mutex_attempt_synthetic_immediate(waiter_thread, mutex_id);
-            (Some(waiter_thread), deadlocks)
+            (Some((waiter_thread, mutex_id)), deadlocks)
         } else {
             (None, Vec::new())
         };
+
+        let woken_thread_id = woken_thread_info.map(|(t, _)| t);
 
         // Log the notify event with woken thread information
         logger::log_condvar_notify_event(
             notifier_id,
             condvar_id,
             Events::CondvarNotifyOne,
-            woken_thread,
+            woken_thread_id,
         );
+
+        // Log the synthetic mutex attempt for the woken thread
+        if let Some((thread_id, mutex_id)) = woken_thread_info {
+            logger::log_interaction_event(thread_id, mutex_id, Events::MutexAttempt);
+        }
 
         deadlocks
     }
@@ -126,10 +134,10 @@ impl Detector {
         let woken_threads: Vec<ThreadId> = waiters_to_wake.iter().map(|(t, _)| *t).collect();
         let mut all_deadlocks = Vec::new();
 
-        for (waiter_thread, mutex_id) in waiters_to_wake {
+        for (waiter_thread, mutex_id) in &waiters_to_wake {
             // Mark as woken (for diagnostics)
-            self.cv_woken.insert(waiter_thread);
-            let deadlocks = self.on_mutex_attempt_synthetic_immediate(waiter_thread, mutex_id);
+            self.cv_woken.insert(*waiter_thread);
+            let deadlocks = self.on_mutex_attempt_synthetic_immediate(*waiter_thread, *mutex_id);
             all_deadlocks.extend(deadlocks);
         }
 
@@ -141,6 +149,11 @@ impl Detector {
             Events::CondvarNotifyAll,
             woken_threads.first().copied(),
         );
+
+        // Log the synthetic mutex attempt for all woken threads
+        for (waiter_thread, mutex_id) in waiters_to_wake {
+            logger::log_interaction_event(waiter_thread, mutex_id, Events::MutexAttempt);
+        }
 
         all_deadlocks
     }
