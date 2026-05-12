@@ -57,6 +57,11 @@ pub struct LockOrderGraph {
     /// Generation counter, incremented on each edge addition
     /// Used to invalidate stale cache entries
     generation: u64,
+
+    // Cached buffers for BFS to avoid repeated allocations
+    bfs_queue: VecDeque<LockId>,
+    bfs_visited: FxHashSet<LockId>,
+    bfs_parent: FxHashMap<LockId, LockId>,
 }
 
 impl LockOrderGraph {
@@ -68,6 +73,9 @@ impl LockOrderGraph {
             all_edges: FxHashSet::default(),
             cycle_cache: FxHashMap::default(),
             generation: 0,
+            bfs_queue: VecDeque::with_capacity(64),
+            bfs_visited: FxHashSet::default(),
+            bfs_parent: FxHashMap::default(),
         }
     }
 
@@ -153,7 +161,7 @@ impl LockOrderGraph {
     /// # Returns
     /// `Some(Vec<LockId>)` containing the path from start to end if one exists,
     /// `None` if no path exists
-    fn find_path(&self, start: LockId, end: LockId) -> Option<Vec<LockId>> {
+    fn find_path(&mut self, start: LockId, end: LockId) -> Option<Vec<LockId>> {
         if start == end {
             return Some(vec![start]);
         }
@@ -163,27 +171,27 @@ impl LockOrderGraph {
             return None;
         }
 
-        // Standard BFS with early termination
-        let mut queue = VecDeque::new();
-        let mut visited = FxHashSet::default();
-        let mut parent: FxHashMap<LockId, LockId> = FxHashMap::default();
+        // Standard BFS with early termination, reusing cached buffers
+        self.bfs_queue.clear();
+        self.bfs_visited.clear();
+        self.bfs_parent.clear();
 
-        queue.push_back(start);
-        visited.insert(start);
+        self.bfs_queue.push_back(start);
+        self.bfs_visited.insert(start);
 
-        while let Some(current) = queue.pop_front() {
+        while let Some(current) = self.bfs_queue.pop_front() {
             if let Some(neighbors) = self.edges.get(&current) {
                 for &neighbor in neighbors {
-                    if !visited.contains(&neighbor) {
-                        visited.insert(neighbor);
-                        parent.insert(neighbor, current);
+                    if !self.bfs_visited.contains(&neighbor) {
+                        self.bfs_visited.insert(neighbor);
+                        self.bfs_parent.insert(neighbor, current);
 
                         // Optimization 3b: Early termination - found the target
                         if neighbor == end {
                             // Reconstruct path immediately
                             let mut path = vec![end];
                             let mut node = end;
-                            while let Some(&prev) = parent.get(&node) {
+                            while let Some(&prev) = self.bfs_parent.get(&node) {
                                 path.push(prev);
                                 node = prev;
                             }
@@ -191,7 +199,7 @@ impl LockOrderGraph {
                             return Some(path);
                         }
 
-                        queue.push_back(neighbor);
+                        self.bfs_queue.push_back(neighbor);
                     }
                 }
             }
