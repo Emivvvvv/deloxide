@@ -68,6 +68,19 @@ jobs:
       - run: scripts/check_docs.sh
       - run: cargo package
 
+  c-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: "1.90.0"
+      - run: cargo build --release
+      - run: >-
+          cc -Wall -Wextra -Werror -Iinclude c_examples/basic_mutex.c
+          target/release/libdeloxide.a -pthread -ldl -lm -o target/c-basic-mutex
+      - run: target/c-basic-mutex
+
   audit:
     runs-on: ubuntu-latest
     permissions:
