@@ -2,6 +2,25 @@
 
 The `stress-test` Cargo feature adds controlled scheduling disturbance around tracked lock operations. It is a test tool, not a production default: delays and yields change latency, throughput, and timing, and a run that does not manifest a bug is not a proof of safety. Deloxide's normal default build has no optional stress feature enabled.
 
+## How stress testing exposes the schedule
+
+Without scheduling disturbance, one thread may acquire A and then B before the
+other thread reaches the reverse B-then-A path. Both operations complete, so the
+latent lock-order problem remains hidden.
+
+Component stress can inject a delay while the first thread holds A and is about
+to acquire B. That gives the second thread time to acquire B and request A. The
+first thread then requests B, completing the circular wait:
+
+<div style="background: #fff; padding: 1rem;">
+  <img src="../assets/stress-testing.png" alt="Two lock acquisition schedules: normal timing completes successfully, while a targeted delay allows opposite lock orders to form a deadlock">
+</div>
+
+The delay does not create an impossible dependency. It widens a valid scheduling
+window that the application can already reach. Once the circular wait exists,
+Deloxide's active detector reports the participating threads and locks through
+the configured callback.
+
 ```toml
 [dependencies]
 deloxide = { version = "1.1.0", features = ["stress-test"] }

@@ -9,6 +9,9 @@
   1,000-run-per-combination measurement.
 - Generated SVG charts include an explicit white background and dark text so
   their labels remain readable in both light and dark book themes.
+- `stress-testing.png` is copied unchanged from
+  `figures/stress_testing (1).png`. It explains how a targeted delay exposes a
+  valid deadlocking schedule and is not benchmark evidence.
 - `visualization.png` is the migrated product screenshot from
   `images/visualization.png`. It is not benchmark evidence.
 
