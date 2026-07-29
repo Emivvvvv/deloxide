@@ -1,6 +1,6 @@
 # Correctness Hardening Report
 
-**Candidate:** Deloxide 1.1.0 on branch `release-hardening`  
+**Candidate:** Deloxide 1.1.0 on branch `release-hardening`
 **Release baseline:** commit `3b28ace`
 
 ## Implemented findings
