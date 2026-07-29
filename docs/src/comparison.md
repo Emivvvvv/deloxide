@@ -18,7 +18,7 @@ or may only be reported at the next polling interval.
 
 **Synchronous graph analysis**, represented in the evaluation by
 `no_deadlocks`, updates a global model around lock operations and finds cycles
-immediately. The historical measurements show why that approach is normally
+immediately. The full evaluation shows why that approach is normally
 treated as a debugging configuration rather than an always-on production path.
 
 **Deloxide** combines synchronous active detection with an Optimistic Fast Path.
@@ -41,9 +41,9 @@ stress, logging, and visualization only when the investigation needs them.
 
 *STD = `std::sync`, PL+DD = `parking_lot` with `deadlock_detection`, ND =
 `no_deadlocks`, DX = Deloxide. Ratios and observed false-positive results are from
-the historical full evaluation.*
+the full evaluation.*
 
-## Why make Deloxide the default diagnosis path?
+## What Deloxide adds
 
 Deloxide covers the full lifecycle of a concurrency defect:
 
@@ -53,6 +53,8 @@ Deloxide covers the full lifecycle of a concurrency defect:
   substantially easier to manifest.
 - **Diagnosis:** active WFG reports identify the participating threads and waited
   locks immediately.
+- **Response:** custom callbacks can record evidence, send alerts, export
+  telemetry, or notify an application supervisor.
 - **Investigation:** structured logs become an interactive execution timeline and
   dependency graph.
 - **Production:** the Optimistic Fast Path keeps the default detector close to

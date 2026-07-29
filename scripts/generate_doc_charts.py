@@ -35,16 +35,17 @@ def bar_chart(
     row_height = 42
     height = 100 + row_height * len(values)
     maximum = max(value for _, value, _ in values)
-    plot_width = 560
+    bar_x = 430
+    plot_width = 400
     rows = []
     for index, (label, value, display) in enumerate(values):
         y = 70 + index * row_height
         bar_width = 0 if maximum == 0 else value / maximum * plot_width
         rows.append(
             f'<text x="20" y="{y + 18}">{escape(label)}</text>'
-            f'<rect x="310" y="{y}" width="{bar_width:.2f}" height="24" '
+            f'<rect x="{bar_x}" y="{y}" width="{bar_width:.2f}" height="24" '
             'fill="#e66a2c"/>'
-            f'<text x="{320 + bar_width:.2f}" y="{y + 18}">'
+            f'<text x="{bar_x + 10 + bar_width:.2f}" y="{y + 18}">'
             f'{escape(display)}</text>'
         )
     return (
@@ -52,6 +53,7 @@ def bar_chart(
         f'height="{height}" viewBox="0 0 {width} {height}">'
         f"<title>{escape(title)}</title>"
         f"<desc>{escape(description)}</desc>"
+        f'<rect width="{width}" height="{height}" fill="#fff"/>'
         '<style>text{font:14px sans-serif;fill:#222}</style>'
         + "".join(rows)
         + "</svg>\n"

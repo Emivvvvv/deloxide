@@ -21,11 +21,11 @@ synchronization. Deloxide also provides:
   become an active deadlock;
 - random and component-based stress modes that make rare schedules easier to
   reproduce;
-- structured callbacks for application telemetry and incident handling;
+- custom callbacks that run application-defined incident handling;
 - asynchronous event logging and an interactive visualization; and
 - C bindings for the same tracked primitives.
 
-## One workflow from development to production
+## Typical workflow
 
 Deloxide is designed to remain useful through the whole investigation:
 
@@ -43,7 +43,17 @@ comparisons are described in the
 [Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109)
 and the [performance chapter](production/performance.md).
 
-## The observation boundary
+## Custom callbacks
+
+The callback is part of the default detector and does not require logging. Your
+application can persist the report, export telemetry, notify an incident system,
+capture additional diagnostics, or signal a supervisor. Keep the callback
+bounded and hand slow work to an application-owned queue.
+
+The [lifecycle and callbacks](rust/lifecycle.md) chapter explains initialization,
+panic containment, queue handoff, and shutdown behavior with complete examples.
+
+## What Deloxide can observe
 
 Deloxide sees synchronization performed through its wrappers. It cannot build a
 complete cycle through raw locks, channels, I/O, another process, or a remote

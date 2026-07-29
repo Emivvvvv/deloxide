@@ -26,19 +26,32 @@
 
 ---
 
-## Deadlocks should leave evidence
+## Runtime deadlock detection for Rust
 
-A deadlock can keep a process alive while useful work has stopped. It is often
-timing-sensitive: add a log line or attach a debugger and the failure disappears.
+Deloxide detects active deadlocks and reports the exact thread-and-lock cycle.
+Replace synchronization on the relevant path with its tracked `Mutex`, `RwLock`,
+and `Condvar` wrappers, then initialize the detector once.
 
-Deloxide instruments the synchronization boundary itself. Replace the locks on a
-suspect path with tracked `Mutex`, `RwLock`, and `Condvar` wrappers. When threads
-block in a cycle, Deloxide reports the participating threads and the lock each one
-is waiting for.
+### Feature highlights
+
+- **Instant active detection:** validates wait-for cycles when they occur, without
+  waiting for a polling interval.
+- **Custom callbacks:** run your own application logic when a deadlock is found,
+  such as recording diagnostics, notifying a supervisor, or sending an alert.
+- **Interactive visualization:** inspect the event timeline and thread-lock graph
+  in a browser.
+- **Lock-order analysis:** find acquisition-order risks before they become active
+  deadlocks.
+- **Stress testing:** use random or component-based scheduling disturbance to
+  reproduce timing-sensitive failures.
+- **Low-overhead default path:** keeps eligible uncontended operations away from
+  global graph work.
+- **Rust first, C supported:** tracked Mutexes, RwLocks, condition variables, and
+  thread registration are available through both interfaces.
 
 ![Deloxide visualization showing the event timeline and thread-lock cycle](docs/src/assets/visualization.png)
 
-## Why switch to Deloxide?
+## Comparison
 
 The Rust ecosystem's existing approaches make a difficult trade-off. Static
 analysis can be noisy on complex paths. Passive monitors preserve performance but
@@ -60,16 +73,12 @@ interactive visualization in one toolkit.
 | **False-positive rate in evaluated WFG controls** | N/A | Zero | Zero | **Zero** |
 
 *STD = `std::sync`, PL+DD = `parking_lot` with `deadlock_detection`, ND =
-`no_deadlocks`, DX = Deloxide. Results are from the historical full evaluation.*
+`no_deadlocks`, DX = Deloxide. Results are from the full evaluation.*
 
-The full suite has not yet been rerun for 1.1, but focused microbenchmarks remain
-in the same nanosecond range and show no material default fast-path regression.
-Read the detailed methodology and tables in the
-[performance chapter](https://emivvvvv.github.io/deloxide/production/performance.html)
-and the
-[Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109).
+See [Why Deloxide](https://emivvvvv.github.io/deloxide/comparison.html) for the
+detection-model differences behind the table.
 
-## From hang to answer
+## Quick start
 
 ```toml
 [dependencies]
@@ -95,6 +104,11 @@ Deloxide::new()
     .expect("start Deloxide");
 ```
 
+The callback is application-controlled. It can record the report, export
+telemetry, notify an incident system, capture additional diagnostics, or signal a
+supervisor. Keep slow work outside the callback by handing the report to an
+application-owned queue.
+
 Then use Deloxide locks where the competing paths meet. An opposite-order cycle
 produces evidence like:
 
@@ -110,19 +124,37 @@ Run the complete example:
 cargo run --example diagnose_deadlock
 ```
 
-## Focused 1.1 check
+## Performance evaluation
 
-The current Apple M1 Pro checkpoint measured an uncontended Deloxide Mutex at
-**9.12 ns** median and the same-harness `parking_lot` Mutex at **10.28 ns**. This
-focused check supports the no-regression statement; the full comparative suite,
-raytracing results, manifestation tables, and reproduction notes live in
-[Performance and benchmarks](https://emivvvvv.github.io/deloxide/production/performance.html).
+The full evaluation tested isolated lock latency, heavily contended Mutex and
+RwLock workloads, deterministic deadlock detection, timing-sensitive
+manifestation, nine complex deadlock-free patterns, and a shared-state raytracer.
 
-## Pick the tool you need
+| Evaluated result | PL+DD | ND | **Deloxide** |
+| --- | ---: | ---: | ---: |
+| Mutex lock latency | 9.9 ns | 10,527 ns | **10.8 ns** |
+| 1080p raytracing | 18.32 s | 329.1 s | **16.67 s** |
+| Average passive manifestation | 63.2% | 89.6% | 57.2% |
+| Component-based manifestation | N/A | N/A | **99.6%** |
+| False deadlock reports across nine safe patterns | Zero | Zero | **Zero** |
+
+The focused 1.1 microbenchmark measured an uncontended Deloxide Mutex at
+**9.12 ns** and the same-harness `parking_lot` Mutex at **10.28 ns**. This short
+run is encouraging, but it is too narrow to claim better general performance. It
+does show that the latest correctness fixes introduced no material default
+fast-path overhead.
+
+The [performance chapter](https://emivvvvv.github.io/deloxide/production/performance.html)
+contains the methodology, complete tables, limitations, and reproduction record.
+The broader study is available as the
+[Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109).
+
+## Features and modes
 
 | Mode | Enable | Use it for |
 | --- | --- | --- |
 | Active wait-for detection | Default | Report a current validated cycle |
+| Custom callback | Default | Run application-defined incident handling |
 | Logging and visualization | `logging-and-visualization` | Reconstruct the tracked event timeline |
 | Lock-order analysis | `lock-order-graph` | Find potential acquisition-order risks |
 | Random stress | `stress-test` + `with_random_stress()` | Broad schedule perturbation |
@@ -130,15 +162,6 @@ raytracing results, manifestation tables, and reproduction notes live in
 
 `WaitForGraph` is active evidence. `LockOrderViolation` is a potential historical
 risk; it does not mean threads are blocked now.
-
-## Boundaries
-
-Deloxide sees synchronization performed through its wrappers. A dependency that
-crosses raw locks, third-party primitives, channels, I/O, another process, or a
-remote service can remain outside the graph.
-
-Optional logging adds queueing and file I/O. Stress modes intentionally change
-timing. Benchmark the feature set you plan to ship and keep callbacks short.
 
 ## Rust first, C supported
 
