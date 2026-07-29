@@ -198,7 +198,7 @@ Focused checks:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --lib --bins --examples --all-features -- -D warnings
 cargo test --lib
 cargo check --examples
 scripts/check_docs.sh
