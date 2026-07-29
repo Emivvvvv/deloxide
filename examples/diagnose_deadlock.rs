@@ -1,17 +1,25 @@
-use deloxide::{DeadlockInfo, Deloxide, Mutex, thread};
+use deloxide::{DeadlockInfo, DeadlockSource, Deloxide, Mutex, thread};
 use std::sync::{Arc, Barrier};
 
 fn main() {
     // ANCHOR: setup
     Deloxide::new()
-        .callback(|info: DeadlockInfo| {
-            eprintln!("source: {:?}", info.source);
-            eprintln!("thread cycle: {:?}", info.thread_cycle);
-            eprintln!(
-                "thread waiting for locks: {:?}",
-                info.thread_waiting_for_locks
-            );
-            std::process::exit(0);
+        .callback(|info: DeadlockInfo| match info.source {
+            DeadlockSource::WaitForGraph => {
+                eprintln!("ACTIVE DEADLOCK");
+                eprintln!("source: {:?}", info.source);
+                eprintln!("thread cycle: {:?}", info.thread_cycle);
+                eprintln!(
+                    "thread waiting for locks: {:?}",
+                    info.thread_waiting_for_locks
+                );
+                std::process::exit(0);
+            }
+            DeadlockSource::LockOrderViolation => {
+                eprintln!("POTENTIAL LOCK-ORDER FINDING");
+                eprintln!("source: {:?}", info.source);
+                eprintln!("lock order cycle: {:?}", info.lock_order_cycle);
+            }
         })
         .start()
         .expect("detector initialization");
