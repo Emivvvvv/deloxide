@@ -86,9 +86,12 @@ The `logging-and-visualization` feature adds an asynchronous event logger. With
 that feature compiled, `Deloxide::new().start()` selects `deloxide.log` unless
 the builder uses `with_log`; the writer creates parent directories and truncates
 an existing selected file. Give each process or incident a unique,
-application-owned path, for example `logs/deloxide_{timestamp}.log`, and apply
-permissions, encryption, storage limits, retention, and access review as you
-would to any incident record. Do not let multiple processes reuse one filename.
+application-owned path that includes a PID, UUID, or another collision-proof
+component. The built-in `{timestamp}` substitution has one-second precision, so
+`logs/deloxide_{timestamp}.log` reduces collisions but is not sufficient to make
+concurrent process paths unique. Apply permissions, encryption, storage limits,
+retention, and access review as you would to any incident record. Do not let
+multiple processes reuse one filename.
 
 The current optional logger has an **unbounded ordinary-event queue**. The
 [correctness hardening report](../../correctness-hardening-report.md) records
