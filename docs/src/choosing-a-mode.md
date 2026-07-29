@@ -1,31 +1,32 @@
-# Choosing a Mode
+# Choosing a mode
 
-Start with the default active detector when you need to explain a reproduced hang.
-Add an optional mode only for a question it can answer. Most importantly, do not
-merge two evidence levels: `WaitForGraph` is an active, validated cycle among
-currently tracked waits and incompatible owners; `LockOrderViolation` is a potential
-historical ordering risk.
+Start with the default detector. Add one optional feature only when it answers a
+question you actually have.
 
-| Mode | Question answered | Cargo feature and builder call | Evidence and environment | Primary cost | Unsafe interpretation to avoid |
-|---|---|---|---|---|---|
-| Active wait-for graph | Which tracked threads are blocked on each other now? | Default features; `Deloxide::new().callback(...).start()` | Active `WaitForGraph`; use for runtime diagnosis and, after measuring the intended workload, production. | Tracking of supported synchronization and contention state. | "Every hang, lock, or external dependency is covered." Only tracked primitives are visible. |
-| Lock-order graph | Have we observed inconsistent acquisition orders? | `lock-order-graph`; `.with_lock_order_checking()` (enabled by default when the feature is compiled). | Potential `LockOrderViolation`; use in development and CI before an active cycle occurs. | Historical ordering graph storage and traversal. | "This report proves a deadlock happened." It identifies a dangerous pattern that may never block. |
-| Random stress testing | Can random timing changes make this suspected bug manifest? | `stress-test`; `.with_random_stress()` | Schedule perturbation, not a finding by itself; use in focused tests. Any callback still has its own `source` evidence level. | Added delays, longer and less deterministic tests. | "A passing run proves the race is gone" or "a failure proves the stress scheduler found the root cause." |
-| Component-based stress testing | Do observed lock-acquisition relationships point to delays likely to expose this bug? | `stress-test`; `.with_component_stress()` | Schedule perturbation guided by tracked acquisition patterns; use in focused test environments. | Added delays plus relationship tracking. | "The component heuristic explores every schedule" or "no manifestation means no deadlock." |
-| Logging and visualization | How did tracked execution reach the report? | `logging-and-visualization`; `.with_log("logs/deadlock_{timestamp}.log")` (or the feature's default log path). | Event history for incident analysis; it can accompany active or potential reports but does not change their certainty. | Queueing, serialization, file I/O, retained log data, and browser transfer when opened. | "The timeline is complete program tracing" or "opening it keeps data local." It covers tracked events and the current viewer receives encoded log data in its URL. |
+| Mode | Question | Enable | Best place |
+| --- | --- | --- | --- |
+| Active wait-for detection | Which tracked threads are blocked on one another now? | Default | Tests and production |
+| Logging and visualization | How did the execution reach this cycle? | `logging-and-visualization` | Incident capture |
+| Lock-order analysis | Have these locks been acquired in a risky order? | `lock-order-graph` | Development and CI |
+| Random stress | Can broad timing changes expose the bug? | `stress-test` + `with_random_stress()` | Reproduction tests |
+| Component stress | Can targeted delays expose this lock relationship? | `stress-test` + `with_component_stress()` | Focused reproduction |
 
-Direct API references:
-[`Deloxide::callback`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.callback),
-[`Deloxide::start`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.start),
-[`Deloxide::with_lock_order_checking`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_lock_order_checking),
-[`Deloxide::with_random_stress`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_random_stress),
-[`Deloxide::with_component_stress`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_component_stress),
-[`Deloxide::with_log`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_log),
-and [`DeadlockSource`](https://docs.rs/deloxide/1.1.0/deloxide/enum.DeadlockSource.html).
+## Active versus potential
 
-Use [Read a Deadlock Report](diagnosis/reports.md) after an active callback. Use
-[Find Potential Lock-Order Risks](diagnosis/lock-order.md) for the lock-order
-workflow, [Stress Test a Suspected Race](diagnosis/stress-testing.md) for both stress
-strategies, and [Logging and Visualization](visualization.md) for the event-log
-workflow. The feature and lifecycle details are collected in
-[Select Features and Configuration](rust/features.md).
+`WaitForGraph` means Deloxide validated a current cycle among tracked waits and
+owners.
+
+`LockOrderViolation` means the program previously acquired locks in conflicting
+orders. It is useful early warning, but it does not mean threads are blocked
+right now.
+
+## A practical progression
+
+1. Reproduce with the default detector.
+2. Add logging if the callback IDs are not enough to find the path.
+3. Add lock-order analysis in development or CI to catch inversions earlier.
+4. Add stress mode only when the failure rarely manifests.
+5. Benchmark the exact feature combination before a broad rollout.
+
+Optional features add graph work, event queueing, file I/O, or intentional
+delays. They are investigation tools, not a reason to enable everything at once.

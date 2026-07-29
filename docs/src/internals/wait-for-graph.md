@@ -106,7 +106,7 @@ Mutex completion and release perform lock-wide refresh. Condvar notification can
 register a woken thread's Mutex intent only when detector state has an actual
 Mutex owner; it does not make the notifying thread the target.
 
-## Why the abstraction remains paper-compatible
+## Why the graph uses thread-to-thread edges
 
 Traversal, cycle candidates, and active reports are all expressed as direct
 `Thread -> Thread` dependencies. `Thread -> (Lock, Mode)` metadata is supporting
