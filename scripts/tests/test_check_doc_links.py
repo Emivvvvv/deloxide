@@ -13,6 +13,10 @@ class LinkValidationTests(unittest.TestCase):
             {"choosing-a-mode", "active-vs-potential-findings"},
         )
 
+    def test_collect_anchors_suffixes_collisions_globally(self):
+        text = "# Foo\n\n# Foo\n\n# Foo-1\n"
+        self.assertEqual(collect_anchors(text), {"foo", "foo-1", "foo-1-1"})
+
     def test_missing_relative_target_is_reported(self):
         with TemporaryDirectory() as raw:
             root = Path(raw)

@@ -3,6 +3,7 @@
 Initialize Deloxide once, then use its synchronization wrappers:
 
 ```rust
+# extern crate deloxide;
 use deloxide::{Deloxide, Mutex};
 
 Deloxide::new()

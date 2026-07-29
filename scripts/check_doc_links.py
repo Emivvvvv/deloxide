@@ -46,8 +46,12 @@ def collect_anchors(markdown: str) -> set[str]:
         if not anchor:
             continue
         number = counts.get(anchor, 0)
+        candidate = anchor if number == 0 else f"{anchor}-{number}"
+        while candidate in anchors:
+            number += 1
+            candidate = f"{anchor}-{number}"
         counts[anchor] = number + 1
-        anchors.add(anchor if number == 0 else f"{anchor}-{number}")
+        anchors.add(candidate)
     return anchors
 
 
