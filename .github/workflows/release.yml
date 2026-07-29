@@ -46,14 +46,22 @@ jobs:
         with:
           toolchain: "1.90.0"
       - run: cargo build --release
+      - name: Package C library
+        shell: bash
+        run: |
+          package="deloxide-${GITHUB_REF_NAME}-${RUNNER_OS}"
+          mkdir -p "dist/${package}/include" "dist/${package}/lib"
+          cp include/deloxide.h "dist/${package}/include/"
+          cp "target/release/${{ matrix.library }}" "dist/${package}/lib/"
+          cp LICENSE-MIT LICENSE-APACHE README.md "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          openssl dgst -sha256 "dist/${package}.tar.gz" > "dist/${package}.tar.gz.sha256"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deloxide-${{ github.ref_name }}-${{ runner.os }}
           path: |
-            target/release/${{ matrix.library }}
-            include/deloxide.h
-            LICENSE-MIT
-            LICENSE-APACHE
+            dist/*.tar.gz
+            dist/*.sha256
 
   publish:
     if: github.event_name == 'push'

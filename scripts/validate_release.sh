@@ -15,4 +15,8 @@ cargo fmt --all -- --check
 cargo clippy --lib --bins --examples --all-features -- -D warnings
 cargo test --lib
 scripts/check_docs.sh
-cargo package
+package_args=()
+if [[ "${DELOXIDE_ALLOW_DIRTY:-0}" == "1" ]]; then
+  package_args+=(--allow-dirty)
+fi
+cargo package "${package_args[@]}"
