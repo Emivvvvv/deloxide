@@ -261,10 +261,7 @@ impl Detector {
             let reader_ids: Vec<_> = readers.keys().copied().collect();
             for reader in reader_ids {
                 if reader != thread_id {
-                    self.set_wait_intent(
-                        thread_id,
-                        WaitIntent::new(lock_id, WaitMode::RwWrite),
-                    );
+                    self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwWrite));
                     if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, reader) {
                         // No common lock filtering for upgrades (Reader->Writer deps)
                         return Some(self.extract_deadlock_info(cycle));

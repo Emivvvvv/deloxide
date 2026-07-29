@@ -1,5 +1,5 @@
 use crate::core::detector;
-use crate::core::locks::NEXT_LOCK_ID;
+use crate::core::locks::{NEXT_LOCK_ID, contention::ContentionState};
 
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 #[cfg(feature = "logging-and-visualization")]
@@ -44,9 +44,15 @@ pub struct Mutex<T> {
     inner: ParkingLotMutex<T>,
     /// Thread that created this mutex
     creator_thread_id: ThreadId,
+    /// Owner and contention state used by the detector handshake.
+    state: MutexState,
+}
+
+struct MutexState {
     /// Stores the ThreadId of the current owner (0 if unlocked).
-    /// This allows us to skip the global detector on the fast path.
     owner: AtomicUsize,
+    /// Number of blocking slow-path operations that may depend on this lock.
+    contention: ContentionState,
 }
 
 /// Guard for a Mutex, reports lock release when dropped
@@ -61,8 +67,8 @@ pub struct MutexGuard<'a, T> {
     lock_id: LockId,
     /// The inner MutexGuard
     guard: ParkingLotMutexGuard<'a, T>,
-    /// Reference to the owner atomic to clear it on drop
-    owner_atomic: &'a AtomicUsize,
+    /// Shared owner/contention state consulted on release.
+    state: &'a MutexState,
     /// Whether this lock acquisition was tracked by the global detector
     tracked_globally: bool,
 }
@@ -94,7 +100,10 @@ impl<T> Mutex<T> {
             id,
             inner: ParkingLotMutex::new(value),
             creator_thread_id,
-            owner: AtomicUsize::new(0),
+            state: MutexState {
+                owner: AtomicUsize::new(0),
+                contention: ContentionState::new(),
+            },
         }
     }
 
@@ -139,7 +148,9 @@ impl<T> Mutex<T> {
         // Optimistic Fast Path (Disabled during stress testing to ensure full detector coverage)
         #[cfg(not(feature = "stress-test"))]
         if let Some(guard) = self.inner.try_lock() {
-            self.owner.store(tid_usize, Ordering::Release);
+            self.state.owner.store(tid_usize, Ordering::Release);
+            let tracked_globally =
+                cfg!(feature = "lock-order-graph") || self.state.contention.has_waiters();
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -148,8 +159,9 @@ impl<T> Mutex<T> {
                 }
             }
 
-            #[cfg(feature = "lock-order-graph")]
-            detector::mutex::complete_acquire(thread_id, self.id);
+            if tracked_globally {
+                detector::mutex::complete_acquire(thread_id, self.id);
+            }
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -162,81 +174,49 @@ impl<T> Mutex<T> {
                 thread_id,
                 lock_id: self.id,
                 guard,
-                owner_atomic: &self.owner,
-                tracked_globally: cfg!(feature = "lock-order-graph"),
+                state: &self.state,
+                tracked_globally,
             };
         }
 
         // Slow Path (Contention)
-        // Read the current owner to report the dependency.
-        let mut current_owner_val = self.owner.load(Ordering::Acquire);
-
-        // Adaptive Backoff:
-        // If the lock is physically held but we don't see an owner yet, it means
-        // the owner is in the tiny gap between acquiring the lock and setting the owner ID.
-        if current_owner_val == 0 && self.inner.is_locked() {
-            let mut spin_count = 0;
-            while current_owner_val == 0 {
-                if spin_count < 100 {
-                    std::hint::spin_loop();
-                } else {
-                    std::thread::yield_now();
-                }
-
-                // Use Relaxed loading during the spin loop for performance
-                current_owner_val = self.owner.load(Ordering::Relaxed);
-                spin_count += 1;
-
-                // Optimization: Only check lock state occasionally to reduce cache traffic
-                // If the lock is released, current_owner_val might remain 0, so we must check.
-                if spin_count % 16 == 0 && !self.inner.is_locked() {
-                    break;
-                }
-            }
-            // Final Acquire fence to ensure we see the data associated with the owner store
-            std::sync::atomic::fence(Ordering::Acquire);
-        }
-
-        let current_owner = if current_owner_val == 0 {
-            None
-        } else {
-            Some(current_owner_val as ThreadId)
-        };
-
-        let deadlock_info = detector::mutex::acquire_slow(thread_id, self.id, current_owner);
+        let slow_waiter = self.state.contention.register();
+        let (rechecked_guard, deadlock_info) = detector::mutex::acquire_slow_with_recheck(
+            thread_id,
+            self.id,
+            || self.inner.try_lock(),
+            || {
+                let owner = self.state.owner.load(Ordering::Acquire);
+                (owner != 0).then_some(owner as ThreadId)
+            },
+        );
 
         if let Some(info) = deadlock_info {
-            // Verify the edge is still valid (it might be stale if the owner released the lock).
-            let is_stale = if let Some(expected_owner) = current_owner {
-                let actual_owner = self.owner.load(Ordering::Relaxed);
-                !detector::deadlock_handling::verify_deadlock_edges(
-                    &info,
-                    thread_id,
-                    self.id,
-                    expected_owner,
-                    actual_owner,
-                )
-            } else {
-                false
-            };
-
-            if !is_stale {
-                detector::deadlock_handling::process_deadlock(info);
-            }
+            detector::deadlock_handling::process_deadlock(info);
         }
 
-        // Block until we get the lock
-        let guard = self.inner.lock();
+        if let Some(guard) = rechecked_guard {
+            self.state.owner.store(tid_usize, Ordering::Release);
+            drop(slow_waiter);
+            return MutexGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                state: &self.state,
+                tracked_globally: true,
+            };
+        }
 
-        // Update state
+        let guard = self.inner.lock();
+        self.state.owner.store(tid_usize, Ordering::Release);
         detector::mutex::complete_acquire(thread_id, self.id);
-        self.owner.store(tid_usize, Ordering::Release);
+        drop(slow_waiter);
 
         MutexGuard {
             thread_id,
             lock_id: self.id,
             guard,
-            owner_atomic: &self.owner,
+            state: &self.state,
             tracked_globally: true,
         }
     }
@@ -266,7 +246,9 @@ impl<T> Mutex<T> {
         let tid_usize = thread_id;
 
         if let Some(guard) = self.inner.try_lock() {
-            self.owner.store(tid_usize, Ordering::Release);
+            self.state.owner.store(tid_usize, Ordering::Release);
+            let tracked_globally =
+                cfg!(feature = "lock-order-graph") || self.state.contention.has_waiters();
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -275,8 +257,9 @@ impl<T> Mutex<T> {
                 }
             }
 
-            #[cfg(feature = "lock-order-graph")]
-            detector::mutex::complete_acquire(thread_id, self.id);
+            if tracked_globally {
+                detector::mutex::complete_acquire(thread_id, self.id);
+            }
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -289,8 +272,8 @@ impl<T> Mutex<T> {
                 thread_id,
                 lock_id: self.id,
                 guard,
-                owner_atomic: &self.owner,
-                tracked_globally: cfg!(feature = "lock-order-graph"),
+                state: &self.state,
+                tracked_globally,
             })
         } else {
             None
@@ -381,22 +364,22 @@ impl<'a, T> MutexGuard<'a, T> {
 
     /// Clear local ownership tracking (used internally by Condvar)
     pub(crate) fn clear_ownership(&self) {
-        self.owner_atomic.store(0, Ordering::Release);
+        self.state.owner.store(0, Ordering::Release);
     }
 
     /// Restore local ownership tracking (used internally by Condvar)
     pub(crate) fn restore_ownership(&self) {
-        self.owner_atomic.store(self.thread_id, Ordering::Release);
+        self.state.owner.store(self.thread_id, Ordering::Release);
     }
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // 1. Clear local ownership first
-        self.owner_atomic.store(0, Ordering::Release);
+        self.state.owner.store(0, Ordering::Release);
 
         // 2. Report lock release (detector and/or logger)
-        if self.tracked_globally {
+        if self.tracked_globally || self.state.contention.has_waiters() {
             detector::mutex::release_mutex(self.thread_id, self.lock_id);
         } else {
             #[cfg(feature = "logging-and-visualization")]
@@ -421,5 +404,47 @@ impl<T> From<T> for Mutex<T> {
     /// This is equivalent to Mutex::new
     fn from(t: T) -> Self {
         Mutex::new(t)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::size_of;
+    use std::sync::{Arc, mpsc};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn mutex_guard_keeps_one_tracking_reference() {
+        let maximum_size = size_of::<ParkingLotMutexGuard<'static, ()>>() + 4 * size_of::<usize>();
+
+        assert!(
+            size_of::<MutexGuard<'static, ()>>() <= maximum_size,
+            "guard stores more than one tracking reference"
+        );
+    }
+
+    #[test]
+    fn blocking_mutex_wait_is_visible_until_acquisition() {
+        let lock = Arc::new(Mutex::new(()));
+        let owner = lock.lock();
+        let waiter_lock = Arc::clone(&lock);
+        let (acquired_tx, acquired_rx) = mpsc::channel();
+
+        let waiter = std::thread::spawn(move || {
+            let _guard = waiter_lock.lock();
+            acquired_tx.send(()).unwrap();
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !lock.state.contention.has_waiters() && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(lock.state.contention.has_waiters());
+
+        drop(owner);
+        acquired_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        waiter.join().unwrap();
+        assert!(!lock.state.contention.has_waiters());
     }
 }

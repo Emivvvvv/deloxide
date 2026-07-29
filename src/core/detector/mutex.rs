@@ -34,9 +34,7 @@ impl Detector {
         let waiters: Vec<_> = self
             .thread_waits_for
             .iter()
-            .filter_map(|(&thread_id, intent)| {
-                (intent.lock_id == lock_id).then_some(thread_id)
-            })
+            .filter_map(|(&thread_id, intent)| (intent.lock_id == lock_id).then_some(thread_id))
             .collect();
         for thread_id in waiters {
             self.clear_wait_intent(thread_id);
@@ -83,26 +81,21 @@ impl Detector {
 
         // Determine the effective owner.
         // Priority: Global state > Atomic hint (if validated or waking from Condvar).
-        let effective_owner = self.mutex_owners.get(&lock_id).copied().or_else(|| {
-            if let Some(owner) = potential_owner {
-                // Trust the atomic hint from the wrapper.
-                // We rely on the wrapper to verify this edge if a deadlock is detected,
-                // to filter out stale edges from Fast Path releases.
-                return Some(owner);
-            }
-            None
-        });
+        let effective_owner = potential_owner.or_else(|| self.mutex_owners.get(&lock_id).copied());
 
         if let Some(owner) = effective_owner {
-            // We are waiting for this owner
-            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex));
+            // A failed physical recheck makes the wrapper's owner hint authoritative
+            // for this contention interval.
+            self.mutex_owners.insert(lock_id, owner);
+        }
 
-            if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
-                let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
+        if let Some(cycle) =
+            self.register_wait(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex))
+        {
+            let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
 
-                if !filtered_cycle.is_empty() {
-                    return Some(cycle);
-                }
+            if !filtered_cycle.is_empty() {
+                return Some(cycle);
             }
         }
         None
@@ -118,16 +111,6 @@ impl Detector {
         lock_id: LockId,
     ) -> Option<DeadlockInfo> {
         self.mutex_owners.insert(lock_id, thread_id);
-
-        // Remove from lock waiters
-        if let Some(waiters) = self.lock_waiters.get_mut(&lock_id) {
-            waiters.remove(&thread_id);
-            if waiters.is_empty() {
-                self.lock_waiters.remove(&lock_id);
-            }
-        }
-
-        self.clear_wait_intent(thread_id);
 
         #[allow(unused_mut)]
         let mut deadlock_info = None;
@@ -145,6 +128,13 @@ impl Detector {
             .entry(thread_id)
             .or_default()
             .insert(lock_id);
+
+        self.clear_wait_intent(thread_id);
+        if let Some(cycle) = self.refresh_waiters_for_lock(lock_id)
+            && let Some(info) = self.validated_deadlock_info(cycle)
+        {
+            deadlock_info = Some(info);
+        }
 
         logger::log_interaction_event(thread_id, lock_id, Events::MutexAcquired);
 
@@ -169,16 +159,7 @@ impl Detector {
             }
         }
 
-        // Remove stale edges for all threads waiting on this lock
-        if let Some(waiters) = self.lock_waiters.get(&lock_id) {
-            for &waiter in waiters {
-                // Each waiter currently has an edge to 'thread_id' (the current owner)
-                // We must remove it because 'thread_id' no longer owns the lock.
-                // The waiter is now waiting for "no one" (or the next owner).
-                // We don't know the next owner yet, so we just clear the edge.
-                self.wait_for_graph.remove_edge(waiter, thread_id);
-            }
-        }
+        self.refresh_waiters_for_lock(lock_id);
 
         // Apply post-release stress testing if enabled
         #[cfg(feature = "stress-test")]
@@ -233,34 +214,36 @@ pub fn complete_acquire(thread_id: ThreadId, lock_id: LockId) {
     }
 }
 
-/// Register a slow-path mutex acquisition attempt with the global detector
-///
-/// # Arguments
-/// * `thread_id` - ID of the thread attempting to acquire the mutex
-/// * `lock_id` - ID of the mutex being attempted
-/// * `potential_owner` - The thread ID observed holding the lock
-pub fn acquire_slow(
+/// Register contention while holding the detector mutex and recheck the physical
+/// lock before persisting a wait.
+pub fn acquire_slow_with_recheck<T, F, H>(
     thread_id: ThreadId,
     lock_id: LockId,
-    potential_owner: Option<ThreadId>,
-) -> Option<DeadlockInfo> {
-    // 1. Calculate stress delay (holding lock)
+    try_acquire: F,
+    owner_hint: H,
+) -> (Option<T>, Option<DeadlockInfo>)
+where
+    F: FnOnce() -> Option<T>,
+    H: FnOnce() -> Option<ThreadId>,
+{
     #[cfg(feature = "stress-test")]
-    let delay = {
-        let detector = GLOBAL_DETECTOR.lock();
-        detector.calculate_stress_delay(thread_id, lock_id)
-    };
-
-    // 2. Apply delay (without lock)
-    #[cfg(feature = "stress-test")]
-    if let Some(duration) = delay {
-        thread::sleep(duration);
-    }
-
-    // 3. Proceed with detection (re-acquiring lock)
     {
-        let mut detector = GLOBAL_DETECTOR.lock();
-        let cycle = detector.acquire_slow(thread_id, lock_id, potential_owner);
-        cycle.map(|cycle| detector.extract_deadlock_info(cycle))
+        let delay = {
+            let detector = GLOBAL_DETECTOR.lock();
+            detector.calculate_stress_delay(thread_id, lock_id)
+        };
+        if let Some(duration) = delay {
+            thread::sleep(duration);
+        }
     }
+
+    let mut detector = GLOBAL_DETECTOR.lock();
+    if let Some(acquired) = try_acquire() {
+        let info = detector.complete_acquire(thread_id, lock_id);
+        return (Some(acquired), info);
+    }
+
+    let cycle = detector.acquire_slow(thread_id, lock_id, owner_hint());
+    let info = cycle.and_then(|cycle| detector.validated_deadlock_info(cycle));
+    (None, info)
 }

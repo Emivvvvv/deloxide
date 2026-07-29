@@ -63,10 +63,7 @@ impl Detector {
         detected_cycle
     }
 
-    pub(crate) fn refresh_waiters_for_lock(
-        &mut self,
-        lock_id: LockId,
-    ) -> Option<Vec<ThreadId>> {
+    pub(crate) fn refresh_waiters_for_lock(&mut self, lock_id: LockId) -> Option<Vec<ThreadId>> {
         let waiters: Vec<_> = self
             .lock_waiters
             .get(&lock_id)
@@ -97,10 +94,7 @@ impl Detector {
                 let target = cycle[(index + 1) % cycle.len()];
                 self.thread_waits_for
                     .get(source)
-                    .map(|intent| {
-                        self.incompatible_owners(*source, *intent)
-                            .contains(&target)
-                    })
+                    .map(|intent| self.incompatible_owners(*source, *intent).contains(&target))
                     .unwrap_or(false)
             })
     }
@@ -190,11 +184,7 @@ mod tests {
     #[test]
     fn read_wait_resolves_only_writer() {
         let mut detector = Detector::new();
-        detector
-            .rwlock_readers
-            .entry(10)
-            .or_default()
-            .insert(3, 1);
+        detector.rwlock_readers.entry(10).or_default().insert(3, 1);
         detector.rwlock_writer.insert(10, 2);
 
         let intent = WaitIntent::new(10, WaitMode::RwRead);
@@ -205,16 +195,8 @@ mod tests {
     #[test]
     fn write_wait_resolves_all_readers_including_self() {
         let mut detector = Detector::new();
-        detector
-            .rwlock_readers
-            .entry(10)
-            .or_default()
-            .insert(1, 1);
-        detector
-            .rwlock_readers
-            .entry(10)
-            .or_default()
-            .insert(3, 2);
+        detector.rwlock_readers.entry(10).or_default().insert(1, 1);
+        detector.rwlock_readers.entry(10).or_default().insert(3, 2);
 
         let intent = WaitIntent::new(10, WaitMode::RwWrite);
         let mut owners = detector.incompatible_owners(1, intent);
@@ -349,5 +331,17 @@ mod tests {
         let mut cycle = info.thread_cycle;
         cycle.sort_unstable();
         assert_eq!(cycle, vec![1, 2]);
+    }
+
+    #[test]
+    fn contended_mutex_acquisition_refreshes_existing_waiters() {
+        let mut detector = Detector::new();
+        detector.mutex_owners.insert(10, 2);
+        detector.register_wait(1, WaitIntent::new(10, WaitMode::Mutex));
+        assert_eq!(detector.wait_for_graph.outgoing(1), vec![2]);
+
+        detector.complete_acquire(3, 10);
+
+        assert_eq!(detector.wait_for_graph.outgoing(1), vec![3]);
     }
 }
