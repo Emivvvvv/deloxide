@@ -130,12 +130,12 @@ The full evaluation tested isolated lock latency, heavily contended Mutex and
 RwLock workloads, deterministic deadlock detection, timing-sensitive
 manifestation, nine complex deadlock-free patterns, and a shared-state raytracer.
 
-| Evaluated result | PL+DD | ND | **Deloxide** |
-| --- | ---: | ---: | ---: |
-| Mutex lock latency | 9.9 ns | 10,527 ns | **10.8 ns** |
-| 1080p raytracing | 18.32 s | 329.1 s | **16.67 s** |
-| Average passive manifestation | 63.2% | 89.6% | 57.2% |
-| Component-based manifestation | N/A | N/A | **99.6%** |
+| Evaluated result                                 | PL+DD | ND | **Deloxide** |
+|--------------------------------------------------| ---: | ---: | ---: |
+| Mutex lock latency                               | 9.9 ns | 10,527 ns | **10.8 ns** |
+| 1080p raytracing                                 | 18.32 s | 329.1 s | **16.67 s** |
+| Average passive manifestation                    | 63.2% | 89.6% | 57.2% |
+| Manifestation with stress testing                | N/A | N/A | **99.6%** |
 | False deadlock reports across nine safe patterns | Zero | Zero | **Zero** |
 
 The focused 1.1 microbenchmark measured an uncontended Deloxide Mutex at
@@ -175,7 +175,6 @@ condition variables, callbacks, and thread registration.
 - [C guide](https://emivvvvv.github.io/deloxide/c-guide.html)
 - [Choosing Deloxide or another tool](https://emivvvvv.github.io/deloxide/comparison.html)
 - [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
 ## License

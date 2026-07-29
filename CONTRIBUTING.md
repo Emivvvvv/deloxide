@@ -7,6 +7,7 @@ cargo fmt --all -- --check
 cargo clippy --lib --bins --examples --all-features -- -D warnings
 cargo test --lib
 cargo check --examples
+cargo bench --bench fast_path
 scripts/check_docs.sh
 ```
 
@@ -14,8 +15,10 @@ Add one focused regression for a concurrency fix and verify that it fails for th
 expected reason before changing production code. Prefer barriers/channels to sleeps
 and isolate intentional deadlocks behind a process watchdog.
 
-Run the focused Criterion cases for changes to lock acquisition or release. The full
-evaluation suite is not required for unrelated changes.
+Run affected benchmarks (such as `cargo bench --bench fast_path` or relevant Criterion cases) for changes affecting performance or lock acquisition/release paths.
+
+If introducing a new feature, adding corresponding tests and benchmarks for that feature is mandatory.
 
 Keep commits small and use compact subjects such as `fix(rwlock)`, `docs(readme)`,
 `book(internals)`, and `ci(checks)`.
+

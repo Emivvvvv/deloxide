@@ -107,7 +107,6 @@ is supporting incident evidence.
 - [Focused microbenchmark methodology](https://github.com/Emivvvvv/deloxide/blob/main/docs/performance/microbench-methodology.md)
 - [Release-candidate evaluation record](https://github.com/Emivvvvv/deloxide/blob/main/docs/performance/evaluation-2026-07-29.md)
 - [Releases](https://github.com/Emivvvvv/deloxide/releases)
-- [Security policy](https://github.com/Emivvvvv/deloxide/blob/main/SECURITY.md)
 - [Changelog](https://github.com/Emivvvvv/deloxide/blob/main/CHANGELOG.md)
 - [Contributing guide](https://github.com/Emivvvvv/deloxide/blob/main/CONTRIBUTING.md)
 
