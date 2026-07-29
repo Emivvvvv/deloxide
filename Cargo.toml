@@ -10,6 +10,7 @@ documentation = "https://docs.rs/deloxide"
 keywords = ["deadlock", "concurrency", "debug", "visualization"]
 categories = ["development-tools", "concurrency", "development-tools::debugging", "development-tools::ffi"]
 readme = "README.md"
+exclude = ["DELOXIDE_AUDIT_REPORT.md", "docs/superpowers/**"]
 
 [lib]
 name = "deloxide"
