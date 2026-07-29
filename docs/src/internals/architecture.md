@@ -39,7 +39,7 @@ Blocking Mutex acquisition and RwLock write acquisition begin with a physical
    `lock-order-graph` feature is not compiled, it can return without ownership-map
    updates, wait-intent allocation, graph traversal, or the detector mutex.
 4. On guard drop, it clears the owner hint before the physical guard is released.
-   A guard that was globally tracked—or a release that observes a slow waiter—also
+   A guard that was globally tracked, or a release that observes a slow waiter, also
    reports the release and repairs affected detector state. Otherwise release
    stays local.
 

@@ -1,74 +1,151 @@
-# C integration
+# C guide
 
-Rust is Deloxide's primary interface, but the same tracked detector and
-primitives are available through `include/deloxide.h`.
+Rust is Deloxide's primary interface, but C applications can use the same
+detector and tracked synchronization through `include/deloxide.h`.
 
-Build the library with:
+## Build and link
+
+Build the library and C API:
 
 ```console
 cargo build --release --features c-api
 ```
 
-Add `logging-and-visualization`, `lock-order-graph`, or `stress-test` only when
-the C application needs those capabilities.
+Add other features when needed:
 
-## Smallest complete program
+```console
+cargo build --release --features \
+  c-api,logging-and-visualization,lock-order-graph,stress-test
+```
+
+Include `include/deloxide.h` and link the produced static or dynamic `deloxide`
+library. Exact filenames and platform libraries depend on the target. The
+repository's [`c_examples/basic_mutex.c`](../../c_examples/basic_mutex.c) is the
+smallest buildable example.
+
+## Initialization and callback
+
+Initialize once before creating tracked objects:
 
 ```c
 #include "deloxide.h"
 #include <stdio.h>
 
 static void on_deadlock(const char *json) {
-    fprintf(stderr, "Deloxide: %s\n", json);
+    fprintf(stderr, "Deloxide report: %s\n", json);
 }
 
 int main(void) {
-    if (deloxide_init(NULL, on_deadlock) != 0) {
+    int rc = deloxide_init(NULL, on_deadlock);
+    if (rc != 0) {
+        fprintf(stderr, "deloxide_init failed: %d\n", rc);
         return 1;
     }
 
-    void *mutex = deloxide_create_mutex();
-    if (mutex == NULL || deloxide_lock_mutex(mutex) != 0) {
-        return 1;
-    }
-
-    /* protected work */
-
-    deloxide_unlock_mutex(mutex);
-    deloxide_destroy_mutex(mutex);
+    /* create locks and threads */
     return 0;
 }
 ```
 
-Pass a log path as the first `deloxide_init` argument when the library was built
-with `logging-and-visualization`. Without that feature, a non-null log path
-returns `-3`. A null callback uses the library's default behavior.
+The callback receives a borrowed NUL-terminated JSON string. Copy it if another
+thread must retain it; do not free it or keep the pointer after the callback
+returns. Keep callback work bounded.
 
-## Available primitives
+Initialization returns `0` on success and `1` if it has already run. Invalid log
+paths and logger failures use negative codes. Passing a non-null log path without
+the logging feature returns `-3`; the public header currently omits that code.
 
-The header provides opaque handles for:
+## Mutex
 
-- mutex creation, lock, try-lock, unlock, and destruction;
-- RwLock read/write acquisition, try operations, release, and destruction; and
-- condition-variable wait, timed wait, notification, and destruction.
+```c
+void *mutex = deloxide_create_mutex();
+if (mutex == NULL) return 1;
 
-Every function returns a documented status code or pointer. Check it—C cannot
-use Rust's type system to prevent a bad handle, mismatched guard, or invalid
-lifecycle.
+if (deloxide_lock_mutex(mutex) != 0) return 1;
+/* protected work */
+if (deloxide_unlock_mutex(mutex) != 0) return 1;
 
-## Threads
+deloxide_destroy_mutex(mutex);
+```
 
-Calls through Deloxide locks are observed regardless of how the native thread
-was created. Register thread start/exit when you also want lifecycle and parent
-information in logs. The header contains POSIX and Windows helpers plus manual
-registration functions for another threading runtime.
+`LOCK_MUTEX(mutex)` and `UNLOCK_MUTEX(mutex)` provide checked convenience macros
+that terminate on failure. Destroy a mutex only after every thread has stopped
+using it.
 
-## Linking
+## RwLock
 
-Link against the produced `deloxide` static or dynamic library and the normal
-platform libraries required by Rust output. The exact filenames and flags vary
-by target, so treat the generated artifact and
-[`include/deloxide.h`](../../include/deloxide.h) as the source of truth.
+```c
+void *state = deloxide_create_rwlock();
+if (state == NULL) return 1;
 
-Keep the callback short, initialize once before creating tracked objects, and
-destroy locks only after all users have stopped.
+if (deloxide_rw_lock_read(state) != 0) return 1;
+/* read shared state */
+if (deloxide_rw_unlock_read(state) != 0) return 1;
+
+if (deloxide_rw_lock_write(state) != 0) return 1;
+/* update shared state */
+if (deloxide_rw_unlock_write(state) != 0) return 1;
+
+deloxide_destroy_rwlock(state);
+```
+
+The `RWLOCK_READ`, `RWUNLOCK_READ`, `RWLOCK_WRITE`, and `RWUNLOCK_WRITE` macros
+are the shorter checked form. A thread may hold read guards for different RwLocks,
+but it must release each matching guard correctly.
+
+## Condition variables
+
+A Deloxide condition variable waits with a Deloxide mutex:
+
+```c
+void *mutex = deloxide_create_mutex();
+void *ready = deloxide_create_condvar();
+
+if (deloxide_lock_mutex(mutex) != 0) return 1;
+while (!predicate_is_ready()) {
+    int rc = deloxide_condvar_wait(ready, mutex);
+    if (rc != 0) return 1;
+}
+if (deloxide_unlock_mutex(mutex) != 0) return 1;
+
+deloxide_destroy_condvar(ready);
+deloxide_destroy_mutex(mutex);
+```
+
+`deloxide_condvar_wait_timeout` returns `1` when the timeout expires and `0` when
+notified. Negative values indicate invalid handles, a mutex not held by the
+caller, or another wait failure. Notify with
+`deloxide_condvar_notify_one` or `deloxide_condvar_notify_all`.
+
+## Tracked threads
+
+Any native thread using a Deloxide lock contributes synchronization events.
+Register lifecycle events when logs should also show the thread relationship:
+
+```c
+uintptr_t tid = deloxide_get_thread_id();
+deloxide_register_thread_spawn(tid, parent_tid);
+
+/* thread work */
+
+deloxide_register_thread_exit(tid);
+```
+
+On POSIX, `DEFINE_TRACKED_THREAD(worker)` and
+`CREATE_TRACKED_THREAD(thread, worker, arg)` wrap this protocol around
+`pthread_create`. Those macros are not available on Windows; call the manual
+registration functions from the Windows thread entry point.
+
+## Logging, visualization, and stress
+
+With `logging-and-visualization`, pass a log path to `deloxide_init`, flush it
+with `deloxide_flush_logs`, and open it with `deloxide_showcase` or
+`deloxide_showcase_current`.
+
+With `stress-test`, C can enable random scheduling delays with
+`deloxide_enable_random_stress`, enable targeted component delays with
+`deloxide_enable_component_stress`, and return to normal scheduling with
+`deloxide_disable_stress`.
+
+The C header is the exact API reference. This chapter focuses on correct
+lifecycle and common usage rather than duplicating every status-code comment.

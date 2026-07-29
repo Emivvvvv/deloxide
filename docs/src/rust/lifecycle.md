@@ -57,7 +57,7 @@ deliberately not an all-or-nothing reconfiguration:
 
 Existing ownership, wait, and other detector state is not cleared as one coherent
 reset while those feature-specific fields change. Repeated starts are therefore
-partial, unsupported reconfiguration—not a reliable reset or runtime toggle.
+partial, unsupported reconfiguration, not a reliable reset or runtime toggle.
 Initialize once before instrumented work and use a separate process when a clean
 configuration or detector state is required. There is deliberately no public
 shutdown, reset, or reconfigure API in this guidance.

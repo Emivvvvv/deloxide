@@ -102,6 +102,6 @@ installed callback and global logger win; an enabled lock-order graph is created
 or replaced, while a later disabled setting does not remove an existing graph;
 and stress mode/configuration is overwritten on each start. Existing ownership
 and wait state is not reset coherently with those changes. Repeated starts are
-therefore partial, unsupported reconfiguration—not a reliable reset or toggle.
+therefore partial, unsupported reconfiguration, not a reliable reset or toggle.
 Use separate processes for clean configurations; see [Manage Lifecycle and
 Callbacks](lifecycle.md) for the exact behavior.

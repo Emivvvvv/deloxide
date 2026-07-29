@@ -113,7 +113,7 @@ describes the file format and failure cases.
 ## Roll back by feature and preserve the evidence boundary
 
 Cargo features are compile-time choices, so a rollback normally means deploying
-a binary built without the optional feature—not flipping a runtime switch in a
+a binary built without the optional feature, not flipping a runtime switch in a
 running process.
 
 | Observation during rollout | Narrow rollback | What remains |

@@ -69,5 +69,5 @@ cargo run --example diagnose_deadlock
 ```
 
 Source: [`examples/diagnose_deadlock.rs`](../../examples/diagnose_deadlock.rs).
-Continue with [Reading a report](diagnosis.md) for self-deadlocks, `RwLock`,
+Continue with [Reading a report](diagnosis/reports.md) for self-deadlocks, `RwLock`,
 condition variables, and missing evidence.

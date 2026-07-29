@@ -56,7 +56,7 @@ Never describe `LockOrderViolation` as an active deadlock. Conversely, an active
 
 The Rust callback receives this structure directly. The C callback receives its
 JSON serialization as a borrowed NUL-terminated string that must be copied, not
-freed or retained; see the [C example](c-guide.md#smallest-complete-program).
+freed or retained; see the [C callback example](c-guide.md#initialization-and-callback).
 
 ## Defaults and lifecycle
 
@@ -82,7 +82,7 @@ feature combinations on Ubuntu. The C smoke job currently builds and runs
 library for Ubuntu, macOS, and Windows. This establishes artifact availability on
 those platforms, but it is not a claim that the same C smoke execution runs on
 all three. The POSIX tracked-thread helpers require `pthread`; Windows consumers
-use the manual registration pattern in the [C Guide](c-guide.md#threads).
+use the manual registration pattern in the [C Guide](c-guide.md#tracked-threads).
 
 Rust is the primary, fully configured interface. C exposes the tracked primitive
 lifecycle, callbacks, thread registration, optional logging calls, and stress

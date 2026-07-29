@@ -40,24 +40,34 @@ is waiting for.
 
 ## Why switch to Deloxide?
 
-The Rust ecosystem has good lock primitives and useful debugging tools. Deloxide
-combines the parts normally spread across several of them:
+The Rust ecosystem's existing approaches make a difficult trade-off. Static
+analysis can be noisy on complex paths. Passive monitors preserve performance but
+do not force rare schedules and report only when polled. Synchronous graph
+debuggers detect immediately but can make every lock operation expensive.
 
-| Capability | `std::sync` | `parking_lot` detector | `no_deadlocks` | **Deloxide** |
-| --- | :---: | :---: | :---: | :---: |
-| `Mutex`, `RwLock`, and `Condvar` | Yes | Yes | Yes | **Yes** |
-| Active runtime cycle detection | No | When explicitly checked | Yes | **Yes, on the blocking path** |
-| Structured callback report | No | No | No | **Yes** |
-| Potential lock-order warnings | No | No | No | **Optional** |
-| Schedule stress testing | No | No | No | **Random + targeted modes** |
-| Interactive event visualization | No | No | No | **Optional** |
-| Rust and C integration | Rust | Rust | Rust | **Rust + C** |
+Deloxide bridges that gap: synchronous active detection with an Optimistic Fast
+Path, plus lock-order analysis, stress testing, structured callbacks, and
+interactive visualization in one toolkit.
 
-Use `std::sync` or plain `parking_lot` when you only need synchronization.
-Use `parking_lot`'s experimental detector when periodic inspection is enough.
-Use `no_deadlocks` as a synchronous debugging replacement. Choose Deloxide when
-you want one path from rare-bug reproduction to an active callback, visualization,
-and production diagnosis.
+| Feature | STD | PL+DD | ND | **DX** |
+| :--- | :---: | :---: | :---: | :---: |
+| **Mutex overhead** | 0.88× | 1.00× | 1063.33× | **1.09×** |
+| **Raytracing at 1080p** | 0.94× | 1.00× | 17.96× | **0.91× (faster)** |
+| **Detection method** | None | Async (poll) | Synchronous | **Synchronous (instant)** |
+| **Lock-order analysis** | No | No | No | **Yes** |
+| **Stress testing** | No | No | No | **Yes** |
+| **Visualization** | No | No | Text dump | **Interactive URL** |
+| **False-positive rate in evaluated WFG controls** | N/A | Zero | Zero | **Zero** |
+
+*STD = `std::sync`, PL+DD = `parking_lot` with `deadlock_detection`, ND =
+`no_deadlocks`, DX = Deloxide. Results are from the historical full evaluation.*
+
+The full suite has not yet been rerun for 1.1, but focused microbenchmarks remain
+in the same nanosecond range and show no material default fast-path regression.
+Read the detailed methodology and tables in the
+[performance chapter](https://emivvvvv.github.io/deloxide/production/performance.html)
+and the
+[Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109).
 
 ## From hang to answer
 
@@ -100,45 +110,13 @@ Run the complete example:
 cargo run --example diagnose_deadlock
 ```
 
-## Measured performance
+## Focused 1.1 check
 
-Current results were recorded at commit
-[`baa9e89`](https://github.com/Emivvvvv/deloxide/commit/baa9e89ef87191d25832b4ecf567c5dd26b4a6ae)
-on an Apple M1 Pro with Rust 1.90.0-nightly.
-
-| Focused operation | Median | 95% interval |
-| --- | ---: | ---: |
-| Deloxide Mutex, uncontended | **9.12 ns** | 9.07–9.22 ns |
-| `parking_lot` Mutex, uncontended | 10.28 ns | 9.95–10.50 ns |
-| Deloxide RwLock write, uncontended | **9.17 ns** | 9.08–9.21 ns |
-| Deloxide RwLock read, uncontended | 58.07 ns | 54.06–62.78 ns |
-| Deloxide Mutex, two-thread handoff | 37.89 µs | 37.12–39.03 µs |
-
-![Focused Mutex latency comparison](docs/src/assets/mutex-latency.svg)
-
-A 1920×1080 raytracer with 129,600 lock acquisitions per frame gives a more
-application-shaped counterpoint:
-
-| Configuration | Ten-run mean |
-| --- | ---: |
-| `parking_lot` | **21.63 s** |
-| `std::sync` | 23.48 s |
-| Deloxide | 23.75 s |
-
-Deloxide was 1.2% above `std::sync` in that workload; `parking_lot` was faster.
-The microbenchmark shows a very small default Mutex fast path, while the raytracer
-shows why you should still benchmark your own contention pattern.
-
-Stress modes can make rare schedules much easier to reproduce. In 1,000 paired
-runs of the deliberate two-lock scenario:
-
-| Default | Random stress | Aggressive stress | Component delays |
-| ---: | ---: | ---: | ---: |
-| 17.0% | 59.1% | 83.7% | **99.9%** |
-
-These are manifestation rates, not throughput or universal detection guarantees.
-See the [performance chapter](https://emivvvvv.github.io/deloxide/performance.html)
-and [full evaluation record](docs/performance/evaluation-2026-07-29.md).
+The current Apple M1 Pro checkpoint measured an uncontended Deloxide Mutex at
+**9.12 ns** median and the same-harness `parking_lot` Mutex at **10.28 ns**. This
+focused check supports the no-regression statement; the full comparative suite,
+raytracing results, manifestation tables, and reproduction notes live in
+[Performance and benchmarks](https://emivvvvv.github.io/deloxide/production/performance.html).
 
 ## Pick the tool you need
 
@@ -168,7 +146,7 @@ Rust is the primary interface. Deloxide also builds a C library using
 [`include/deloxide.h`](include/deloxide.h), with tracked mutexes, RwLocks,
 condition variables, callbacks, and thread registration.
 
-- [Short user manual](https://emivvvvv.github.io/deloxide/)
+- [User manual](https://emivvvvv.github.io/deloxide/)
 - [Rust API](https://docs.rs/deloxide)
 - [Examples](examples)
 - [C guide](https://emivvvvv.github.io/deloxide/c-guide.html)

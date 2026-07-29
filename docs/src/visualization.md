@@ -1,16 +1,17 @@
 # Logging and visualization
 
-The callback tells you which threads and locks formed a cycle. Logging adds the
-events that led there.
+An active callback tells you which threads and locks form a cycle. Logging adds
+the execution path that led there: thread lifecycle, lock attempts, acquisitions,
+releases, condition-variable events, and the final finding.
 
-Enable it with:
+## Enable logging
 
 ```toml
 [dependencies]
 deloxide = { version = "1.1", features = ["logging-and-visualization"] }
 ```
 
-Choose a log path at startup:
+Choose a log path when Deloxide starts:
 
 ```rust,no_run
 # extern crate deloxide;
@@ -23,25 +24,48 @@ Deloxide::new()
     .expect("start Deloxide");
 ```
 
-The file records thread lifecycle, lock attempts, acquisitions, releases,
-condition-variable events, and the final finding.
+Without `with_log`, a logging-enabled build uses `deloxide.log`. The logger
+creates missing parent directories and truncates an existing selected file.
+For production captures, add a PID, UUID, or another collision-proof component;
+the built-in timestamp has one-second precision.
 
-![Deloxide timeline and thread-lock graph](assets/visualization.png)
+## Open the viewer
 
-Open a retained log with:
+Use `showcase` for a retained file:
 
 ```rust,no_run
 # extern crate deloxide;
-deloxide::showcase("logs/deloxide_20260729_120000.log")
+use deloxide::showcase;
+
+showcase("logs/deloxide_20260729_120000.log")
     .expect("open visualization");
 ```
 
-Or call `showcase_this()` to flush and open the current process's active log.
+Use `showcase_this()` when the current process owns the active logger. It flushes
+pending records before opening the current file.
 
-The viewer encodes the log into a URL and opens
+```console
+cargo run --features logging-and-visualization --bin deloxide -- \
+  logs/deloxide_20260729_120000.log
+```
+
+![Deloxide timeline and thread-lock graph](assets/visualization.png)
+
+The timeline shows the tracked events leading to the report. The graph lets you
+follow each waiting thread to the lock and incompatible owner that complete the
+cycle. Use the shared IDs to correlate the callback, log, and application
+telemetry.
+
+## Operational notes
+
+The viewer compresses and encodes the log into a URL parameter, then opens
 `https://deloxide.vercel.app/`. Review the log for sensitive identifiers before
-using it. The logger queue is currently unbounded, so monitor memory and file
-growth during long captures.
+opening it outside an approved environment.
 
-Use visualization for reconstruction, not as a replacement for the small
-structured callback report.
+The ordinary-event logger queue is currently unbounded. During a long capture,
+monitor memory, file growth, storage retention, and writer progress. Keep the
+structured callback as the primary alert; visualization is supporting evidence.
+
+Browser launch and file handling can fail. Do not open the viewer inside the
+deadlock callback. Hand the report to an incident worker, retain the log, and
+open it from a controlled path.

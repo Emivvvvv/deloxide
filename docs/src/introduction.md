@@ -1,56 +1,58 @@
-# What deadlocks are—and what Deloxide does
+# Introduction
 
-A deadlock happens when threads wait on one another in a cycle and none of them
-can continue.
+Deloxide is a runtime deadlock detection and diagnosis toolkit for Rust, with a
+secondary C interface. It turns a hanging tracked workload into a concrete
+thread-and-lock cycle, then gives you tools to reproduce, understand, and prevent
+the same failure.
 
-```text
-thread A holds lock 1 and waits for lock 2
-thread B holds lock 2 and waits for lock 1
-```
-
-The program is still running, but the affected work has stopped. Deadlocks are
-especially frustrating because timing matters: adding a log line, attaching a
-debugger, or rerunning the test can make the problem disappear.
-
-## What Deloxide does
-
-Deloxide replaces the synchronization on a suspicious path with tracked
-`Mutex`, `RwLock`, and `Condvar` wrappers. When a thread must wait, Deloxide
-records which lock it wants and which thread currently owns the incompatible
-guard. If those waits form a cycle, your callback receives the threads and locks
-involved.
+The default detector follows waits between threads using Deloxide's `Mutex`,
+`RwLock`, and `Condvar`. When the current waits form a cycle, the callback receives
+the participating thread IDs and the lock each thread is trying to acquire.
 
 ```text
-unexplained hang
-      ↓
-tracked lock waits
-      ↓
-ThreadId(2) → LockId(7) → ThreadId(3)
-ThreadId(3) → LockId(4) → ThreadId(2)
+ThreadId(2) waits for LockId(7), owned by ThreadId(3)
+ThreadId(3) waits for LockId(4), owned by ThreadId(2)
 ```
 
-That default `WaitForGraph` finding describes an active blocked cycle. Deloxide
-can also:
+That is a `WaitForGraph` report: an active cycle observed among tracked
+synchronization. Deloxide also provides:
 
-- record events for an interactive visualization;
-- warn about potentially dangerous lock-order inversions;
-- perturb scheduling to help rare deadlocks reproduce;
-- send structured findings through a callback; and
-- expose the same tracked primitives to C programs.
+- an optional lock-order graph that finds risky acquisition patterns before they
+  become an active deadlock;
+- random and component-based stress modes that make rare schedules easier to
+  reproduce;
+- structured callbacks for application telemetry and incident handling;
+- asynchronous event logging and an interactive visualization; and
+- C bindings for the same tracked primitives.
 
-Rust is the primary interface. Adoption can be incremental: start with the locks
-around the suspected hang instead of rewriting the whole application.
+## One workflow from development to production
 
-## What it does not do
+Deloxide is designed to remain useful through the whole investigation:
 
-Deloxide only sees operations that pass through its wrappers. It cannot explain
-a cycle hidden inside raw locks, channels, I/O, another process, or a remote
-service. It is also not a data-race or distributed-deadlock detector.
+1. Replace the locks around the suspicious path.
+2. Reproduce the hang and receive an active cycle.
+3. Add visualization when the IDs alone are not enough.
+4. Use lock-order analysis to find the inversion earlier.
+5. Use stress modes when the schedule rarely manifests.
+6. Keep the default detector in production when the measured cost fits the
+   application.
 
-Use Deloxide when you need a concrete answer to “which tracked threads are
-waiting on which tracked locks?” Use ordinary locks when you do not need that
-diagnosis, and keep normal tracing, timeouts, and thread dumps for hangs outside
-the tracked boundary.
+The Optimistic Fast Path keeps eligible uncontended Mutex and exclusive RwLock
+operations away from global graph work. The broader evaluation, methodology, and
+comparisons are described in the
+[Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109)
+and the [performance chapter](production/performance.md).
 
-Next: [install Deloxide](installation.md), then run
-[your first diagnosis](getting-started.md).
+## The observation boundary
+
+Deloxide sees synchronization performed through its wrappers. It cannot build a
+complete cycle through raw locks, channels, I/O, another process, or a remote
+service. That is why incremental adoption should cover every lock on the
+suspected cycle, not only the line where the final thread happened to block.
+
+This manual complements [docs.rs](https://docs.rs/deloxide). It explains the
+workflow, feature choices, evidence, examples, C integration, and production
+trade-offs. Use the API documentation for exact signatures and trait details.
+
+Continue with [Installation](installation.md), then run
+[Your first diagnosis](getting-started.md).

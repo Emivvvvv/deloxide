@@ -1,42 +1,69 @@
-# Choosing Deloxide or another tool
+# Why Deloxide
 
-Choose based on the question you need answered, not one benchmark.
+The Rust ecosystem offers several approaches to concurrency safety, each with
+different trade-offs. Deloxide is built to bridge the gap between lightweight
+but passive monitoring and heavyweight synchronous debugging.
 
-| Need | Usually choose |
-| --- | --- |
-| Fast synchronization with no deadlock diagnosis | `std::sync` or `parking_lot` |
-| Periodically inspect a process for active lock cycles | `parking_lot` with `deadlock_detection` |
-| Replace standard locks temporarily with a synchronous runtime debugger | `no_deadlocks` |
-| Active reports, optional lock-order analysis, stress scheduling, callbacks, and visualization in one toolkit | Deloxide |
-| Prove lock ordering or concurrency properties before running the program | Static analysis, model checking, or a formal lock-order policy |
+## The landscape
 
-## Feature comparison
+**Static analysis** checks code before it runs. It can find useful ordering
+problems early, but complex path and concurrency assumptions can produce noisy
+results. It also cannot reconstruct the runtime schedule that produced an
+incident.
 
-| Capability | `std::sync` | `parking_lot` detector | `no_deadlocks` | **Deloxide** |
-| --- | :---: | :---: | :---: | :---: |
-| `Mutex`, `RwLock`, and `Condvar` wrappers | Yes | Yes | Yes | **Yes** |
-| Active runtime cycle detection | No | Yes, when checked | Yes | **Yes, on the blocking path** |
-| Structured callback report | No | No | No | **Yes** |
-| Historical lock-order analysis | No | No | No | **Optional** |
-| Built-in schedule stress modes | No | No | No | **Optional** |
-| Interactive event visualization | No | No | No | **Optional** |
-| Rust and C integration | Rust | Rust | Rust | **Rust + C** |
-| Default uncontended Mutex median in Deloxide's recorded harness | Not measured in the current focused CSV | 10.28 ns | Not measured in the current focused CSV | **9.12 ns** |
+**Passive dynamic detection**, such as a periodic `parking_lot` deadlock check,
+keeps normal lock operations fast. Because observation happens later and the
+detector does not perturb scheduling, timing-sensitive bugs may fail to manifest
+or may only be reported at the next polling interval.
 
-`parking_lot` is an excellent primitive library and may be the right answer when
-raw synchronization performance is the only requirement. Its experimental
-deadlock detector is a separate API that applications normally call
-periodically.
+**Synchronous graph analysis**, represented in the evaluation by
+`no_deadlocks`, updates a global model around lock operations and finds cycles
+immediately. The historical measurements show why that approach is normally
+treated as a debugging configuration rather than an always-on production path.
 
-`no_deadlocks` provides a familiar debugging replacement and keeps lock state in
-a global manager. Its own documentation recommends it primarily while debugging
-before switching back to standard locks.
+**Deloxide** combines synchronous active detection with an Optimistic Fast Path.
+Eligible uncontended Mutex and exclusive RwLock operations avoid global graph
+work, while contended operations publish the evidence needed for a current
+wait-for cycle. Optional features add predictive lock-order analysis, schedule
+stress, logging, and visualization only when the investigation needs them.
 
-Deloxide is strongest when you want to keep one diagnosis surface from
-reproduction through production: an active callback when threads block, optional
-lock-order warnings before they block, stress modes for rare schedules, and a
-visual event trail. Its trade-off is that synchronization must use Deloxide's
-wrappers and optional features add work.
+## Feature matrix
 
-See [Performance and benchmarks](performance.md) for measured results and
-[Production checklist and limits](operations.md) for the coverage boundary.
+| Feature | STD | PL+DD | ND | **DX** |
+| :--- | :---: | :---: | :---: | :---: |
+| **Mutex overhead** | 0.88× | 1.00× | 1063.33× | **1.09×** |
+| **Raytracing at 1080p** | 0.94× | 1.00× | 17.96× | **0.91× (faster)** |
+| **Detection method** | None | Async (poll) | Synchronous | **Synchronous (instant)** |
+| **Lock-order analysis** | No | No | No | **Yes** |
+| **Stress testing** | No | No | No | **Yes** |
+| **Visualization** | No | No | Text dump | **Interactive URL** |
+| **False-positive rate in evaluated WFG controls** | N/A | Zero | Zero | **Zero** |
+
+*STD = `std::sync`, PL+DD = `parking_lot` with `deadlock_detection`, ND =
+`no_deadlocks`, DX = Deloxide. Ratios and observed false-positive results are from
+the historical full evaluation.*
+
+## Why make Deloxide the default diagnosis path?
+
+Deloxide covers the full lifecycle of a concurrency defect:
+
+- **Development:** lock-order analysis finds dangerous inversions before they
+  block a run.
+- **Testing:** random and component-based stress modes make rare schedules
+  substantially easier to manifest.
+- **Diagnosis:** active WFG reports identify the participating threads and waited
+  locks immediately.
+- **Investigation:** structured logs become an interactive execution timeline and
+  dependency graph.
+- **Production:** the Optimistic Fast Path keeps the default detector close to
+  primitive-baseline cost in the evaluated workloads.
+- **Integration:** Rust applications get guard-based wrappers and C applications
+  use the same detector through the shipped header.
+
+That combination is Deloxide's selling point. It is not only another lock
+implementation and not only a post-hoc deadlock check; it is one toolkit for
+finding, reproducing, explaining, and monitoring the bug.
+
+The detailed methodology and results are in
+[Performance and benchmarks](production/performance.md) and the
+[Deloxide preprint](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6389109).

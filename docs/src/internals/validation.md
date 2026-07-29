@@ -94,7 +94,7 @@ lock probe for every edge during validation.
 Owner and contention state are separate atomics, so there is no single
 linearizable owner/waiter snapshot. The detector also has no acquisition
 generation. A release and later reacquisition by the same thread can therefore
-look like the same current owner—an ABA-shaped limitation—even though complete
+look like the same current owner, an ABA-shaped limitation, even though complete
 current-owner validation has no reproduced deterministic failure requiring
 generations. Packed state and generations remain deferred, not silently assumed.
 

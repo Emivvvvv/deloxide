@@ -52,7 +52,7 @@ The report contains `source: LockOrderViolation`, a one-thread contextual `threa
 ## Development and CI workflow
 
 1. Enable `lock-order-graph` in a development/CI feature set and install a callback that records the full `DeadlockInfo` payload.
-2. Exercise distinct entry points, error/rollback paths, and shutdown paths—the places most likely to acquire the same resources in a different order.
+2. Exercise distinct entry points, error/rollback paths, and shutdown paths. These are the places most likely to acquire the same resources in a different order.
 3. Group potential findings by the normalized `lock_order_cycle`, then identify the acquisition sites for every edge. Treat numeric IDs as run-local evidence; use logs and symbols to name the resources.
 4. Decide whether the paths can hold the same lock instances concurrently. If they cannot, document why and keep a regression test; if they can, impose a consistent acquisition order or remove the nested hold.
 5. Run the focused scenario repeatedly, optionally with [stress mode](stress-testing.md), then run the normal test suite. A later active `WaitForGraph` report raises the issue from a potential warning to an incident-quality reproduction.
