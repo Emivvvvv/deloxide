@@ -21,6 +21,10 @@ name = "deloxide"
 path = "src/main.rs"
 required-features = ["logging-and-visualization"]
 
+[[example]]
+name = "diagnose_deadlock"
+path = "examples/diagnose_deadlock.rs"
+
 [features]
 default = [] # Fast production build: no logging overhead.
 logging-and-visualization = ["dep:crossbeam-channel"] # Enable structured logging and visualization support
