@@ -73,9 +73,13 @@ real owner globally. On notification, detector code may create a wait intent for
 the woken thread only when an actual current Mutex owner is recorded. `notify_one`
 and `notify_all` never make the notifier the Mutex owner.
 
-Timeout follows the same reacquisition and cleanup sequence. The boolean result
-describes whether `parking_lot` timed out; either way, the function returns with
-the Mutex guard reacquired.
+Timeout follows the same physical reacquisition and cleanup sequence, but it does
+not have the same detector coverage as notification. Only `notify_one` and
+`notify_all` can install the synthetic Mutex wait intent described above. A pure
+timeout can therefore block while physically reacquiring the Mutex without that
+dependency appearing in the active WFG, unless a notification also selected the
+waiter. The boolean result describes whether `parking_lot` timed out; either way,
+the function returns with the Mutex guard reacquired.
 
 ## Nonblocking attempts leave no wait
 
