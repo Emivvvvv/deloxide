@@ -108,7 +108,7 @@ fn test_five_lock_cycle_deadlock() {
 
     // Verify the deadlock report
     assert!(
-        info.thread_cycle.len() >= 1,
+        !info.thread_cycle.is_empty(),
         "Deadlock should involve at least 1 thread"
     );
     assert!(

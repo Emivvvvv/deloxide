@@ -211,18 +211,16 @@ impl Detector {
         #[cfg(not(feature = "lock-order-graph"))]
         let _lock_order_violation: Option<Vec<LockId>> = None;
 
-        if self.mutex_owners.contains_key(&lock_id) {
-            if let Some(cycle) =
+        if self.mutex_owners.contains_key(&lock_id)
+            && let Some(cycle) =
                 self.register_wait(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex))
-            {
-                // Apply common lock filter
-                let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
+        {
+            let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
 
-                if !filtered_cycle.is_empty()
-                    && let Some(info) = self.validated_deadlock_info(cycle)
-                {
-                    deadlocks.push(info);
-                }
+            if !filtered_cycle.is_empty()
+                && let Some(info) = self.validated_deadlock_info(cycle)
+            {
+                deadlocks.push(info);
             }
         }
 

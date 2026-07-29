@@ -81,7 +81,7 @@ fn test_mixed_rwlock_mutex_condvar_deadlock() {
     }
 
     let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
-    println!("Deadlock info: {:?}", info);
+    println!("Deadlock info: {info:?}");
 
     if info.lock_order_cycle.is_some() {
         // If lock order graph is enabled, we might catch it as a violation first

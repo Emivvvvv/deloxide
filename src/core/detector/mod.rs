@@ -68,10 +68,7 @@ struct Dispatcher {
     _thread_handle: std::thread::JoinHandle<()>,
 }
 
-fn invoke_callback(
-    callback: &Arc<dyn Fn(DeadlockInfo) + Send + Sync>,
-    info: DeadlockInfo,
-) {
+fn invoke_callback(callback: &Arc<dyn Fn(DeadlockInfo) + Send + Sync>, info: DeadlockInfo) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(info))).is_err() {
         eprintln!("Deloxide callback panicked; dispatcher remains active");
     }
