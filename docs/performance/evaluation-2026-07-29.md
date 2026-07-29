@@ -127,17 +127,20 @@ done
 The run remained in
 `$evaluation_tmp/deloxide-deadlock-tests`, because each executable appends its
 row to `deadlock_tests/<scenario>_<mode>.csv` relative to that directory. The
-exact direct loop, including the macOS fallback seed formula used by
-`run_tests.sh`, was:
+corrected direct loop exactly matches the original runner's pairing: it
+generates and exports one seed at the start of each outer iteration, then reuses
+that seed for all five scenarios × four modes. The macOS fallback formula is
+unchanged:
 
 ```sh
 find deadlock_tests -type f -name '*.csv' -delete
 for iteration_number in $(seq 1 1000); do
+  HEISENBUG_SEED="$(($(date +%s) * 1000000 + RANDOM * 1000 + RANDOM))"
+  export HEISENBUG_SEED
   for scenario_name in "${scenarios[@]}"; do
     for mode_name in "${modes[@]}"; do
-      HEISENBUG_SEED="$(($(date +%s) * 1000000 + RANDOM * 1000 + RANDOM))" \
-        "/tmp/deloxide-direct-bins/$mode_name/$scenario_name" \
-        >> /tmp/deloxide-direct-manifestation-1000.log 2>&1 || true
+      "/tmp/deloxide-direct-bins/$mode_name/$scenario_name" \
+        >> /tmp/deloxide-direct-manifestation-1000-paired.log 2>&1 || true
     done
   done
 done
@@ -149,7 +152,10 @@ python3 analyze_detection_rate.py
 The final count was 20,000 rows. The `|| true` matches `run_tests.sh`, whose
 detector callback intentionally panics after recording a detection. A discarded
 2,000-run, 100-per-combination pilot completed in 20 seconds before the final
-run. The normalized documentation CSV was collected from the final files with:
+measurement. The recorded final measurement is the corrected paired-seed rerun,
+not either earlier unpaired run. For every row index 0–999, a raw-file check
+confirmed that the seed column was identical across all 20 scenario/mode files.
+The normalized documentation CSV was collected from the paired final files with:
 
 ```python
 import csv
@@ -176,12 +182,21 @@ for scenario in [
 ```
 
 Prebuilding changes only repeated Cargo invocation, not the release executable,
-features, scenario, working directory, CSV format, or seed mechanism.
+features, scenario, working directory, CSV format, or the runner's paired-seed
+mechanism.
 
 `detected` counts only the active wait-for detector result in the scenario CSV.
 No `LockOrderViolation` mode or finding is included. Rates describe how often
 these deliberately deadlocking schedules manifested on this machine; stress
 modes are testing tools, not production-default performance claims.
+
+| Scenario | Deloxide | Random default | Aggressive | Component delays |
+| --- | ---: | ---: | ---: | ---: |
+| two_lock | 170/1,000 (17.0%) | 591/1,000 (59.1%) | 837/1,000 (83.7%) | 999/1,000 (99.9%) |
+| three_lock_cycle | 802/1,000 (80.2%) | 979/1,000 (97.9%) | 998/1,000 (99.8%) | 1,000/1,000 (100.0%) |
+| dining_philosophers | 363/1,000 (36.3%) | 690/1,000 (69.0%) | 869/1,000 (86.9%) | 999/1,000 (99.9%) |
+| rwlock_deadlock | 336/1,000 (33.6%) | 708/1,000 (70.8%) | 873/1,000 (87.3%) | 1,000/1,000 (100.0%) |
+| five_lock_cycle | 1,000/1,000 (100.0%) | 1,000/1,000 (100.0%) | 1,000/1,000 (100.0%) | 1,000/1,000 (100.0%) |
 
 ## Correctness controls
 
