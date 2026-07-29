@@ -169,7 +169,7 @@ fn parse_log_entry(entry: LogEntry) -> Result<Event> {
         "CondvarNotifyOne" => 32u8,
         "CondvarNotifyAll" => 33u8,
 
-        other => anyhow::bail!("Invalid event type: '{}'", other),
+        other => anyhow::bail!("Invalid event type: '{other}'"),
     };
 
     // Convert parent_id and woken_thread to u64, using 0 to represent None

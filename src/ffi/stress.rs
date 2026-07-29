@@ -40,11 +40,12 @@ pub unsafe extern "C" fn deloxide_enable_random_stress(
 
         STRESS_MODE.store(1, Ordering::SeqCst);
 
+        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         unsafe {
             STRESS_CONFIG = Some(crate::core::stress::StressConfig {
                 preemption_probability: probability,
-                min_delay_us,
-                max_delay_us,
+                min_delay_us: u64::from(min_delay_us),
+                max_delay_us: u64::from(max_delay_us),
                 preempt_after_release: true,
             });
         }
@@ -89,11 +90,12 @@ pub unsafe extern "C" fn deloxide_enable_component_stress(
 
         STRESS_MODE.store(2, Ordering::SeqCst);
 
+        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         unsafe {
             STRESS_CONFIG = Some(StressConfig {
                 preemption_probability: 0.8, // High probability for component-based mode
-                min_delay_us,
-                max_delay_us,
+                min_delay_us: u64::from(min_delay_us),
+                max_delay_us: u64::from(max_delay_us),
                 preempt_after_release: true,
             });
         }

@@ -10,29 +10,33 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/deloxide"><img alt="crates.io" src="https://img.shields.io/crates/v/deloxide.svg"></a>
-  <a href="https://docs.rs/deloxide"><img alt="docs.rs" src="https://docs.rs/deloxide/badge.svg"></a>
-  <a href="https://github.com/Emivvvvv/deloxide/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Emivvvvv/deloxide/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://crates.io/crates/deloxide"><img alt="downloads" src="https://img.shields.io/crates/d/deloxide.svg"></a>
-  <a href="LICENSE-MIT"><img alt="MIT or Apache-2.0 license" src="https://img.shields.io/crates/l/deloxide.svg"></a>
+  <a href="https://crates.io/crates/deloxide"><img src="https://img.shields.io/crates/v/deloxide.svg" alt="crates.io release"></a>
+  <a href="https://docs.rs/deloxide"><img src="https://docs.rs/deloxide/badge.svg" alt="docs.rs"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.85%2B-black.svg" alt="Rust 1.85+"></a>
+  <a href="https://github.com/Emivvvvv/deloxide/actions/workflows/ci.yml"><img src="https://github.com/Emivvvvv/deloxide/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://crates.io/crates/deloxide"><img src="https://img.shields.io/crates/d/deloxide.svg" alt="downloads"></a>
+  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green.svg" alt="MIT or Apache-2.0"></a>
 </p>
 
 <p align="center">
-  <strong><a href="https://emivvvvv.github.io/deloxide/">User manual</a></strong>
-  · <a href="https://docs.rs/deloxide">Rust API</a>
-  · <a href="examples/diagnose_deadlock.rs">Runnable example</a>
-  · <a href="https://github.com/Emivvvvv/deloxide/issues">Issues</a>
+  <a href="https://emivvvvv.github.io/deloxide/"><strong>Read the user manual »</strong></a>
+  <br />
+  <a href="https://docs.rs/deloxide">API reference</a>
+  ·
+  <a href="https://github.com/Emivvvvv/deloxide/tree/main/examples">Examples</a>
+  ·
+  <a href="https://github.com/Emivvvvv/deloxide/issues/new?labels=bug">Report a bug</a>
+  ·
+  <a href="https://github.com/Emivvvvv/deloxide/issues/new?labels=enhancement">Request a feature</a>
 </p>
 
 ---
-
-## Runtime deadlock detection for Rust
 
 Deloxide detects active deadlocks and reports the exact thread-and-lock cycle.
 Replace synchronization on the relevant path with its tracked `Mutex`, `RwLock`,
 and `Condvar` wrappers, then initialize the detector once.
 
-### Feature highlights
+## Why Deloxide
 
 - **Instant active detection:** validates wait-for cycles when they occur, without
   waiting for a polling interval.

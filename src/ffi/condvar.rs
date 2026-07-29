@@ -178,7 +178,8 @@ pub unsafe extern "C" fn deloxide_condvar_wait_timeout(
     });
 
     // Perform the wait operation with timeout
-    let timeout = Duration::from_millis(timeout_ms);
+    #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
+    let timeout = Duration::from_millis(u64::from(timeout_ms));
     let timed_out = condvar_ref.wait_timeout(&mut guard, timeout);
 
     // Store the guard back in thread-local storage for this mutex
