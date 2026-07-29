@@ -18,6 +18,11 @@ fn main() {
             DeadlockSource::LockOrderViolation => {
                 eprintln!("POTENTIAL LOCK-ORDER FINDING");
                 eprintln!("source: {:?}", info.source);
+                eprintln!("thread cycle: {:?}", info.thread_cycle);
+                eprintln!(
+                    "thread waiting for locks: {:?}",
+                    info.thread_waiting_for_locks
+                );
                 eprintln!("lock order cycle: {:?}", info.lock_order_cycle);
             }
         })
