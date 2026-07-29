@@ -18,6 +18,7 @@
 | Shared-read filter | Common shared read suppressed a real candidate | Shared RwLock ownership is excluded from mutual-exclusion proof | Focused filter test |
 | Condvar timeout cleanup | Completed wait remained in the Condvar queue | Exact `(thread, condvar, mutex)` cleanup | Queue/mappings are empty after end |
 | Synthetic notifier owner | Notify outside the mutex invented a dependency | Notification uses only actual mutex ownership | Outside-notify test produces no dependency |
+| Condvar fast-guard release | Reacquisition inserted a global owner without updating the guard's release state | Mark the existing guard globally tracked after reacquisition | Focused wait-timeout lifecycle test |
 | C RwLock guard overwrite | Second read guard silently dropped the first | TLS maps keyed by RwLock pointer | Exported-function test holds two guards |
 | Callback panic | A panic terminated the only dispatcher | Per-invocation unwind isolation | A second invocation executes after the first panics |
 
@@ -32,6 +33,12 @@ Uncontended operations still avoid graph traversal, allocation, and the global
 detector. Mutex and RwLock writers inspect per-lock contention state around ownership
 changes. Slow paths recheck the physical primitive while holding the detector before
 persisting a wait.
+
+These changes close the stale-edge and handoff failures reproduced by the focused
+tests, but they do not claim a linearizable snapshot across the separate owner and
+slow-waiter atomics. A packed owner/contention state would provide that stronger
+formal boundary; it is intentionally deferred until its fast-path cost is measured
+and its state transitions receive dedicated concurrency testing.
 
 ## Focused performance checkpoint
 
@@ -64,6 +71,9 @@ The full evaluation is deliberately deferred.
   saturation design/test before implementation.
 - Acquisition generations remain excluded because complete current-owner validation
   has not left a deterministic ABA failure.
+- Owner and slow-waiter state remain separate atomics. No reproduced failure remains
+  after physical recheck and handoff refresh, but a packed-state protocol is the
+  remaining option for a formal single-snapshot handoff guarantee.
 - Process-wide initialization still accepts only the first callback configuration;
   changing singleton lifecycle is a public behavior decision.
 
