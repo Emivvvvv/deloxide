@@ -167,12 +167,17 @@ impl Detector {
     /// * `thread_id` - ID of the thread whose wait is ending
     /// * `condvar_id` - ID of the condition variable that was waited on
     /// * `mutex_id` - ID of the mutex that was reacquired
-    pub fn end_wait(&mut self, thread_id: ThreadId, _condvar_id: CondvarId, _mutex_id: LockId) {
+    pub fn end_wait(&mut self, thread_id: ThreadId, condvar_id: CondvarId, mutex_id: LockId) {
+        if let Some(waiters) = self.cv_waiters.get_mut(&condvar_id) {
+            waiters.retain(|(waiter, lock)| *waiter != thread_id || *lock != mutex_id);
+        }
+
         // Remove from thread wait tracking
         self.thread_wait_cv.remove(&thread_id);
 
         // Remove from woken set if present
         self.cv_woken.remove(&thread_id);
+        self.clear_wait_intent(thread_id);
 
         // Note: CondvarWaitEnd is now logged at a higher level after MutexAcquired
     }
@@ -206,22 +211,16 @@ impl Detector {
         #[cfg(not(feature = "lock-order-graph"))]
         let _lock_order_violation: Option<Vec<LockId>> = None;
 
-        let effective_owner = self
-            .mutex_owners
-            .get(&lock_id)
-            .copied()
-            .or_else(|| Some(get_current_thread_id()));
-
-        if let Some(owner) = effective_owner {
-            // Mutex is owned - set up wait-for edge
-            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex));
-
-            if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
+        if self.mutex_owners.contains_key(&lock_id) {
+            if let Some(cycle) =
+                self.register_wait(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex))
+            {
                 // Apply common lock filter
                 let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
 
-                if !filtered_cycle.is_empty() {
-                    let info = self.extract_deadlock_info(cycle);
+                if !filtered_cycle.is_empty()
+                    && let Some(info) = self.validated_deadlock_info(cycle)
+                {
                     deadlocks.push(info);
                 }
             }
@@ -308,4 +307,34 @@ pub fn notify_all(condvar_id: CondvarId, notifier_id: ThreadId) {
 pub fn end_wait(thread_id: ThreadId, condvar_id: CondvarId, mutex_id: LockId) {
     let mut detector = GLOBAL_DETECTOR.lock();
     detector.end_wait(thread_id, condvar_id, mutex_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn end_wait_removes_exact_condvar_waiter() {
+        let mut detector = Detector::new();
+        detector.create_condvar(20);
+        detector.begin_wait(1, 20, 10);
+
+        detector.end_wait(1, 20, 10);
+
+        assert!(detector.cv_waiters[&20].is_empty());
+        assert!(!detector.thread_wait_cv.contains_key(&1));
+        assert!(!detector.cv_woken.contains(&1));
+    }
+
+    #[test]
+    fn notify_without_mutex_owner_does_not_invent_dependency() {
+        let mut detector = Detector::new();
+        detector.create_condvar(20);
+        detector.begin_wait(1, 20, 10);
+
+        let deadlocks = detector.notify_one(20, 9);
+
+        assert!(deadlocks.is_empty());
+        assert!(!detector.thread_waits_for.contains_key(&1));
+    }
 }
