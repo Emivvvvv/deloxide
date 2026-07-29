@@ -48,10 +48,12 @@ from that release. Do not mix a header from one release with a library from anot
 Call `deloxide_init` before creating or using a tracked primitive. Its documented
 results are `0` for initialization, `1` when another caller already initialized
 the process, `-1` for a non-UTF-8 log path, and `-2` when logger initialization
-fails. A current build also returns `-3` if a non-NULL log path requests optional
-logging from a library built without `logging-and-visualization`. Treat any
-negative result as a failed setup; a program that tolerates an already-initialized
-process may accept `1` deliberately.
+fails. The public header currently omits an implemented `-3` return when a non-NULL
+log path requests optional logging from a library built without
+`logging-and-visualization`. Treat that mismatch as a public-documentation gap and
+`-3` as current-build behavior; the header remains authoritative for the function
+signature. Treat any negative result as a failed setup. A program that tolerates
+an already-initialized process may accept `1` deliberately.
 
 ```c
 int rc = deloxide_init(NULL, deadlock_callback);
