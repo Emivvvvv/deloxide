@@ -2,12 +2,15 @@ use crate::core::detector::rwlock::create_rwlock;
 use crate::core::locks::rwlock::RwLock;
 use crate::core::types::ThreadId;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::{c_int, c_void};
 
 // Each thread can hold one read and one write guard at a time (per-thread tracking)
 thread_local! {
-    static FFI_RW_READ_GUARD: RefCell<Option<crate::core::locks::rwlock::RwLockReadGuard<'static, ()>>> = const {RefCell::new(None)};
-    static FFI_RW_WRITE_GUARD: RefCell<Option<crate::core::locks::rwlock::RwLockWriteGuard<'static, ()>>> = const {RefCell::new(None)};
+    static FFI_RW_READ_GUARDS: RefCell<HashMap<*mut c_void, crate::core::locks::rwlock::RwLockReadGuard<'static, ()>>> =
+        RefCell::new(HashMap::new());
+    static FFI_RW_WRITE_GUARDS: RefCell<HashMap<*mut c_void, crate::core::locks::rwlock::RwLockWriteGuard<'static, ()>>> =
+        RefCell::new(HashMap::new());
 }
 
 /// Create a new tracked RwLock (reader-writer lock).
@@ -79,11 +82,14 @@ pub unsafe extern "C" fn deloxide_rw_lock_read(rwlock: *mut c_void) -> c_int {
     let rwlock_ref = unsafe { &*(rwlock as *const RwLock<()>) };
     let guard = rwlock_ref.read();
     unsafe {
-        FFI_RW_READ_GUARD.with(|slot| {
-            *slot.borrow_mut() = Some(std::mem::transmute::<
-                crate::core::locks::rwlock::RwLockReadGuard<'_, ()>,
-                crate::core::locks::rwlock::RwLockReadGuard<'_, ()>,
-            >(guard))
+        FFI_RW_READ_GUARDS.with(|guards| {
+            guards.borrow_mut().insert(
+                rwlock,
+                std::mem::transmute::<
+                    crate::core::locks::rwlock::RwLockReadGuard<'_, ()>,
+                    crate::core::locks::rwlock::RwLockReadGuard<'_, ()>,
+                >(guard),
+            );
         });
     }
     0
@@ -102,10 +108,7 @@ pub unsafe extern "C" fn deloxide_rw_unlock_read(rwlock: *mut c_void) -> c_int {
     if rwlock.is_null() {
         return -1;
     }
-    FFI_RW_READ_GUARD.with(|slot| {
-        let _ = slot.borrow_mut().take();
-    });
-    0
+    FFI_RW_READ_GUARDS.with(|guards| guards.borrow_mut().remove(&rwlock).map(|_| 0).unwrap_or(-1))
 }
 
 /// Lock an RwLock for writing.
@@ -128,11 +131,14 @@ pub unsafe extern "C" fn deloxide_rw_lock_write(rwlock: *mut c_void) -> c_int {
     let rwlock_ref = unsafe { &*(rwlock as *const RwLock<()>) };
     let guard = rwlock_ref.write();
     unsafe {
-        FFI_RW_WRITE_GUARD.with(|slot| {
-            *slot.borrow_mut() = Some(std::mem::transmute::<
-                crate::core::locks::rwlock::RwLockWriteGuard<'_, ()>,
-                crate::core::locks::rwlock::RwLockWriteGuard<'_, ()>,
-            >(guard))
+        FFI_RW_WRITE_GUARDS.with(|guards| {
+            guards.borrow_mut().insert(
+                rwlock,
+                std::mem::transmute::<
+                    crate::core::locks::rwlock::RwLockWriteGuard<'_, ()>,
+                    crate::core::locks::rwlock::RwLockWriteGuard<'_, ()>,
+                >(guard),
+            );
         });
     }
 
@@ -152,10 +158,7 @@ pub unsafe extern "C" fn deloxide_rw_unlock_write(rwlock: *mut c_void) -> c_int 
     if rwlock.is_null() {
         return -1;
     }
-    FFI_RW_WRITE_GUARD.with(|slot| {
-        let _ = slot.borrow_mut().take();
-    });
-    0
+    FFI_RW_WRITE_GUARDS.with(|guards| guards.borrow_mut().remove(&rwlock).map(|_| 0).unwrap_or(-1))
 }
 
 /// Get the creator thread ID of an RwLock.
@@ -172,4 +175,30 @@ pub unsafe extern "C" fn deloxide_get_rwlock_creator(rwlock: *mut c_void) -> usi
     }
     let rwlock_ref = unsafe { &*(rwlock as *const RwLock<()>) };
     rwlock_ref.creator_thread_id()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ffi_thread_can_hold_two_distinct_read_guards() {
+        unsafe {
+            let first = deloxide_create_rwlock();
+            let second = deloxide_create_rwlock();
+            assert_eq!(deloxide_rw_lock_read(first), 0);
+            assert_eq!(deloxide_rw_lock_read(second), 0);
+
+            let first_lock = &*(first as *const RwLock<()>);
+            assert!(
+                first_lock.try_write().is_none(),
+                "locking a second RwLock must not release the first guard"
+            );
+
+            assert_eq!(deloxide_rw_unlock_read(second), 0);
+            assert_eq!(deloxide_rw_unlock_read(first), 0);
+            deloxide_destroy_rwlock(second);
+            deloxide_destroy_rwlock(first);
+        }
+    }
 }
