@@ -16,7 +16,8 @@ deloxide = { version = "1.1", features = ["logging-and-visualization"] }
 With that feature, `Deloxide::new().start()` writes to `deloxide.log` by default.
 Choose a path explicitly when each run needs its own retained artifact:
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::Deloxide;
 
 Deloxide::new()
@@ -63,7 +64,8 @@ See the API entries for
 [`showcase_this`](https://docs.rs/deloxide/1.1.0/deloxide/fn.showcase_this.html) for
 their exact signatures and error contracts.
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{showcase, showcase_this};
 
 showcase("logs/deadlock_20260729_120000.log")
