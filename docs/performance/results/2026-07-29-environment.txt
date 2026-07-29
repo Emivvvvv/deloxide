@@ -5,9 +5,25 @@ Deloxide worktree status before benchmarking
  M Cargo.toml
 ?? scripts/tests/
 
-The parallel dirty files are documentation/example/script work and do not change
-Deloxide runtime sources. The existing README.md width edit is likewise unrelated
-to benchmark code. No runtime source was changed before or during these runs.
+Measured build identity
+The runtime source tree was exactly
+baa9e89ef87191d25832b4ecf567c5dd26b4a6ae. The only Cargo.toml dirtiness was
+this explicit example target:
+
+[[example]]
+name = "diagnose_deadlock"
+path = "examples/diagnose_deadlock.rs"
+
+Those four lines were later committed unchanged in
+5db2db52889ff35f8d944f58b48196fe9b8b7864. They do not change dependencies,
+features, benchmark targets, build profiles, or runtime source. The untracked
+scripts/tests/ directory and the parallel README.md width edit were documentation
+validation work and were not compiled into the benchmark. No runtime source was
+changed before or during these runs.
+
+To reproduce the measured state, check out
+baa9e89ef87191d25832b4ecf567c5dd26b4a6ae, add only the [[example]] block above
+to Cargo.toml, leave runtime sources untouched, and run the recorded commands.
 
 rustc -Vv
 rustc 1.90.0-nightly (bdaba05a9 2025-06-27)

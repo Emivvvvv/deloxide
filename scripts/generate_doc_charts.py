@@ -58,19 +58,6 @@ def bar_chart(
     )
 
 
-def no_data_chart(title: str, description: str) -> str:
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="142" '
-        'viewBox="0 0 960 142">'
-        f"<title>{escape(title)}</title>"
-        f"<desc>{escape(description)}</desc>"
-        '<style>text{font:14px sans-serif;fill:#222}</style>'
-        '<text x="20" y="42">No comparable result was recorded.</text>'
-        '<text x="20" y="72">See the evaluation record for the runner limitation.</text>'
-        '</svg>\n'
-    )
-
-
 def latency_svg(rows: list[dict[str, str]]) -> str:
     selected = [
         row
@@ -93,12 +80,6 @@ def latency_svg(rows: list[dict[str, str]]) -> str:
 
 
 def manifestation_svg(rows: list[dict[str, str]]) -> str:
-    if not rows:
-        return no_data_chart(
-            "Deadlock manifestation rate",
-            "No comparable 1,000-iteration result was recorded because the "
-            "evaluation runner did not complete in reasonable time.",
-        )
     values = [
         (
             f'{row["scenario"]}: {row["mode"]}',

@@ -5,8 +5,8 @@
   `python3 scripts/generate_doc_charts.py`.
 - `manifestation-rate.svg` is generated from
   `docs/performance/results/2026-07-29-manifestation.csv` with the same command.
-  The committed chart explicitly states when the prescribed manifestation run did
-  not produce comparable data; it does not represent a rate in that case.
+  It contains the 20 populated scenario/mode rates from the completed
+  1,000-run-per-combination measurement.
 - `visualization.png` is the migrated product screenshot from
   `images/visualization.png`. It is not benchmark evidence.
 

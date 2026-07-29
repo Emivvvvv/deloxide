@@ -2,5 +2,5 @@ case,implementation,median,unit,confidence_low,confidence_high,samples,features,
 mutex/uncontended,deloxide,9.122785,ns,9.065149,9.220279,30,default=[],baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
 parking_lot/mutex_uncontended,parking_lot,10.279415,ns,9.950690,10.500662,30,default=[],baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
 rwlock/read_uncontended,deloxide,58.073547,ns,54.055029,62.781292,30,default=[],baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
-rwlock/write_uncontended,deloxide,9.165020,ns,9.083011,9.211179,30,default=[],baa9e89ef87191d25832b4a6ae
+rwlock/write_uncontended,deloxide,9.165020,ns,9.083011,9.211179,30,default=[],baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
 mutex/two_thread_handoff,deloxide,37891.485192,ns,37118.106728,39032.073499,30,default=[],baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
