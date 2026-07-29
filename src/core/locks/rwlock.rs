@@ -23,7 +23,7 @@
 //! ```
 
 use crate::core::detector;
-use crate::core::locks::NEXT_LOCK_ID;
+use crate::core::locks::{NEXT_LOCK_ID, contention::ContentionState};
 
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 #[cfg(feature = "logging-and-visualization")]
@@ -49,6 +49,8 @@ pub struct RwLock<T> {
     creator_thread_id: ThreadId,
     /// Tracks the thread ID of a WRITER using AtomicUsize. 0 if no writer.
     writer_owner: AtomicUsize,
+    /// Number of blocking slow-path operations that may depend on this lock.
+    contention: ContentionState,
 }
 
 /// Guard for a shared (read) lock, reports release when dropped
@@ -67,6 +69,7 @@ pub struct RwLockWriteGuard<'a, T> {
     owner_atomic: &'a AtomicUsize,
     /// Whether this lock acquisition was tracked by the global detector
     tracked_globally: bool,
+    contention: &'a ContentionState,
 }
 
 impl<T> RwLock<T> {
@@ -93,6 +96,7 @@ impl<T> RwLock<T> {
             inner: ParkingLotRwLock::new(value),
             creator_thread_id,
             writer_owner: AtomicUsize::new(0),
+            contention: ContentionState::new(),
         }
     }
 
@@ -116,20 +120,37 @@ impl<T> RwLock<T> {
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         let thread_id = get_current_thread_id();
 
-        // Phase 1: Atomic detection and try-acquire
-        let guard = crate::core::detector::rwlock::attempt_read(thread_id, self.id, || {
-            self.inner.try_read()
-        });
+        if let Some(guard) =
+            crate::core::detector::rwlock::try_read(thread_id, self.id, || self.inner.try_read())
+        {
+            return RwLockReadGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+            };
+        }
 
-        // Phase 2: If try-acquire failed, use blocking read
-        let guard = match guard {
-            Some(g) => g,
-            None => {
-                let g = self.inner.read();
-                detector::rwlock::complete_read(thread_id, self.id);
-                g
-            }
+        let slow_waiter = self.contention.register();
+        let (rechecked_guard, deadlock_info) = detector::rwlock::acquire_read_slow_with_recheck(
+            thread_id,
+            self.id,
+            || self.inner.try_read(),
+            || {
+                let writer = self.writer_owner.load(Ordering::Acquire);
+                (writer != 0).then_some(writer as ThreadId)
+            },
+        );
+        if let Some(info) = deadlock_info {
+            detector::deadlock_handling::process_deadlock(info);
+        }
+        let guard = if let Some(guard) = rechecked_guard {
+            guard
+        } else {
+            let guard = self.inner.read();
+            detector::rwlock::complete_read(thread_id, self.id);
+            guard
         };
+        drop(slow_waiter);
 
         RwLockReadGuard {
             thread_id,
@@ -153,6 +174,8 @@ impl<T> RwLock<T> {
         #[cfg(not(feature = "stress-test"))]
         if let Some(guard) = self.inner.try_write() {
             self.writer_owner.store(tid_usize, Ordering::Release);
+            let tracked_globally =
+                cfg!(feature = "lock-order-graph") || self.contention.has_waiters();
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -161,8 +184,9 @@ impl<T> RwLock<T> {
                 }
             }
 
-            #[cfg(feature = "lock-order-graph")]
-            detector::rwlock::complete_write(thread_id, self.id);
+            if tracked_globally {
+                detector::rwlock::complete_write(thread_id, self.id);
+            }
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -176,71 +200,43 @@ impl<T> RwLock<T> {
                 lock_id: self.id,
                 guard,
                 owner_atomic: &self.writer_owner,
-                tracked_globally: cfg!(feature = "lock-order-graph"),
+                tracked_globally,
+                contention: &self.contention,
             };
         }
 
-        // Slow Path
-        // Check if a writer holds it locally
-        let mut current_writer_val = self.writer_owner.load(Ordering::Acquire);
-
-        // Adaptive Backoff:
-        // If the lock is held exclusively but we don't see a writer owner yet,
-        // wait briefly for the owner to set their ID.
-        if current_writer_val == 0 && self.inner.is_locked_exclusive() {
-            let mut spin_count = 0;
-            while current_writer_val == 0 {
-                if spin_count < 100 {
-                    std::hint::spin_loop();
-                } else {
-                    std::thread::yield_now();
-                }
-
-                // Use Relaxed loading during the spin loop
-                current_writer_val = self.writer_owner.load(Ordering::Relaxed);
-                spin_count += 1;
-
-                // Optimization: Check lock state less frequently
-                if spin_count % 16 == 0 && !self.inner.is_locked_exclusive() {
-                    break;
-                }
-            }
-            std::sync::atomic::fence(Ordering::Acquire);
-        }
-
-        let current_writer = if current_writer_val == 0 {
-            None
-        } else {
-            Some(current_writer_val as ThreadId)
-        };
-
-        let deadlock_info =
-            detector::rwlock::acquire_write_slow(thread_id, self.id, current_writer);
+        let slow_waiter = self.contention.register();
+        let (rechecked_guard, deadlock_info) = detector::rwlock::acquire_write_slow_with_recheck(
+            thread_id,
+            self.id,
+            || self.inner.try_write(),
+            || {
+                let writer = self.writer_owner.load(Ordering::Acquire);
+                (writer != 0).then_some(writer as ThreadId)
+            },
+        );
 
         if let Some(info) = deadlock_info {
-            // Verify the edge is still valid (it might be stale if the writer released the lock).
-            let is_stale = if let Some(expected_writer) = current_writer {
-                let actual_writer = self.writer_owner.load(Ordering::Relaxed);
-                !detector::deadlock_handling::verify_deadlock_edges(
-                    &info,
-                    thread_id,
-                    self.id,
-                    expected_writer,
-                    actual_writer,
-                )
-            } else {
-                false
-            };
+            detector::deadlock_handling::process_deadlock(info);
+        }
 
-            if !is_stale {
-                detector::deadlock_handling::process_deadlock(info);
-            }
+        if let Some(guard) = rechecked_guard {
+            self.writer_owner.store(tid_usize, Ordering::Release);
+            drop(slow_waiter);
+            return RwLockWriteGuard {
+                thread_id,
+                lock_id: self.id,
+                guard,
+                owner_atomic: &self.writer_owner,
+                tracked_globally: true,
+                contention: &self.contention,
+            };
         }
 
         let guard = self.inner.write();
-
-        detector::rwlock::complete_write(thread_id, self.id);
         self.writer_owner.store(tid_usize, Ordering::Release);
+        detector::rwlock::complete_write(thread_id, self.id);
+        drop(slow_waiter);
 
         RwLockWriteGuard {
             thread_id,
@@ -248,6 +244,7 @@ impl<T> RwLock<T> {
             guard,
             owner_atomic: &self.writer_owner,
             tracked_globally: true,
+            contention: &self.contention,
         }
     }
 
@@ -259,7 +256,7 @@ impl<T> RwLock<T> {
         let thread_id = get_current_thread_id();
 
         // Use atomic detection and try-acquire
-        let guard = detector::rwlock::attempt_read(thread_id, self.id, || self.inner.try_read());
+        let guard = detector::rwlock::try_read(thread_id, self.id, || self.inner.try_read());
 
         guard.map(|g| RwLockReadGuard {
             thread_id,
@@ -278,6 +275,8 @@ impl<T> RwLock<T> {
         if let Some(guard) = self.inner.try_write() {
             self.writer_owner
                 .store(thread_id as usize, Ordering::Release);
+            let tracked_globally =
+                cfg!(feature = "lock-order-graph") || self.contention.has_waiters();
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -286,8 +285,9 @@ impl<T> RwLock<T> {
                 }
             }
 
-            #[cfg(feature = "lock-order-graph")]
-            detector::rwlock::complete_write(thread_id, self.id);
+            if tracked_globally {
+                detector::rwlock::complete_write(thread_id, self.id);
+            }
 
             #[cfg(feature = "logging-and-visualization")]
             {
@@ -301,7 +301,8 @@ impl<T> RwLock<T> {
                 lock_id: self.id,
                 guard,
                 owner_atomic: &self.writer_owner,
-                tracked_globally: cfg!(feature = "lock-order-graph"),
+                tracked_globally,
+                contention: &self.contention,
             })
         } else {
             None
@@ -390,7 +391,7 @@ impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
         self.owner_atomic.store(0, Ordering::Release);
 
         // 2. Report release (detector and/or logger)
-        if self.tracked_globally {
+        if self.tracked_globally || self.contention.has_waiters() {
             detector::rwlock::release_write(self.thread_id, self.lock_id);
         } else {
             #[cfg(feature = "logging-and-visualization")]
@@ -419,5 +420,36 @@ impl<T> From<T> for RwLock<T> {
     /// This is equivalent to RwLock::new
     fn from(t: T) -> Self {
         RwLock::new(t)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, mpsc};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn blocking_reader_wait_is_visible_while_fast_writer_holds_lock() {
+        let lock = Arc::new(RwLock::new(()));
+        let writer = lock.write();
+        let reader_lock = Arc::clone(&lock);
+        let (acquired_tx, acquired_rx) = mpsc::channel();
+
+        let reader = std::thread::spawn(move || {
+            let _guard = reader_lock.read();
+            acquired_tx.send(()).unwrap();
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !lock.contention.has_waiters() && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(lock.contention.has_waiters());
+
+        drop(writer);
+        acquired_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        reader.join().unwrap();
+        assert!(!lock.contention.has_waiters());
     }
 }

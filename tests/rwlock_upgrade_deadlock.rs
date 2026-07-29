@@ -34,13 +34,13 @@ fn test_rwlock_upgrade_deadlock() {
     let info = expect_deadlock(&harness, DEADLOCK_TIMEOUT);
     assert_eq!(
         info.thread_cycle.len(),
-        2,
-        "Deadlock should involve 2 threads"
+        1,
+        "A blocking read-to-write upgrade is already a same-thread deadlock"
     );
     assert_eq!(
         info.thread_waiting_for_locks.len(),
-        2,
-        "Should be 2 waiting relationships"
+        1,
+        "The upgrading thread should wait on its own read ownership"
     );
     println!(
         "✔ Detected RwLock upgrade deadlock: {:?}",

@@ -1,4 +1,5 @@
 use crate::DeadlockInfo;
+#[cfg(feature = "lock-order-graph")]
 use crate::LockId;
 use crate::ThreadId;
 use crate::core::detector::DISPATCHER;
@@ -50,6 +51,10 @@ impl Detector {
                 break;
             }
         }
+
+        // A shared RwLock read can be held by every participant at once, so it
+        // cannot prove that the observed cycle is an impossible snapshot.
+        intersection.retain(|lock_id| !self.rwlock_readers.contains_key(lock_id));
 
         // If intersection is empty, it's a real cycle (no common locks)
         // If intersection has locks, it's a false positive (threads share locks)
@@ -113,80 +118,18 @@ pub fn process_deadlock(info: DeadlockInfo) {
     logger::log_deadlock(info);
 }
 
-/// Verify if a reported deadlock is valid by checking current lock ownership
-///
-/// This function performs "Immediate Edge Verification" to filter out stale edges
-/// that can occur when using atomic hints for Fast Path detection.
-///
-/// # Arguments
-/// * `info` - The detected deadlock info
-/// * `thread_id` - The ID of the current thread (the one verifying)
-/// * `lock_id` - The ID of the lock the current thread is trying to acquire
-/// * `expected_owner` - The thread ID that was expected to hold the lock (from atomic hint)
-/// * `actual_owner` - The actual current owner of the lock (from atomic load)
-///
-/// # Returns
-/// * `true` if the deadlock is valid (edges confirmed)
-/// * `false` if the deadlock is stale (edges invalid)
-pub fn verify_deadlock_edges(
-    info: &DeadlockInfo,
-    thread_id: ThreadId,
-    lock_id: LockId,
-    expected_owner: ThreadId,
-    actual_owner: usize,
-) -> bool {
-    // Verify Outgoing Edge: Check if we are waiting for this specific lock
-    let waiting_for_this = info
-        .thread_waiting_for_locks
-        .iter()
-        .any(|&(t, l)| t == thread_id && l == lock_id);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    if !waiting_for_this {
-        return false;
+    #[test]
+    fn common_shared_read_lock_does_not_filter_cycle() {
+        let mut detector = Detector::new();
+        detector.thread_holds.entry(1).or_default().insert(99);
+        detector.thread_holds.entry(2).or_default().insert(99);
+        detector.rwlock_readers.entry(99).or_default().insert(1, 1);
+        detector.rwlock_readers.entry(99).or_default().insert(2, 1);
+
+        assert_eq!(detector.filter_cycle_by_common_locks(&[1, 2]), vec![1, 2]);
     }
-
-    // Verify the expected owner still holds the lock
-    if actual_owner != expected_owner {
-        return false; // Stale outgoing edge
-    }
-
-    // Verify Incoming Edges: Ensure cycle consistency with our current state
-    // If the cycle implies WE hold this lock, but we know we don't, then the cycle is stale.
-    // NOTE: LockOrderViolation cycles are synthetic (just the current thread) and don't represent
-    // a wait-for cycle, so we skip this check.
-    if info.source == DeadlockSource::LockOrderViolation {
-        return true;
-    }
-
-    // Find who is waiting for us in the cycle
-    // The cycle is a list of threads [t1, t2, t3] where t1->t2->t3->t1
-    let cycle_len = info.thread_cycle.len();
-    let mut self_index = None;
-    for (i, &t) in info.thread_cycle.iter().enumerate() {
-        if t == thread_id {
-            self_index = Some(i);
-            break;
-        }
-    }
-
-    if let Some(idx) = self_index {
-        // The thread before us in the cycle is waiting for us
-        let prev_idx = if idx == 0 { cycle_len - 1 } else { idx - 1 };
-        let prev_thread = info.thread_cycle[prev_idx];
-
-        // Check if prev_thread is waiting for THIS lock
-        let prev_waiting_for_this = info
-            .thread_waiting_for_locks
-            .iter()
-            .any(|&(t, l)| t == prev_thread && l == lock_id);
-
-        if prev_waiting_for_this {
-            // The cycle says prev_thread waits for US for THIS lock.
-            // But we know WE don't hold it (actual_owner == expected_owner != us).
-            // So this edge is stale.
-            return false; // Stale incoming edge
-        }
-    }
-
-    true
 }

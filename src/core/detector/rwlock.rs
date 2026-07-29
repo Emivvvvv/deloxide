@@ -47,58 +47,18 @@ impl Detector {
         logger::log_lock_event(lock_id, None, Events::RwExit);
     }
 
-    /// Read lock attempt and try-acquire operation
-    ///
-    /// # Arguments
-    /// * `thread_id` - ID of the thread attempting to acquire the read lock
-    /// * `lock_id` - ID of the RwLock being attempted
-    /// * `try_acquire_fn` - Closure that attempts non-blocking read lock acquisition
-    ///
-    /// # Returns
-    /// * `Some(T)` - Read lock was acquired successfully
-    /// * `None` - Lock is busy (writer exists), deadlock detected, or acquisition failed
-    pub fn attempt_read<T, F>(
+    pub(crate) fn try_read_nonblocking<T, F>(
         &mut self,
         thread_id: ThreadId,
         lock_id: LockId,
-        potential_writer: Option<ThreadId>,
         try_acquire_fn: F,
-    ) -> Result<Option<T>, Vec<ThreadId>>
+    ) -> Option<T>
     where
         F: FnOnce() -> Option<T>,
     {
-        // Log the attempt
         logger::log_interaction_event(thread_id, lock_id, Events::RwReadAttempt);
-
-        // Apply stress testing while holding detector lock
-
-        // Check if there's a writer (Global State OR Atomic Hint)
-        let effective_writer = self
-            .rwlock_writer
-            .get(&lock_id)
-            .copied()
-            .or(potential_writer);
-
-        if let Some(writer) = effective_writer {
-            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwRead));
-
-            if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
-                // Apply common lock filter
-                let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
-
-                if !filtered_cycle.is_empty() {
-                    // Real deadlock detected!
-                    return Err(cycle);
-                }
-            }
-
-            // Writer exists but no deadlock - will need to block
-            return Ok(None);
-        }
-
-        // No writer - try to acquire read lock while still holding GLOBAL_DETECTOR
-        if let Some(guard) = try_acquire_fn() {
-            // Success! Update detector state immediately
+        let acquired = try_acquire_fn();
+        if acquired.is_some() {
             self.rwlock_readers
                 .entry(lock_id)
                 .or_default()
@@ -110,32 +70,12 @@ impl Detector {
                 .entry(thread_id)
                 .or_default()
                 .insert(lock_id);
-
-            // NOTE: Read locks do NOT clear wait edges!
-            // Multiple readers can coexist, so the thread stays in the graph
-            // for potential upgrade deadlock detection.
-            self.clear_wait_intent(thread_id);
-
-            // Log acquisition
             logger::log_interaction_event(thread_id, lock_id, Events::RwReadAcquired);
-
-            Ok(Some(guard))
-        } else {
-            // try_read failed - a writer must have acquired it
-            // Set up wait-for edges for the blocking read() that will follow
-            if let Some(&writer) = self.rwlock_writer.get(&lock_id) {
-                self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwRead));
-
-                if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
-                    let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
-                    if !filtered_cycle.is_empty() {
-                        return Err(cycle);
-                    }
-                }
+            if self.lock_waiters.contains_key(&lock_id) {
+                self.refresh_waiters_for_lock(lock_id);
             }
-
-            Ok(None)
         }
+        acquired
     }
 
     /// Update detector state after blocking read lock acquisition
@@ -169,6 +109,7 @@ impl Detector {
     /// * `lock_id` - ID of the RwLock being released
     pub fn release_read(&mut self, thread_id: ThreadId, lock_id: LockId) {
         logger::log_interaction_event(thread_id, lock_id, Events::RwReadReleased);
+        let mut still_holds_read = false;
         if let Some(readers) = self.rwlock_readers.get_mut(&lock_id) {
             if let Some(count) = readers.get_mut(&thread_id) {
                 *count -= 1;
@@ -176,13 +117,14 @@ impl Detector {
                     readers.remove(&thread_id);
                 }
             }
+            still_holds_read = readers.contains_key(&thread_id);
             if readers.is_empty() {
                 self.rwlock_readers.remove(&lock_id);
             }
         }
 
         #[cfg(feature = "lock-order-graph")]
-        if let Some(holds) = self.thread_holds.get_mut(&thread_id) {
+        if !still_holds_read && let Some(holds) = self.thread_holds.get_mut(&thread_id) {
             holds.remove(&lock_id);
             if holds.is_empty() {
                 self.thread_holds.remove(&thread_id);
@@ -191,7 +133,7 @@ impl Detector {
 
         // Remove stale edges for all threads waiting on this lock
         // (e.g. writers waiting for this reader)
-        if let Some(waiters) = self.lock_waiters.get(&lock_id) {
+        if !still_holds_read && let Some(waiters) = self.lock_waiters.get(&lock_id) {
             for &waiter in waiters {
                 self.wait_for_graph.remove_edge(waiter, thread_id);
             }
@@ -256,37 +198,20 @@ impl Detector {
             return Some(self.extract_lock_order_violation_info(thread_id, lock_id, lock_cycle));
         }
 
-        // Check for conflicting readers (Global State)
-        if let Some(readers) = self.rwlock_readers.get(&lock_id) {
-            let reader_ids: Vec<_> = readers.keys().copied().collect();
-            for reader in reader_ids {
-                if reader != thread_id {
-                    self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwWrite));
-                    if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, reader) {
-                        // No common lock filtering for upgrades (Reader->Writer deps)
-                        return Some(self.extract_deadlock_info(cycle));
-                    }
-                }
-            }
+        if let Some(writer) = potential_writer {
+            self.rwlock_writer.insert(lock_id, writer);
         }
 
-        // Check for conflicting writer (Global State or Atomic Hint)
-        let effective_writer = self.rwlock_writer.get(&lock_id).copied().or_else(|| {
-            if let Some(writer) = potential_writer {
-                // Trust the atomic hint from the wrapper.
-                // We rely on the wrapper to verify this edge if a deadlock is detected.
-                return Some(writer);
-            }
-            None
-        });
-
-        if let Some(writer) = effective_writer
-            && writer != thread_id
+        let has_readers = self
+            .rwlock_readers
+            .get(&lock_id)
+            .is_some_and(|readers| !readers.is_empty());
+        let has_writer = self.rwlock_writer.contains_key(&lock_id);
+        if (has_readers || has_writer)
+            && let Some(cycle) =
+                self.register_wait(thread_id, WaitIntent::new(lock_id, WaitMode::RwWrite))
         {
-            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwWrite));
-            if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
-                return Some(self.extract_deadlock_info(cycle));
-            }
+            return self.validated_deadlock_info(cycle);
         }
         None
     }
@@ -318,6 +243,11 @@ impl Detector {
 
         // Clear wait-for edges
         self.clear_wait_intent(thread_id);
+        if let Some(cycle) = self.refresh_waiters_for_lock(lock_id)
+            && let Some(info) = self.validated_deadlock_info(cycle)
+        {
+            deadlock_info = Some(info);
+        }
 
         // Log acquisition
         logger::log_interaction_event(thread_id, lock_id, Events::RwWriteAcquired);
@@ -350,47 +280,36 @@ pub fn release_write(thread_id: ThreadId, lock_id: LockId) {
     detector.release_write(thread_id, lock_id);
 }
 
-/// Read lock attempt and try-acquire with the global detector
-///
-/// # Arguments
-/// * `thread_id` - ID of the thread attempting to acquire the read lock
-/// * `lock_id` - ID of the RwLock being attempted
-/// * `try_acquire_fn` - Closure that attempts non-blocking read lock acquisition
-///
-/// # Returns
-/// * `Some(T)` - Read lock was acquired successfully
-/// * `None` - Lock is busy, deadlock detected, or acquisition failed
-pub fn attempt_read<T, F>(thread_id: ThreadId, lock_id: LockId, try_acquire_fn: F) -> Option<T>
+pub fn try_read<T, F>(thread_id: ThreadId, lock_id: LockId, try_acquire_fn: F) -> Option<T>
 where
     F: FnOnce() -> Option<T>,
 {
-    // 1. Calculate stress delay (holding lock)
-    #[cfg(feature = "stress-test")]
-    let delay = {
-        let detector = GLOBAL_DETECTOR.lock();
-        detector.calculate_stress_delay(thread_id, lock_id)
-    };
+    let mut detector = GLOBAL_DETECTOR.lock();
+    detector.try_read_nonblocking(thread_id, lock_id, try_acquire_fn)
+}
 
-    // 2. Apply delay (without lock)
-    #[cfg(feature = "stress-test")]
-    if let Some(duration) = delay {
-        thread::sleep(duration);
+pub fn acquire_read_slow_with_recheck<T, F, H>(
+    thread_id: ThreadId,
+    lock_id: LockId,
+    try_acquire: F,
+    writer_hint: H,
+) -> (Option<T>, Option<DeadlockInfo>)
+where
+    F: FnOnce() -> Option<T>,
+    H: FnOnce() -> Option<ThreadId>,
+{
+    let mut detector = GLOBAL_DETECTOR.lock();
+    if let Some(acquired) = try_acquire() {
+        detector.complete_read(thread_id, lock_id);
+        return (Some(acquired), None);
     }
 
-    // 3. Proceed with detection (re-acquiring lock)
-    let (result, deadlock_info) = {
-        let mut detector = GLOBAL_DETECTOR.lock();
-        match detector.attempt_read(thread_id, lock_id, None, try_acquire_fn) {
-            Ok(val) => (val, None),
-            Err(cycle) => (None, Some(detector.extract_deadlock_info(cycle))),
-        }
-    };
-
-    if let Some(info) = deadlock_info {
-        deadlock_handling::process_deadlock(info);
+    if let Some(writer) = writer_hint() {
+        detector.rwlock_writer.insert(lock_id, writer);
     }
-
-    result
+    let cycle = detector.register_wait(thread_id, WaitIntent::new(lock_id, WaitMode::RwRead));
+    let info = cycle.and_then(|cycle| detector.validated_deadlock_info(cycle));
+    (None, info)
 }
 
 /// Complete read lock acquisition after blocking
@@ -403,35 +322,35 @@ pub fn complete_read(thread_id: ThreadId, lock_id: LockId) {
     detector.complete_read(thread_id, lock_id);
 }
 
-/// Register a slow-path write lock acquisition attempt with the global detector
-///
-/// # Arguments
-/// * `thread_id` - ID of the thread attempting to acquire the write lock
-/// * `lock_id` - ID of the RwLock being attempted
-/// * `potential_writer` - The thread ID observed holding the write lock
-pub fn acquire_write_slow(
+pub fn acquire_write_slow_with_recheck<T, F, H>(
     thread_id: ThreadId,
     lock_id: LockId,
-    potential_writer: Option<ThreadId>,
-) -> Option<DeadlockInfo> {
-    // 1. Calculate stress delay (holding lock)
+    try_acquire: F,
+    writer_hint: H,
+) -> (Option<T>, Option<DeadlockInfo>)
+where
+    F: FnOnce() -> Option<T>,
+    H: FnOnce() -> Option<ThreadId>,
+{
     #[cfg(feature = "stress-test")]
-    let delay = {
-        let detector = GLOBAL_DETECTOR.lock();
-        detector.calculate_stress_delay(thread_id, lock_id)
-    };
-
-    // 2. Apply delay (without lock)
-    #[cfg(feature = "stress-test")]
-    if let Some(duration) = delay {
-        thread::sleep(duration);
-    }
-
-    // 3. Proceed with detection (re-acquiring lock)
     {
-        let mut detector = GLOBAL_DETECTOR.lock();
-        detector.acquire_write_slow(thread_id, lock_id, potential_writer)
+        let delay = {
+            let detector = GLOBAL_DETECTOR.lock();
+            detector.calculate_stress_delay(thread_id, lock_id)
+        };
+        if let Some(duration) = delay {
+            thread::sleep(duration);
+        }
     }
+
+    let mut detector = GLOBAL_DETECTOR.lock();
+    if let Some(acquired) = try_acquire() {
+        let info = detector.complete_write(thread_id, lock_id);
+        return (Some(acquired), info);
+    }
+
+    let info = detector.acquire_write_slow(thread_id, lock_id, writer_hint());
+    (None, info)
 }
 
 /// Complete write lock acquisition after blocking
@@ -447,5 +366,70 @@ pub fn complete_write(thread_id: ThreadId, lock_id: LockId) {
 
     if let Some(info) = deadlock_info {
         deadlock_handling::process_deadlock(info);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocking_upgrade_registers_self_cycle() {
+        let mut detector = Detector::new();
+        detector.rwlock_readers.entry(10).or_default().insert(1, 1);
+
+        let info = detector
+            .acquire_write_slow(1, 10, None)
+            .expect("blocking upgrade must be reported");
+
+        assert_eq!(info.thread_cycle, vec![1]);
+        assert_eq!(info.thread_waiting_for_locks, vec![(1, 10)]);
+    }
+
+    #[test]
+    fn failed_nonblocking_read_leaves_no_wait_state() {
+        let mut detector = Detector::new();
+        detector.rwlock_writer.insert(10, 2);
+
+        let result = detector.try_read_nonblocking(1, 10, || None::<()>);
+
+        assert!(result.is_none());
+        assert!(!detector.thread_waits_for.contains_key(&1));
+        assert!(!detector.lock_waiters.contains_key(&10));
+        assert!(detector.wait_for_graph.edges.get(&1).is_none());
+    }
+
+    #[test]
+    fn recursive_read_release_preserves_remaining_hold() {
+        let mut detector = Detector::new();
+        detector.rwlock_readers.entry(10).or_default().insert(1, 2);
+
+        detector.release_read(1, 10);
+        assert_eq!(detector.rwlock_readers[&10][&1], 1);
+
+        detector.release_read(1, 10);
+        assert!(!detector.rwlock_readers.contains_key(&10));
+    }
+
+    #[test]
+    #[cfg(feature = "lock-order-graph")]
+    fn recursive_read_release_preserves_lock_order_hold_until_last_guard() {
+        let mut detector = Detector::new();
+        detector.complete_read(1, 10);
+        detector.complete_read(1, 10);
+        detector.register_wait(2, WaitIntent::new(10, WaitMode::RwWrite));
+        assert_eq!(detector.wait_for_graph.outgoing(2), vec![1]);
+
+        detector.release_read(1, 10);
+
+        assert_eq!(detector.rwlock_readers[&10][&1], 1);
+        assert!(detector.thread_holds[&1].contains(&10));
+        assert_eq!(detector.wait_for_graph.outgoing(2), vec![1]);
+
+        detector.release_read(1, 10);
+
+        assert!(!detector.rwlock_readers.contains_key(&10));
+        assert!(!detector.thread_holds.contains_key(&1));
+        assert!(detector.wait_for_graph.outgoing(2).is_empty());
     }
 }
