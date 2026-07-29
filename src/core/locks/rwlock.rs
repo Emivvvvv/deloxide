@@ -112,8 +112,8 @@ impl<T> RwLock<T> {
 
     /// Acquire a shared (read) lock, tracking the attempt and acquisition
     ///
-    /// Uses two-phase locking protocol to eliminate race conditions between
-    /// deadlock detection and lock acquisition.
+    /// Uses a contention handshake and physical recheck to narrow races between
+    /// detector updates and physical acquisition.
     ///
     /// # Returns
     /// A guard which releases the lock when dropped
@@ -161,8 +161,8 @@ impl<T> RwLock<T> {
 
     /// Acquire an exclusive (write) lock, tracking the attempt and acquisition
     ///
-    /// Uses two-phase locking protocol to eliminate race conditions between
-    /// deadlock detection and lock acquisition.
+    /// Uses a contention handshake and physical recheck to narrow races between
+    /// detector updates and physical acquisition.
     ///
     /// # Returns
     /// A guard which releases the lock when dropped

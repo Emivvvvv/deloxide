@@ -84,8 +84,8 @@ impl Detector {
         let effective_owner = potential_owner.or_else(|| self.mutex_owners.get(&lock_id).copied());
 
         if let Some(owner) = effective_owner {
-            // A failed physical recheck makes the wrapper's owner hint authoritative
-            // for this contention interval.
+            // A failed physical recheck lets the wrapper's owner hint synchronize
+            // the detector for this contention interval.
             self.mutex_owners.insert(lock_id, owner);
         }
 
@@ -212,6 +212,11 @@ pub fn complete_acquire(thread_id: ThreadId, lock_id: LockId) {
     if let Some(info) = deadlock_info {
         deadlock_handling::process_deadlock(info);
     }
+}
+
+#[cfg(all(test, not(feature = "lock-order-graph")))]
+pub(crate) fn owner_for_test(lock_id: LockId) -> Option<ThreadId> {
+    GLOBAL_DETECTOR.lock().mutex_owners.get(&lock_id).copied()
 }
 
 /// Register contention while holding the detector mutex and recheck the physical

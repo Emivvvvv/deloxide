@@ -125,7 +125,7 @@ impl<T> Mutex<T> {
 
     /// Acquire the lock, blocking if necessary
     ///
-    /// Uses atomic deadlock detection to prevent race conditions.
+    /// Uses a contention handshake and physical recheck to narrow ownership races.
     ///
     /// Uses the Optimistic Fast Path: attempts to acquire the lock cheaply first.
     /// Only interacts with the global deadlock detector if the lock is contented.
@@ -370,6 +370,15 @@ impl<'a, T> MutexGuard<'a, T> {
     /// Restore local ownership tracking (used internally by Condvar)
     pub(crate) fn restore_ownership(&self) {
         self.state.owner.store(self.thread_id, Ordering::Release);
+    }
+
+    pub(crate) fn mark_tracked_globally(&mut self) {
+        self.tracked_globally = true;
+    }
+
+    #[cfg(all(test, not(feature = "lock-order-graph")))]
+    pub(crate) fn is_tracked_globally(&self) -> bool {
+        self.tracked_globally
     }
 }
 

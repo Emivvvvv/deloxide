@@ -126,6 +126,7 @@ impl Condvar {
 
         // Report mutex reacquisition (this logs MutexAcquired)
         detector::mutex::complete_acquire(thread_id, mutex_id);
+        guard.mark_tracked_globally();
 
         // Report wait end (clears cv_woken flag, which allows complete_acquire to work correctly)
         crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
@@ -186,6 +187,7 @@ impl Condvar {
         guard.restore_ownership();
 
         detector::mutex::complete_acquire(thread_id, mutex_id);
+        guard.mark_tracked_globally();
         crate::core::detector::condvar::end_wait(thread_id, self.id, mutex_id);
 
         // Log condvar wait end AFTER mutex acquisition for logical ordering
@@ -355,5 +357,36 @@ impl Drop for Condvar {
     fn drop(&mut self) {
         // Register the condvar destruction with the detector
         detector::condvar::destroy_condvar(self.id);
+    }
+}
+
+#[cfg(all(test, not(feature = "lock-order-graph")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn condvar_reacquisition_marks_fast_guard_globally_tracked() {
+        let mutex = crate::Mutex::new(());
+        let condvar = Condvar::new();
+        let mut guard = mutex.lock();
+        assert!(!guard.is_tracked_globally());
+
+        assert!(condvar.wait_timeout(&mut guard, Duration::ZERO));
+
+        assert!(
+            guard.is_tracked_globally(),
+            "the guard must release the ownership inserted during reacquisition"
+        );
+        assert_eq!(
+            crate::core::detector::mutex::owner_for_test(mutex.id()),
+            Some(get_current_thread_id())
+        );
+
+        drop(guard);
+
+        assert_eq!(
+            crate::core::detector::mutex::owner_for_test(mutex.id()),
+            None
+        );
     }
 }

@@ -98,10 +98,10 @@ pub enum Events {
 /// level of certainty about the deadlock.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeadlockSource {
-    /// Deadlock detected via wait-for graph (actual runtime deadlock)
+    /// Deadlock detected via the runtime wait-for graph
     ///
-    /// This indicates threads are actually blocked waiting for each other.
-    /// This is a CERTAIN deadlock - the program is deadlocked right now.
+    /// This indicates a cycle validated against the detector's current ownership
+    /// and wait-intent state.
     WaitForGraph,
 
     /// Deadlock detected via lock order violation (potential deadlock)
@@ -122,8 +122,8 @@ pub enum DeadlockSource {
 pub struct DeadlockInfo {
     /// Source of the deadlock detection
     ///
-    /// Indicates whether this is a certain deadlock (WaitForGraph) or a
-    /// suspected deadlock pattern (LockOrderViolation).
+    /// Indicates whether this came from the runtime wait-for graph
+    /// (WaitForGraph) or a potential ordering pattern (LockOrderViolation).
     pub source: DeadlockSource,
 
     /// List of threads involved in the deadlock cycle
