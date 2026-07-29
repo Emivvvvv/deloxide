@@ -11,7 +11,8 @@ deloxide = { version = "1.1.0", features = ["stress-test"] }
 
 Random mode samples a delay before a lock acquisition when the thread already holds a tracked lock:
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::Deloxide;
 
 Deloxide::new()
@@ -22,7 +23,8 @@ Deloxide::new()
 
 Component mode learns held-lock/acquisition relationships and preferentially delays paths in the same component or reverse order:
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::Deloxide;
 
 Deloxide::new()
@@ -35,7 +37,8 @@ Both [`with_random_stress`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Delox
 
 ## Configure the disturbance
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{Deloxide, StressConfig};
 
 Deloxide::new()
@@ -54,7 +57,8 @@ Deloxide::new()
 
 Start low to keep ordinary tests quick, then increase only a focused reproduction:
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{Deloxide, StressConfig};
 
 let gentle = Deloxide::new()
@@ -75,7 +79,7 @@ let _ = (gentle, aggressive); // call start() in the isolated test process
 1. Make the competing threads reach the intended acquisition point with a barrier or channels. Do not use a sleep to create the bug; use a sleep only inside the configured stress disturbance.
 2. Run the scenario in a separate test process (or otherwise disposable process). Deloxide initialization is process-wide, and an intentional deadlock must not strand the main test runner.
 3. Give the parent a hard timeout. On timeout, collect thread stacks, the callback payload, and the event log before terminating the child.
-4. Repeat enough independent attempts to estimate a **manifestation rate**: `active WaitForGraph reports / completed attempts`. Report the attempt count and confidence context, not a claim of deterministic discovery.
+4. Have the parent classify every launched attempt before calculating a **manifestation rate**. Count an active `WaitForGraph` callback received before the deadline as a detection. Count a child that exits without that callback, and a timeout with no such callback, as no active detection. The rate is `active detections / all attempts classified as detection or no detection`; exclude only harness infrastructure failures, and report those failures separately with the launched-attempt count. A potential `LockOrderViolation` callback is not an active detection.
 5. Save the test-case seed, scheduler/input seed, attempt number, platform, feature set, and complete `StressConfig`. Deloxide currently draws stress randomness from its runtime RNG and exposes no seed-setting API, so record and control the surrounding harness seed when replayability matters.
 
 The revalidated results chart is useful for comparing configurations, but it is not a promise that a particular machine or run will find the same defect:

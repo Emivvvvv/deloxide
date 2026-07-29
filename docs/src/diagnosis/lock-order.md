@@ -13,7 +13,8 @@ deloxide = { version = "1.1.0", features = ["lock-order-graph"] }
 
 When that feature is compiled, [`Deloxide::new`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.new) enables order checking by default. Make the choice visible in development or CI configuration with [`with_lock_order_checking`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_lock_order_checking), and turn it off explicitly for a controlled comparison with [`no_lock_order_checking`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.no_lock_order_checking).
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{DeadlockSource, Deloxide};
 
 Deloxide::new()

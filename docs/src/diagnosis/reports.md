@@ -46,22 +46,34 @@ This is not proof that 202 is blocked. It means prior execution recorded 17 befo
 
 ## Keep the callback small
 
-Register a handler with [`Deloxide::callback`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.callback), but treat it as an alert handoff, not a recovery transaction. Deloxide dispatches callbacks away from the detecting thread, yet a callback that waits on application locks, performs slow network I/O, or invokes a complex shutdown path can still delay later notifications or compound an incident. Copy or serialize `DeadlockInfo`, send it to a bounded incident queue or logger that does not use implicated locks, and return.
+Register a handler with [`Deloxide::callback`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.callback), but treat it as an alert handoff, not a recovery transaction. Deloxide dispatches callbacks away from the detecting thread, yet a callback that waits on application locks, performs slow network I/O, or invokes a complex shutdown path can still delay later notifications or compound an incident. Move `DeadlockInfo` into a bounded incident queue with a nonblocking send, record overload without taking an application lock, and return.
 
-```rust,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{DeadlockInfo, Deloxide};
-use std::sync::mpsc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+    mpsc,
+};
 
-let (reports_tx, reports_rx) = mpsc::channel::<DeadlockInfo>();
+let (reports_tx, reports_rx) = mpsc::sync_channel::<DeadlockInfo>(64);
+let dropped_reports = Arc::new(AtomicU64::new(0));
+let callback_drops = Arc::clone(&dropped_reports);
 Deloxide::new()
     .callback(move |info| {
-        let _ = reports_tx.send(info); // hand off; do not acquire application locks here
+        if reports_tx.try_send(info).is_err() {
+            // Counts a full queue or disconnected receiver without blocking.
+            callback_drops.fetch_add(1, Ordering::Relaxed);
+        }
     })
     .start()
     .expect("detector initialization");
 
 // A separate supervisory task can correlate, persist, or page on reports_rx.
-let _ = reports_rx;
+let _ = (reports_rx, dropped_reports);
 ```
+
+`try_send` deliberately applies no backpressure to the callback. If the queue is full or its receiver has gone away, this example drops that report and increments a counter; production alerting should monitor the counter and size the queue for its incident burst budget. The supervisor may perform slower persistence and network work, provided it does not need an implicated application lock.
 
 If logging is enabled, [`Deloxide::with_log`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_log) and [`showcase_this`](https://docs.rs/deloxide/1.1.0/deloxide/fn.showcase_this.html) can provide the event history. The structured callback payload remains the authoritative alert input; the visualization is supporting evidence.
