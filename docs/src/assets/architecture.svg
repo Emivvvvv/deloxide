@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="840" viewBox="0 0 1240 840" role="img" aria-labelledby="title desc">
+  <title id="title">Deloxide runtime architecture</title>
+  <desc id="desc">The solid default path starts at Rust wrappers or the C FFI, attempts a physical parking_lot primitive, bypasses the global detector on eligible uncontended operations, or enters slow-waiter tracking, a detector-held physical recheck, mode-aware wait intent, the direct thread wait-for graph, complete-cycle validation, and the callback dispatcher. Ownership handoff refreshes affected graph edges. Dashed paths show the optional lock-order graph, stress scheduler, and logger and visualizer.</desc>
+
+  <defs>
+    <marker id="arrow-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2457a6"/>
+    </marker>
+    <marker id="arrow-optional" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a94a36"/>
+    </marker>
+    <style>
+      .background { fill: #f8fafc; }
+      .section { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .default-box { fill: #eef5ff; stroke: #2457a6; stroke-width: 2; }
+      .optional-box { fill: #fff4ee; stroke: #a94a36; stroke-width: 2; }
+      .heading { fill: #162033; font: 700 22px system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .label { fill: #162033; font: 600 16px system-ui, -apple-system, "Segoe UI", sans-serif; text-anchor: middle; }
+      .small { fill: #475569; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; text-anchor: middle; }
+      .legend { fill: #334155; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .default-path { fill: none; stroke: #2457a6; stroke-width: 3; marker-end: url(#arrow-default); }
+      .optional-path { fill: none; stroke: #a94a36; stroke-width: 3; stroke-dasharray: 10 8; marker-end: url(#arrow-optional); }
+    </style>
+  </defs>
+
+  <rect class="background" width="1240" height="840" rx="18"/>
+  <text class="heading" x="54" y="48">Deloxide runtime architecture</text>
+
+  <line x1="730" y1="40" x2="790" y2="40" class="default-path"/>
+  <text class="legend" x="802" y="45">default runtime path</text>
+  <line x1="1020" y1="40" x2="1080" y2="40" class="optional-path"/>
+  <text class="legend" x="1092" y="45">optional feature</text>
+
+  <rect class="section" x="40" y="72" width="760" height="730" rx="16"/>
+  <text class="heading" x="68" y="108">Default active wait-for detector</text>
+
+  <rect class="default-box" x="80" y="132" width="300" height="72" rx="12"/>
+  <text class="label" x="230" y="163">Rust wrappers / C FFI</text>
+  <text class="small" x="230" y="185">tracked Mutex, RwLock, Condvar</text>
+
+  <rect class="default-box" x="80" y="244" width="300" height="72" rx="12"/>
+  <text class="label" x="230" y="275">Physical parking_lot primitive</text>
+  <text class="small" x="230" y="297">real acquisition, release, and parking</text>
+
+  <rect class="default-box" x="80" y="356" width="300" height="72" rx="12"/>
+  <text class="label" x="230" y="387">Uncontended fast path</text>
+  <text class="small" x="230" y="409">eligible exclusive operations return here</text>
+
+  <rect class="default-box" x="460" y="132" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="163">Slow-waiter state</text>
+  <text class="small" x="610" y="185">per-lock ownership handshake</text>
+
+  <rect class="default-box" x="460" y="244" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="275">Detector-held recheck</text>
+  <text class="small" x="610" y="297">retry physical acquisition before waiting</text>
+
+  <rect class="default-box" x="460" y="356" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="387">Mode-aware wait intent</text>
+  <text class="small" x="610" y="409">Thread → (Lock, Mode)</text>
+
+  <rect class="default-box" x="460" y="468" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="499">Direct Thread -&gt; Thread WFG</text>
+  <text class="small" x="610" y="521">edges to current incompatible owners</text>
+
+  <rect class="default-box" x="80" y="468" width="300" height="72" rx="12"/>
+  <text class="label" x="230" y="499">Ownership-handoff refresh</text>
+  <text class="small" x="230" y="521">retarget affected waiters</text>
+
+  <rect class="default-box" x="460" y="580" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="611">Complete-cycle validation</text>
+  <text class="small" x="610" y="633">recheck every candidate dependency</text>
+
+  <rect class="default-box" x="460" y="692" width="300" height="72" rx="12"/>
+  <text class="label" x="610" y="723">Callback dispatcher</text>
+  <text class="small" x="610" y="745">asynchronous user callback</text>
+
+  <path class="default-path" d="M 230 204 L 230 244"/>
+  <path class="default-path" d="M 230 316 L 230 356"/>
+  <path class="default-path" d="M 380 280 C 420 280 420 168 460 168"/>
+  <path class="default-path" d="M 610 204 L 610 244"/>
+  <path class="default-path" d="M 610 316 L 610 356"/>
+  <path class="default-path" d="M 610 428 L 610 468"/>
+  <path class="default-path" d="M 80 280 C 54 280 54 504 80 504"/>
+  <path class="default-path" d="M 380 504 L 460 504"/>
+  <path class="default-path" d="M 610 540 L 610 580"/>
+  <path class="default-path" d="M 610 652 L 610 692"/>
+
+  <rect class="section" x="830" y="72" width="370" height="730" rx="16"/>
+  <text class="heading" x="858" y="108">Feature-gated branches</text>
+
+  <rect class="optional-box" x="870" y="164" width="290" height="86" rx="12"/>
+  <text class="label" x="1015" y="198">Optional LOG</text>
+  <text class="small" x="1015" y="221">historical lock-order cycle checks</text>
+
+  <rect class="optional-box" x="870" y="360" width="290" height="86" rx="12"/>
+  <text class="label" x="1015" y="394">Optional stress scheduler</text>
+  <text class="small" x="1015" y="417">test-only delays and preemption</text>
+
+  <rect class="optional-box" x="870" y="556" width="290" height="86" rx="12"/>
+  <text class="label" x="1015" y="590">Optional logger and visualizer</text>
+  <text class="small" x="1015" y="613">event history and rendered evidence</text>
+
+  <path class="optional-path" d="M 380 168 C 610 95 790 130 870 192"/>
+  <path class="optional-path" d="M 870 404 C 760 338 700 256 380 256"/>
+  <path class="optional-path" d="M 380 184 C 650 235 770 500 870 584"/>
+  <path class="optional-path" d="M 760 728 C 825 728 825 620 870 620"/>
+</svg>
