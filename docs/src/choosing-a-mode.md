@@ -14,6 +14,15 @@ historical ordering risk.
 | Component-based stress testing | Do observed lock-acquisition relationships point to delays likely to expose this bug? | `stress-test`; `.with_component_stress()` | Schedule perturbation guided by tracked acquisition patterns; use in focused test environments. | Added delays plus relationship tracking. | "The component heuristic explores every schedule" or "no manifestation means no deadlock." |
 | Logging and visualization | How did tracked execution reach the report? | `logging-and-visualization`; `.with_log("logs/deadlock_{timestamp}.log")` (or the feature's default log path). | Event history for incident analysis; it can accompany active or potential reports but does not change their certainty. | Queueing, serialization, file I/O, retained log data, and browser transfer when opened. | "The timeline is complete program tracing" or "opening it keeps data local." It covers tracked events and the current viewer receives encoded log data in its URL. |
 
+Direct API references:
+[`Deloxide::callback`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.callback),
+[`Deloxide::start`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.start),
+[`Deloxide::with_lock_order_checking`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_lock_order_checking),
+[`Deloxide::with_random_stress`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_random_stress),
+[`Deloxide::with_component_stress`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_component_stress),
+[`Deloxide::with_log`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_log),
+and [`DeadlockSource`](https://docs.rs/deloxide/1.1.0/deloxide/enum.DeadlockSource.html).
+
 Use [Read a Deadlock Report](diagnosis/reports.md) after an active callback. Use
 [Find Potential Lock-Order Risks](diagnosis/lock-order.md) for the lock-order
 workflow, [Stress Test a Suspected Race](diagnosis/stress-testing.md) for both stress

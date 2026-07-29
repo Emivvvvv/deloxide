@@ -21,7 +21,8 @@ The canonical example configures the detector and its callback before it creates
 the locks or starts worker threads. The callback only prints the report and exits,
 which keeps the teaching program bounded.
 
-```rust,no_run,ignore
+```rust,no_run
+# extern crate deloxide;
 use deloxide::{DeadlockInfo, DeadlockSource, Deloxide, Mutex, thread};
 use std::sync::{Arc, Barrier};
 
@@ -37,9 +38,7 @@ The `setup` and `cycle` excerpts above are taken from
 [`examples/diagnose_deadlock.rs`](https://github.com/Emivvvvv/deloxide/blob/main/examples/diagnose_deadlock.rs),
 which is the compile-tested source for this intentionally deadlocking example.
 The `no_run` marker is important: running this exact program is supposed to block
-until Deloxide reports the cycle. The canonical example is compile-checked by Cargo;
-the rendered excerpt is ignored by `mdbook test` because the book test harness does
-not link this crate's multi-artifact library target.
+until Deloxide reports the cycle.
 
 ## 3. Reproduce the cycle
 
@@ -85,5 +84,9 @@ hide the dependency rather than remove it.
 
 Once you have a report, you can preserve the event history with
 [logging and visualization](visualization.md), probe a rare reproduction with
-[stress testing](diagnosis/stress-testing.md), or check the API surface on
-[docs.rs](https://docs.rs/deloxide).
+[stress testing](diagnosis/stress-testing.md), or continue into the API references
+for [`Deloxide`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html),
+[`DeadlockInfo`](https://docs.rs/deloxide/1.1.0/deloxide/struct.DeadlockInfo.html),
+[`DeadlockSource`](https://docs.rs/deloxide/1.1.0/deloxide/enum.DeadlockSource.html),
+[`Mutex`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Mutex.html), and the tracked
+[`thread` module](https://docs.rs/deloxide/1.1.0/deloxide/thread/index.html).

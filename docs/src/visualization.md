@@ -57,6 +57,11 @@ before opening it outside your approved environment.
 Use `showcase` when you have a retained file, or `showcase_this` when the current
 process owns the active logger. `showcase_this` first flushes pending records and
 then obtains the active path; `showcase` simply reads the path you supply.
+See the API entries for
+[`Deloxide::with_log`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.with_log),
+[`showcase`](https://docs.rs/deloxide/1.1.0/deloxide/fn.showcase.html), and
+[`showcase_this`](https://docs.rs/deloxide/1.1.0/deloxide/fn.showcase_this.html) for
+their exact signatures and error contracts.
 
 ```rust,ignore
 use deloxide::{showcase, showcase_this};
