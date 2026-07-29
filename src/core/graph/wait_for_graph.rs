@@ -91,6 +91,18 @@ impl WaitForGraph {
         None
     }
 
+    #[cfg(test)]
+    pub(crate) fn outgoing(&self, thread_id: ThreadId) -> Vec<ThreadId> {
+        let mut result: Vec<_> = self
+            .edges
+            .get(&thread_id)
+            .into_iter()
+            .flat_map(|edges| edges.iter().copied())
+            .collect();
+        result.sort_unstable();
+        result
+    }
+
     /// Clear the wait edges for a thread (what it's waiting for)
     ///
     /// This is typically called when a thread successfully acquires a lock
