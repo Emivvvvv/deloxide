@@ -1,0 +1,31 @@
+Deloxide commit
+baa9e89ef87191d25832b4ecf567c5dd26b4a6ae
+
+Deloxide worktree status before benchmarking
+ M Cargo.toml
+?? scripts/tests/
+
+The parallel dirty files are documentation/example/script work and do not change
+Deloxide runtime sources. The existing README.md width edit is likewise unrelated
+to benchmark code. No runtime source was changed before or during these runs.
+
+rustc -Vv
+rustc 1.90.0-nightly (bdaba05a9 2025-06-27)
+binary: rustc
+commit-hash: bdaba05a953eb5abeba0011cdda2560d157aed2e
+commit-date: 2025-06-27
+host: aarch64-apple-darwin
+release: 1.90.0-nightly
+LLVM version: 20.1.7
+
+cargo -V
+cargo 1.90.0-nightly (409fed7dc 2025-06-23)
+
+uname -a
+Darwin Emirhans-MacBook-Pro.local 24.6.0 Darwin Kernel Version 24.6.0: Mon Jan 19 22:00:55 PST 2026; root:xnu-11417.140.69.708.3~1/RELEASE_ARM64_T6000 arm64
+
+sysctl -n machdep.cpu.brand_string
+Apple M1 Pro
+
+sysctl -n hw.memsize
+17179869184
