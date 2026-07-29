@@ -65,7 +65,11 @@ impl Detector {
         // This reduces the size of the info struct and speeds up verification.
         let thread_waiting_for_locks = cycle
             .iter()
-            .filter_map(|&t| self.thread_waits_for.get(&t).map(|&l| (t, l)))
+            .filter_map(|&t| {
+                self.thread_waits_for
+                    .get(&t)
+                    .map(|intent| (t, intent.lock_id))
+            })
             .collect();
 
         DeadlockInfo {

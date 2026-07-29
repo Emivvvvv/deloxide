@@ -4,6 +4,8 @@ pub mod mutex;
 pub mod rwlock;
 mod stress;
 pub mod thread;
+mod wait;
+pub(crate) use wait::{WaitIntent, WaitMode};
 
 #[cfg(feature = "stress-test")]
 use crate::core::StressConfig;
@@ -112,14 +114,14 @@ pub struct Detector {
     /// Lock order graph for detecting lock ordering violations (only created if enabled)
     #[cfg(feature = "lock-order-graph")]
     lock_order_graph: Option<LockOrderGraph>,
-    /// Maps threads to the locks they're attempting to acquire
-    thread_waits_for: FxHashMap<ThreadId, LockId>,
+    /// Maps threads to the lock and acquisition mode they are waiting for.
+    thread_waits_for: FxHashMap<ThreadId, WaitIntent>,
     /// Tracks, for each thread, which locks it currently holds
     thread_holds: FxHashMap<ThreadId, FxHashSet<LockId>>,
     /// Maps Mutexes to the threads that currently own them
     mutex_owners: FxHashMap<LockId, ThreadId>,
-    /// Maps RwLock IDs to the set of readers (shared lock holders)
-    rwlock_readers: FxHashMap<LockId, FxHashSet<ThreadId>>,
+    /// Maps RwLock IDs to per-thread shared-acquisition recursion counts.
+    rwlock_readers: FxHashMap<LockId, FxHashMap<ThreadId, usize>>,
     /// Maps RwLock IDs to the current writer (if any)
     rwlock_writer: FxHashMap<LockId, ThreadId>,
     /// Maps condvar IDs to queues of waiting threads and their associated mutex IDs

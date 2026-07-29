@@ -7,7 +7,7 @@ use crate::core::detector::GLOBAL_DETECTOR;
 use crate::core::detector::deadlock_handling;
 use crate::core::logger;
 use crate::core::types::DeadlockInfo;
-use crate::core::{Detector, Events, get_current_thread_id};
+use crate::core::{Detector, Events, WaitIntent, WaitMode, get_current_thread_id};
 use crate::{LockId, ThreadId};
 #[cfg(feature = "stress-test")]
 use std::thread;
@@ -31,12 +31,16 @@ impl Detector {
         // remove ownership
         self.mutex_owners.remove(&lock_id);
         // clear any pending wait-for for this lock
-        for attempts in self.thread_waits_for.values_mut() {
-            if *attempts == lock_id {
-                *attempts = 0;
-            }
+        let waiters: Vec<_> = self
+            .thread_waits_for
+            .iter()
+            .filter_map(|(&thread_id, intent)| {
+                (intent.lock_id == lock_id).then_some(thread_id)
+            })
+            .collect();
+        for thread_id in waiters {
+            self.clear_wait_intent(thread_id);
         }
-        self.thread_waits_for.retain(|_, &mut l| l != 0);
 
         logger::log_lock_event(lock_id, None, Events::MutexExit);
 
@@ -91,11 +95,7 @@ impl Detector {
 
         if let Some(owner) = effective_owner {
             // We are waiting for this owner
-            self.thread_waits_for.insert(thread_id, lock_id);
-            self.lock_waiters
-                .entry(lock_id)
-                .or_default()
-                .insert(thread_id);
+            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex));
 
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
                 let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
@@ -127,8 +127,7 @@ impl Detector {
             }
         }
 
-        self.thread_waits_for.remove(&thread_id);
-        self.wait_for_graph.clear_wait_edges(thread_id);
+        self.clear_wait_intent(thread_id);
 
         #[allow(unused_mut)]
         let mut deadlock_info = None;

@@ -8,7 +8,7 @@ use crate::core::detector::GLOBAL_DETECTOR;
 use crate::core::detector::deadlock_handling;
 use crate::core::logger;
 use crate::core::types::{CondvarId, DeadlockInfo, LockId, ThreadId};
-use crate::core::{Detector, Events, get_current_thread_id};
+use crate::core::{Detector, Events, WaitIntent, WaitMode, get_current_thread_id};
 use std::collections::VecDeque;
 
 impl Detector {
@@ -214,11 +214,7 @@ impl Detector {
 
         if let Some(owner) = effective_owner {
             // Mutex is owned - set up wait-for edge
-            self.thread_waits_for.insert(thread_id, lock_id);
-            self.lock_waiters
-                .entry(lock_id)
-                .or_default()
-                .insert(thread_id);
+            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::Mutex));
 
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, owner) {
                 // Apply common lock filter

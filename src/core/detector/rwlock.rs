@@ -7,7 +7,7 @@ use crate::core::detector::GLOBAL_DETECTOR;
 use crate::core::detector::deadlock_handling;
 use crate::core::logger;
 use crate::core::types::DeadlockInfo;
-use crate::core::{Detector, Events, get_current_thread_id};
+use crate::core::{Detector, Events, WaitIntent, WaitMode, get_current_thread_id};
 use crate::{LockId, ThreadId};
 #[cfg(feature = "stress-test")]
 use std::thread;
@@ -80,11 +80,7 @@ impl Detector {
             .or(potential_writer);
 
         if let Some(writer) = effective_writer {
-            self.thread_waits_for.insert(thread_id, lock_id);
-            self.lock_waiters
-                .entry(lock_id)
-                .or_default()
-                .insert(thread_id);
+            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwRead));
 
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
                 // Apply common lock filter
@@ -106,7 +102,9 @@ impl Detector {
             self.rwlock_readers
                 .entry(lock_id)
                 .or_default()
-                .insert(thread_id);
+                .entry(thread_id)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
             #[cfg(feature = "lock-order-graph")]
             self.thread_holds
                 .entry(thread_id)
@@ -116,7 +114,7 @@ impl Detector {
             // NOTE: Read locks do NOT clear wait edges!
             // Multiple readers can coexist, so the thread stays in the graph
             // for potential upgrade deadlock detection.
-            self.thread_waits_for.remove(&thread_id);
+            self.clear_wait_intent(thread_id);
 
             // Log acquisition
             logger::log_interaction_event(thread_id, lock_id, Events::RwReadAcquired);
@@ -126,11 +124,7 @@ impl Detector {
             // try_read failed - a writer must have acquired it
             // Set up wait-for edges for the blocking read() that will follow
             if let Some(&writer) = self.rwlock_writer.get(&lock_id) {
-                self.thread_waits_for.insert(thread_id, lock_id);
-                self.lock_waiters
-                    .entry(lock_id)
-                    .or_default()
-                    .insert(thread_id);
+                self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwRead));
 
                 if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
                     let filtered_cycle = self.filter_cycle_by_common_locks(&cycle);
@@ -153,20 +147,16 @@ impl Detector {
         self.rwlock_readers
             .entry(lock_id)
             .or_default()
-            .insert(thread_id);
+            .entry(thread_id)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
         #[cfg(feature = "lock-order-graph")]
         self.thread_holds
             .entry(thread_id)
             .or_default()
             .insert(lock_id);
 
-        self.thread_waits_for.remove(&thread_id);
-        if let Some(waiters) = self.lock_waiters.get_mut(&lock_id) {
-            waiters.remove(&thread_id);
-            if waiters.is_empty() {
-                self.lock_waiters.remove(&lock_id);
-            }
-        }
+        self.clear_wait_intent(thread_id);
 
         // Log acquisition
         logger::log_interaction_event(thread_id, lock_id, Events::RwReadAcquired);
@@ -180,7 +170,12 @@ impl Detector {
     pub fn release_read(&mut self, thread_id: ThreadId, lock_id: LockId) {
         logger::log_interaction_event(thread_id, lock_id, Events::RwReadReleased);
         if let Some(readers) = self.rwlock_readers.get_mut(&lock_id) {
-            readers.remove(&thread_id);
+            if let Some(count) = readers.get_mut(&thread_id) {
+                *count -= 1;
+                if *count == 0 {
+                    readers.remove(&thread_id);
+                }
+            }
             if readers.is_empty() {
                 self.rwlock_readers.remove(&lock_id);
             }
@@ -263,13 +258,13 @@ impl Detector {
 
         // Check for conflicting readers (Global State)
         if let Some(readers) = self.rwlock_readers.get(&lock_id) {
-            for &reader in readers {
+            let reader_ids: Vec<_> = readers.keys().copied().collect();
+            for reader in reader_ids {
                 if reader != thread_id {
-                    self.thread_waits_for.insert(thread_id, lock_id);
-                    self.lock_waiters
-                        .entry(lock_id)
-                        .or_default()
-                        .insert(thread_id);
+                    self.set_wait_intent(
+                        thread_id,
+                        WaitIntent::new(lock_id, WaitMode::RwWrite),
+                    );
                     if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, reader) {
                         // No common lock filtering for upgrades (Reader->Writer deps)
                         return Some(self.extract_deadlock_info(cycle));
@@ -291,11 +286,7 @@ impl Detector {
         if let Some(writer) = effective_writer
             && writer != thread_id
         {
-            self.thread_waits_for.insert(thread_id, lock_id);
-            self.lock_waiters
-                .entry(lock_id)
-                .or_default()
-                .insert(thread_id);
+            self.set_wait_intent(thread_id, WaitIntent::new(lock_id, WaitMode::RwWrite));
             if let Some(cycle) = self.wait_for_graph.add_edge(thread_id, writer) {
                 return Some(self.extract_deadlock_info(cycle));
             }
@@ -329,14 +320,7 @@ impl Detector {
             .insert(lock_id);
 
         // Clear wait-for edges
-        self.thread_waits_for.remove(&thread_id);
-        if let Some(waiters) = self.lock_waiters.get_mut(&lock_id) {
-            waiters.remove(&thread_id);
-            if waiters.is_empty() {
-                self.lock_waiters.remove(&lock_id);
-            }
-        }
-        self.wait_for_graph.clear_wait_edges(thread_id);
+        self.clear_wait_intent(thread_id);
 
         // Log acquisition
         logger::log_interaction_event(thread_id, lock_id, Events::RwWriteAcquired);
