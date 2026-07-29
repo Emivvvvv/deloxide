@@ -106,6 +106,7 @@ impl Condvar {
     pub fn wait<'a, T>(&self, guard: &mut MutexGuard<'a, T>) {
         let thread_id = get_current_thread_id();
         let mutex_id = guard.lock_id();
+        let _mutex_waiter = guard.register_condvar_waiter();
 
         // Report wait begin
         crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
@@ -172,6 +173,7 @@ impl Condvar {
     pub fn wait_timeout<'a, T>(&self, guard: &mut MutexGuard<'a, T>, timeout: Duration) -> bool {
         let thread_id = get_current_thread_id();
         let mutex_id = guard.lock_id();
+        let _mutex_waiter = guard.register_condvar_waiter();
 
         crate::core::detector::condvar::begin_wait(thread_id, self.id, mutex_id);
 

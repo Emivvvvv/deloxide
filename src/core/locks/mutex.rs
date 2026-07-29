@@ -1,5 +1,8 @@
 use crate::core::detector;
-use crate::core::locks::{NEXT_LOCK_ID, contention::ContentionState};
+use crate::core::locks::{
+    NEXT_LOCK_ID,
+    contention::{ContentionState, SlowWaiter},
+};
 
 use crate::core::types::{LockId, ThreadId, get_current_thread_id};
 #[cfg(feature = "logging-and-visualization")]
@@ -360,6 +363,11 @@ impl<'a, T> MutexGuard<'a, T> {
     /// Returns the unique identifier of the mutex this guard protects.
     pub(crate) fn lock_id(&self) -> LockId {
         self.lock_id
+    }
+
+    /// Keep Condvar reacquisition visible to mutex fast-path owners.
+    pub(crate) fn register_condvar_waiter(&self) -> SlowWaiter<'a> {
+        self.state.contention.register()
     }
 
     /// Clear local ownership tracking (used internally by Condvar)
