@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a focused product or integration improvement.
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem cannot be solved with the current API?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Fast-path, compatibility, or operational impact

@@ -1,0 +1,36 @@
+name: Bug report
+description: Report incorrect detection, missed detection, crash, or integration failure.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Deloxide version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Rust/C compiler, and enabled Cargo features.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include synchronization order and whether any untracked locks are involved.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Callback report or logs
+      render: json
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
