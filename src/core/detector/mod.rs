@@ -68,6 +68,15 @@ struct Dispatcher {
     _thread_handle: std::thread::JoinHandle<()>,
 }
 
+fn invoke_callback(
+    callback: &Arc<dyn Fn(DeadlockInfo) + Send + Sync>,
+    info: DeadlockInfo,
+) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(info))).is_err() {
+        eprintln!("Deloxide callback panicked; dispatcher remains active");
+    }
+}
+
 impl Dispatcher {
     /// Create a new dispatcher with a background thread and channel
     fn new() -> Self {
@@ -77,7 +86,7 @@ impl Dispatcher {
         let thread_handle = std::thread::spawn(move || {
             while let Ok(info) = rx.recv() {
                 if let Some(cb) = CALLBACK.get() {
-                    cb(info);
+                    invoke_callback(cb, info);
                 }
             }
         });
@@ -258,4 +267,35 @@ pub fn init_detector(config: DetectorConfig) {
 #[cfg(feature = "logging-and-visualization")]
 pub fn flush_global_detector_logs() -> Result<()> {
     logger::flush_logs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::DeadlockSource;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn callback_panic_is_contained_per_invocation() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback: Arc<dyn Fn(DeadlockInfo) + Send + Sync> = Arc::new(move |_| {
+            if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+                panic!("first callback");
+            }
+        });
+        let info = DeadlockInfo {
+            source: DeadlockSource::WaitForGraph,
+            thread_cycle: vec![1],
+            thread_waiting_for_locks: vec![(1, 1)],
+            lock_order_cycle: None,
+            timestamp: String::new(),
+            verification_request: None,
+        };
+
+        invoke_callback(&callback, info.clone());
+        invoke_callback(&callback, info);
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
 }
