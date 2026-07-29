@@ -28,8 +28,8 @@ always supplies a callback that panics with the report unless you replace it wit
 [`callback`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.callback).
 When `logging-and-visualization` is compiled, it enables logging by default with
 the path `deloxide.log`; change that path with `with_log`, or disable logging for
-that start with `no_logging`. When `lock-order-graph` is compiled, lock-order
-checking is enabled by default; make the policy explicit with
+the initial configuration with `no_logging`. When `lock-order-graph` is compiled,
+lock-order checking is enabled by default; make the initial policy explicit with
 `with_lock_order_checking`, or use `no_lock_order_checking` for a controlled
 baseline. Stress compilation alone does not add delays: select random or
 component stress with its corresponding builder method.
@@ -95,6 +95,13 @@ for operational trade-offs, [Finding Inconsistent Lock Order](../diagnosis/lock-
 for potential findings, and [Stress Test a Suspected Race](../diagnosis/stress-testing.md)
 for test-only stress workflows.
 
-Finally, choose features before the first `start()`. The detector and optional
-logger are process-wide, so starting it repeatedly is not a way to toggle a
-feature or replace its configuration; see [Manage Lifecycle and Callbacks](lifecycle.md).
+Cargo features are fixed when the application is built. Choose one runtime
+builder configuration and start it before instrumented work. Repeated `start()`
+calls are accepted, but their effects are asymmetric: the first successfully
+installed callback and global logger win; an enabled lock-order graph is created
+or replaced, while a later disabled setting does not remove an existing graph;
+and stress mode/configuration is overwritten on each start. Existing ownership
+and wait state is not reset coherently with those changes. Repeated starts are
+therefore partial, unsupported reconfiguration—not a reliable reset or toggle.
+Use separate processes for clean configurations; see [Manage Lifecycle and
+Callbacks](lifecycle.md) for the exact behavior.

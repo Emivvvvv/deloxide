@@ -32,20 +32,35 @@ triage workflow and the exact [`Deloxide`](https://docs.rs/deloxide/1.1.0/deloxi
 and [`DeadlockSource`](https://docs.rs/deloxide/1.1.0/deloxide/enum.DeadlockSource.html)
 APIs.
 
-## One detector, first configuration
+## One detector, partial repeated-start behavior
 
 Deloxide keeps a global detector for the process. Calling
 [`Deloxide::start`](https://docs.rs/deloxide/1.1.0/deloxide/struct.Deloxide.html#method.start)
-does not create an isolated detector or clear prior graph state. The callback and,
-when logging is compiled, the global logger are one-time initializations: the
-first successfully installed callback and logger are the ones used by later
-reports. Treat the first startup configuration as authoritative.
+does not create an isolated detector or reject a call merely because one start
+already completed. A later call still runs initialization and, assuming any
+requested logger can be constructed, normally returns `Ok(())`. Its effects are
+deliberately not an all-or-nothing reconfiguration:
 
-Do not call `start()` again to change a callback, replace a log file, reset a
-lock-order history, or create a clean detector for a new tenant. Later starts are
-not a supported reconfiguration mechanism; in particular, they do not undo
-previous detector state. There is deliberately no public shutdown, reset, or
-reconfigure API in this guidance.
+- The callback uses a `OnceLock`; the first callback successfully installed in
+  the process handles later reports. A later builder's callback is not installed.
+- With `logging-and-visualization`, the global logger has its own `OnceLock`.
+  The first logger successfully installed receives later events. An earlier
+  `no_logging()` start leaves that slot empty, so a later start can install the
+  first logger. Once installed, a later log path does not replace it, although
+  that later `start()` still attempts to create its configured logger before the
+  one-time install and can return an I/O error.
+- With `lock-order-graph`, a later start with checking enabled creates or replaces
+  the detector's order graph with a new graph. A later start with checking
+  disabled does not remove an order graph that already exists.
+- With `stress-test`, every start overwrites the process-wide stress mode and
+  stress configuration, including overwriting them with the builder defaults.
+
+Existing ownership, wait, and other detector state is not cleared as one coherent
+reset while those feature-specific fields change. Repeated starts are therefore
+partial, unsupported reconfiguration—not a reliable reset or runtime toggle.
+Initialize once before instrumented work and use a separate process when a clean
+configuration or detector state is required. There is deliberately no public
+shutdown, reset, or reconfigure API in this guidance.
 
 This matters in tests. Put cases requiring different Deloxide configurations in
 separate test processes (for example, separate integration-test binaries or

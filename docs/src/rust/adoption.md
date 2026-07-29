@@ -47,8 +47,10 @@ This is an import diff rather than a Rust example. The runnable forms are the re
 examples.
 
 `Mutex::lock`, `RwLock::read`, and `RwLock::write` return guards directly. A
-guard dereferences to its protected value and reports release when it is dropped,
-so keep the usual narrow scopes and explicit `drop(guard)` where the release
+guard dereferences to its protected value, and dropping it always releases the
+physical lock. The wrapper also reports the release globally when active tracking
+or logging requires it; uncontended fast paths avoid unnecessary global detector
+work. Keep the usual narrow scopes and explicit `drop(guard)` where the release
 point matters. The wrappers use `parking_lot` internally; they do not expose
 `std::sync` poisoning or `LockResult`/`PoisonError`. In particular, remove
 `.unwrap()` or poisoned-lock recovery that existed only to handle the standard
